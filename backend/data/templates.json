@@ -1,0 +1,44 @@
+[
+  {
+    "id": "prd",
+    "name": "Product Requirements Doc",
+    "category": "Planning",
+    "icon": "📋",
+    "content": "# PRD: [Feature Name]\n\n## Problem Statement\nWhat problem are we solving and for whom?\n\n## Target Users\nWho will use this feature and what is their context?\n\n## Proposed Solution\nHigh-level description of what we're building.\n\n## Success Metrics\n- Primary metric:\n- Secondary metric:\n\n## User Stories\n- As a [user], I want [goal] so that [benefit]\n\n## Out of Scope\nWhat are we explicitly NOT building?\n\n## Open Questions\n- [ ] Question 1\n- [ ] Question 2"
+  },
+  {
+    "id": "okr",
+    "name": "OKRs",
+    "category": "Strategy",
+    "icon": "🎯",
+    "content": "# OKRs — Q[N] [Year]\n\n## Objective 1: [Outcome-oriented statement]\n- **KR1:** [Measurable result by X date]\n- **KR2:** [Measurable result by X date]\n- **KR3:** [Measurable result by X date]\n\n## Objective 2: [Outcome-oriented statement]\n- **KR1:** [Measurable result by X date]\n- **KR2:** [Measurable result by X date]\n\n## Initiatives Linked to OKRs\n| Initiative | Objective | Confidence | Status |\n|-----------|-----------|------------|--------|\n|           |           |            |        |"
+  },
+  {
+    "id": "interview-guide",
+    "name": "User Interview Guide",
+    "category": "Research",
+    "icon": "🎤",
+    "content": "# User Interview Guide\n\n## Research Goals\n1. [Goal 1]\n2. [Goal 2]\n\n## Screener Criteria\n- Must be: [criteria]\n- Nice to have: [criteria]\n\n## Intro Script\n\"Thank you for joining today. I'm [name]. I'm a PM at [company] working on [area]. I want to hear about your experiences with [topic]. There are no right or wrong answers — your honest perspective helps us build better products.\"\n\n## Questions\n\n### Warm-up\n1. Can you tell me a bit about your role and how you use [product/tool]?\n\n### Core Questions\n2. Walk me through the last time you [did the thing we're exploring].\n3. What's the most frustrating part of [workflow]?\n4. How do you currently handle [problem]?\n5. What would your ideal solution look like?\n\n### Closing\n6. Is there anything else you think would be helpful for us to know?\n\n## Key Themes to Listen For\n- [ ] Theme 1\n- [ ] Theme 2"
+  },
+  {
+    "id": "sprint-review",
+    "name": "Sprint Review",
+    "category": "Agile",
+    "icon": "🏃",
+    "content": "# Sprint [N] Review\n\n**Date:** [Date]  \n**Team:** [Team name]  \n**Sprint Goal:** [What we set out to achieve]\n\n## Completed ✅\n- [Story/task]\n- [Story/task]\n\n## Not Completed ⏳\n- [Story/task] — [brief reason]\n\n## Demo Notes\n[Key things shown, stakeholder reactions]\n\n## Metrics\n| Metric | Target | Actual |\n|--------|--------|--------|\n| Velocity | | |\n| Bug count | | |\n\n## Retrospective Highlights\n**Keep:** \n**Stop:** \n**Start:** \n\n## Next Sprint Goals\n1. [Goal]\n2. [Goal]"
+  },
+  {
+    "id": "competitor-analysis",
+    "name": "Competitor Analysis",
+    "category": "Strategy",
+    "icon": "🔍",
+    "content": "# Competitor Analysis\n\n**Date:** [Date]  \n**Analyst:** [Name]\n\n## Competitors Evaluated\n1. [Competitor A]\n2. [Competitor B]\n3. [Competitor C]\n\n## Feature Comparison\n| Feature | Us | [A] | [B] | [C] |\n|---------|-----|-----|-----|-----|\n| [Feature 1] | | | | |\n| [Feature 2] | | | | |\n| [Feature 3] | | | | |\n\n## Pricing\n| Plan | Us | [A] | [B] |\n|------|-----|-----|-----|\n| Free | | | |\n| Pro | | | |\n\n## Our Differentiators\n1. [Differentiator 1]\n2. [Differentiator 2]\n\n## Gaps to Address\n1. [Gap 1]\n2. [Gap 2]\n\n## Summary\n[2-3 sentence takeaway]"
+  },
+  {
+    "id": "one-pager",
+    "name": "Product One-Pager",
+    "category": "Planning",
+    "icon": "📄",
+    "content": "# [Feature/Initiative Name]\n\n**Owner:** [PM name]  \n**Date:** [Date]  \n**Status:** Draft\n\n## TL;DR\n[One sentence: what we're building and why it matters]\n\n## Problem\n[2-3 sentences on the pain point and who experiences it]\n\n## Solution\n[2-3 sentences on what we're building]\n\n## Why Now\n[What's changed or what opportunity exists]\n\n## Success Looks Like\n- [Metric 1]\n- [Metric 2]\n\n## Risks\n- [Risk and mitigation]\n\n## Timeline\n| Milestone | Date |\n|-----------|------|\n| Design complete | |\n| Dev complete | |\n| Launch | |"
+  }
+]

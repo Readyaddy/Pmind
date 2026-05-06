@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #09090b;
+    --border: #e4e4e7;
+  }
+  .dark {
+    --background: #050505;
+    --foreground: #F3F2F1;
+    --border: rgba(255, 255, 255, 0.05);
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom text selection */
+::selection {
+  background-color: rgba(217, 119, 6, 0.4); /* Amber, transparent */
+  color: inherit;
+}
+
+/* Tiptap prose styles */
+.ProseMirror {
+  outline: none;
+  caret-color: #D97706; /* Amber cursor */
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #8A8A8A; /* silver ash */
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Texture & Lighting Effects */
+body {
+  background-color: #000000;
+}
+
+body {
+  background-color: #FAFAFA;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(217, 119, 6, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(217, 119, 6, 0.02) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: #1A1A1A;
+}
+
+.dark body {
+  background-color: #131313;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(217, 119, 6, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(217, 119, 6, 0.03) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: #e5e2e1;
+}
+
+.glass-pane {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.8);
+  border-left: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-pane {
+  background: rgba(26, 26, 26, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(217, 119, 6, 0.1);
+  border-top: 1px solid rgba(217, 119, 6, 0.2);
+  border-left: 1px solid rgba(217, 119, 6, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.amber-glow {
+  /* No glow in light mode to keep it clean */
+}
+
+.dark .amber-glow {
+  filter: drop-shadow(0 0 10px rgba(217, 119, 6, 0.5));
+}
+
+/* Editor image nodes */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: block;
+}
+.dark .ProseMirror img {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #D97706;
+  outline-offset: 2px;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Chat markdown code blocks */
+.chat-markdown pre {
+  background: rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0.5rem 0;
+}
+.dark .chat-markdown pre {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+}
+.chat-markdown code:not(pre code) {
+  background: rgba(217,119,6,0.1);
+  color: #B45309;
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+.dark .chat-markdown code:not(pre code) {
+  background: rgba(217,119,6,0.15);
+  color: #D97706;
+}
+.chat-markdown h1,.chat-markdown h2,.chat-markdown h3 {
+  font-family: var(--font-playfair), serif;
+  font-weight: 600;
+  margin-top: 0.75em;
+  margin-bottom: 0.25em;
+}
+.chat-markdown h1 { font-size: 1.1em; }
+.chat-markdown h2 { font-size: 1em; }
+.chat-markdown h3 { font-size: 0.95em; }
+.chat-markdown ul,.chat-markdown ol {
+  padding-left: 1.25em;
+  margin: 0.35em 0;
+}
+.chat-markdown ul { list-style-type: disc; }
+.chat-markdown ol { list-style-type: decimal; }
+.chat-markdown li { margin: 0.15em 0; }
+.chat-markdown p { margin: 0.35em 0; }
+.chat-markdown p:first-child { margin-top: 0; }
+.chat-markdown p:last-child { margin-bottom: 0; }
+.chat-markdown blockquote {
+  border-left: 2px solid #D97706;
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: rgba(0,0,0,0.5);
+}
+.dark .chat-markdown blockquote { color: rgba(255,255,255,0.5); }
+.chat-markdown strong { font-weight: 600; }
+.chat-markdown a { color: #D97706; text-decoration: underline; text-underline-offset: 2px; }
+.chat-markdown hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 0.75em 0; }
+.dark .chat-markdown hr { border-top-color: rgba(255,255,255,0.1); }
+.chat-markdown table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 0.5em 0; }
+.chat-markdown th,.chat-markdown td { border: 1px solid rgba(0,0,0,0.1); padding: 0.35em 0.6em; text-align: left; }
+.dark .chat-markdown th,.dark .chat-markdown td { border-color: rgba(255,255,255,0.1); }
+.chat-markdown th { background: rgba(0,0,0,0.03); font-weight: 600; }
+.dark .chat-markdown th { background: rgba(255,255,255,0.03); }
+
+

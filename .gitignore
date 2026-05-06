@@ -1,0 +1,44 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node
+cursor-for-pms/node_modules/
+cursor-for-pms/.next/
+cursor-for-pms/out/
+cursor-for-pms/.env
+cursor-for-pms/.env.local
+cursor-for-pms/.env.production.local
+
+# Root env files (never commit API keys)
+.env
+.env.local
+
+# Landing page (separate repo)
+landing/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Vercel
+.vercel
+
+# Claude Code AI memory (local only)
+.claude/
+
+# Misc artifacts
+errors
+package-lock.json
