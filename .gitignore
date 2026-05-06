@@ -20,8 +20,6 @@ cursor-for-pms/.env.production.local
 .env
 .env.local
 
-# Landing page (separate repo)
-landing/
 
 # OS
 .DS_Store
