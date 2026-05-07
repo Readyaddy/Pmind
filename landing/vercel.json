@@ -1,13 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "**/*.{html,xml,txt}", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/demo.html",                         "dest": "/demo.html" },
-    { "src": "/sitemap.xml",                       "dest": "/sitemap.xml" },
-    { "src": "/robots.txt",                        "dest": "/robots.txt" },
-    { "src": "/blog/how-to-write-a-prd-with-ai",  "dest": "/blog/how-to-write-a-prd-with-ai.html" },
-    { "src": "/(.*)",                              "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/blog/how-to-write-a-prd-with-ai", "destination": "/blog/how-to-write-a-prd-with-ai.html" }
   ]
 }
