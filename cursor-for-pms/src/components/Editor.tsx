@@ -20,6 +20,7 @@ const SuggestionMark = Mark.create({
   name: "suggestion",
   addAttributes() {
     return {
+      id:          { default: "" },
       replacement: { default: "" },
     };
   },
@@ -31,7 +32,8 @@ const SuggestionMark = Mark.create({
       "mark",
       mergeAttributes(HTMLAttributes, {
         "data-suggestion": "",
-        style: "background: #fef3c7; border-radius: 2px; padding: 0 1px;",
+        "data-sid": HTMLAttributes.id,
+        style: "background: rgba(254,243,199,0.85); border-radius: 2px; padding: 0 1px; cursor: pointer;",
       }),
       0,
     ];
@@ -48,7 +50,8 @@ interface EditorProps {
 export default function Editor({ docId: _docId, projectId, initialContent, onSave }: EditorProps) {
   const [showAIModal, setShowAIModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; replacement: string }>>([]);
+  const [floatTool, setFloatTool] = useState<{ id: string; x: number; y: number } | null>(null);
   const { getContext } = useProductBrain();
   const context = getContext(projectId);
   const { registerEditor, unregisterEditor } = useEditorStore();
@@ -153,23 +156,27 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
         const { schema } = editor.state;
         const suggType = schema.marks.suggestion;
 
-        let matched = 0;
+        const newSuggestions: Array<{ id: string; replacement: string }> = [];
 
         if (suggType && changes.length > 0) {
-          for (const { find, replace } of changes) {
+          for (let i = 0; i < changes.length; i++) {
+            const { find, replace } = changes[i];
             const range = findInDoc(find);
             if (!range) continue;
+            const id = `s_${Date.now()}_${i}`;
             editor.view.dispatch(
-              editor.state.tr.addMark(range.from, range.to, suggType.create({ replacement: replace }))
+              editor.state.tr.addMark(range.from, range.to, suggType.create({ id, replacement: replace }))
             );
-            matched++;
+            newSuggestions.push({ id, replacement: replace });
           }
         }
 
+        const matched = newSuggestions.length;
+
         if (matched > 0) {
-          setPendingSuggestions(matched);
+          setSuggestions(newSuggestions);
           toast.success(
-            `${matched} suggestion${matched > 1 ? "s" : ""} highlighted — accept or reject below.`,
+            `${matched} suggestion${matched > 1 ? "s" : ""} highlighted — click any to accept or reject.`,
             { id: toastId }
           );
         } else {
@@ -187,35 +194,84 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
     [editor, userId, API, findInDoc]
   );
 
+  // ── Helpers: scan doc for all nodes carrying a given suggestion id ──
+  const collectByID = useCallback(
+    (id: string) => {
+      if (!editor) return [];
+      const suggType = editor.state.schema.marks.suggestion;
+      if (!suggType) return [];
+      const hits: Array<{ from: number; to: number; text: string }> = [];
+      editor.state.doc.descendants((node, pos) => {
+        if (!node.isText) return;
+        const m = node.marks.find((mk) => mk.type === suggType && mk.attrs.id === id);
+        if (m) hits.push({ from: pos, to: pos + node.nodeSize, text: m.attrs.replacement as string });
+      });
+      return hits;
+    },
+    [editor]
+  );
+
+  // Accept one suggestion by id
+  const acceptSuggestion = useCallback(
+    (id: string) => {
+      if (!editor) return;
+      const hits = collectByID(id);
+      if (!hits.length) return;
+      let tr = editor.state.tr;
+      [...hits].reverse().forEach(({ from, to, text }) => {
+        tr = text
+          ? tr.replaceWith(from, to, editor.state.schema.text(text))
+          : tr.delete(from, to);
+      });
+      editor.view.dispatch(tr);
+      setSuggestions((prev) => prev.filter((s) => s.id !== id));
+      setFloatTool(null);
+    },
+    [editor, collectByID]
+  );
+
+  // Reject one suggestion by id (remove mark, keep original text)
+  const rejectSuggestion = useCallback(
+    (id: string) => {
+      if (!editor) return;
+      const suggType = editor.state.schema.marks.suggestion;
+      if (!suggType) return;
+      const hits = collectByID(id);
+      if (!hits.length) return;
+      let tr = editor.state.tr;
+      [...hits].reverse().forEach(({ from, to }) => {
+        tr = tr.removeMark(from, to, suggType);
+      });
+      editor.view.dispatch(tr);
+      setSuggestions((prev) => prev.filter((s) => s.id !== id));
+      setFloatTool(null);
+    },
+    [editor, collectByID]
+  );
+
+  // Bulk accept all
   const acceptAllSuggestions = useCallback(() => {
-    if (!editor) return;
-    const { schema } = editor.state;
-    const suggType = schema.marks.suggestion;
-    if (!suggType) return;
+    suggestions.forEach((s) => acceptSuggestion(s.id));
+    setSuggestions([]);
+    setFloatTool(null);
+  }, [suggestions, acceptSuggestion]);
 
-    // Collect in reverse order so position offsets stay valid after each replacement
-    const replacements: Array<{ from: number; to: number; text: string }> = [];
-    editor.state.doc.descendants((node, pos) => {
-      if (!node.isText) return;
-      const mark = node.marks.find((m) => m.type === suggType);
-      if (mark) {
-        replacements.push({ from: pos, to: pos + node.nodeSize, text: mark.attrs.replacement });
-      }
-    });
-
-    let tr = editor.state.tr;
-    [...replacements].reverse().forEach(({ from, to, text }) => {
-      tr = tr.replaceWith(from, to, schema.text(text));
-    });
-    editor.view.dispatch(tr);
-    setPendingSuggestions(0);
-  }, [editor]);
-
+  // Bulk reject all
   const rejectAllSuggestions = useCallback(() => {
-    if (!editor) return;
-    editor.commands.unsetMark("suggestion");
-    setPendingSuggestions(0);
-  }, [editor]);
+    suggestions.forEach((s) => rejectSuggestion(s.id));
+    setSuggestions([]);
+    setFloatTool(null);
+  }, [suggestions, rejectSuggestion]);
+
+  // Click on highlighted text → show per-suggestion floating toolbar
+  const handleEditorClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const markEl = (e.target as HTMLElement).closest("mark[data-suggestion]") as HTMLElement | null;
+    if (!markEl) { setFloatTool(null); return; }
+    const id = markEl.getAttribute("data-sid") || "";
+    if (!id) return;
+    const rect = markEl.getBoundingClientRect();
+    setFloatTool({ id, x: rect.left + rect.width / 2, y: rect.top });
+  }, []);
 
   // Register/unregister with EditorStore so CursorChat can call applyChanges
   useEffect(() => {
@@ -234,15 +290,37 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
   );
 
   return (
-    <div className="relative h-full overflow-y-auto">
+    <div className="relative h-full overflow-y-auto" onClick={handleEditorClick}>
       <EditorToolbar editor={editor} />
       <EditorContent editor={editor} />
 
-      {/* Suggestion accept/reject bar */}
-      {pendingSuggestions > 0 && (
+      {/* Per-suggestion floating toolbar — appears above clicked highlight */}
+      {floatTool && (
+        <div
+          className="fixed z-30 flex items-center gap-1 p-1 rounded-lg bg-gray-900/95 border border-white/10 shadow-2xl backdrop-blur"
+          style={{ left: floatTool.x, top: floatTool.y, transform: "translate(-50%, calc(-100% - 6px))" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => acceptSuggestion(floatTool.id)}
+            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-green-500 hover:bg-green-600 text-white transition-colors"
+          >
+            <CheckCheck size={11} /> Accept
+          </button>
+          <button
+            onClick={() => rejectSuggestion(floatTool.id)}
+            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/70 transition-colors"
+          >
+            <X size={11} /> Reject
+          </button>
+        </div>
+      )}
+
+      {/* Bottom bar — bulk accept / reject all when multiple suggestions pending */}
+      {suggestions.length > 0 && (
         <div className="fixed bottom-14 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber/10 border border-amber-200 dark:border-amber/30 shadow-lg z-20">
           <span className="text-[12px] font-medium text-amber-800 dark:text-amber">
-            {pendingSuggestions} suggestion{pendingSuggestions > 1 ? "s" : ""} pending
+            {suggestions.length} suggestion{suggestions.length > 1 ? "s" : ""} — click to review
           </span>
           <button
             onClick={acceptAllSuggestions}
@@ -254,7 +332,7 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
             onClick={rejectAllSuggestions}
             className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1 rounded-lg bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black/70 dark:text-white/70 transition-colors"
           >
-            <X size={12} /> Reject
+            <X size={12} /> Reject all
           </button>
         </div>
       )}

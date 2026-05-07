@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PMind — Demo Recording</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0D0D0D;
+      --glass:    rgba(22, 22, 22, 0.92);
+      --border:   rgba(217, 119, 6, 0.12);
+      --amber:    #D97706;
+      --amber-hi: #F59E0B;
+      --amber-lo: rgba(217, 119, 6, 0.12);
+      --amber-bd: rgba(217, 119, 6, 0.25);
+      --text:     #F3F2F1;
+      --text-2:   rgba(243, 242, 241, 0.55);
+      --text-3:   rgba(243, 242, 241, 0.26);
+      --mono:     'JetBrains Mono', monospace;
+      --sans:     'Inter', -apple-system, sans-serif;
+      --serif:    'Playfair Display', Georgia, serif;
+    }
+
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #000; font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Scaling shell ────────────────────────────────────── */
+    #shell {
+      position: absolute;
+      width: 1280px; height: 720px;
+      transform-origin: top left;
+      background: var(--bg);
+      overflow: hidden;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    /* ── Fade overlay ─────────────────────────────────────── */
+    #fade {
+      position: absolute; inset: 0; z-index: 999;
+      background: #000; opacity: 0; pointer-events: none;
+      transition: opacity 0.7s ease;
+    }
+    #fade.in { opacity: 1; }
+
+    /* ── Ambient background ───────────────────────────────── */
+    .ambient {
+      position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 40% at 50% 0%, rgba(217,119,6,0.07) 0%, transparent 65%),
+        radial-gradient(ellipse 30% 20% at 75% 8%, rgba(180,83,9,0.04) 0%, transparent 55%);
+    }
+
+    /* ── Window chrome ────────────────────────────────────── */
+    .titlebar {
+      position: relative; z-index: 10;
+      height: 38px; background: #090909;
+      border-bottom: 1px solid rgba(217,119,6,0.08);
+      display: flex; align-items: center; padding: 0 14px; gap: 10px;
+    }
+    .tl-group { display: flex; gap: 6px; }
+    .tl { width: 11px; height: 11px; border-radius: 50%; }
+    .tl-r { background: #FF5F57; }
+    .tl-y { background: #FFBD2E; }
+    .tl-g { background: #28CA41; }
+    .win-label {
+      font-family: var(--mono); font-size: 11px;
+      color: rgba(255,255,255,0.2); margin-left: 4px;
+    }
+    .win-badge {
+      margin-left: auto; display: flex; align-items: center; gap: 5px;
+      font-family: var(--mono); font-size: 9px; color: rgba(217,119,6,0.5);
+      padding: 3px 9px; background: rgba(217,119,6,0.06);
+      border: 1px solid rgba(217,119,6,0.12); border-radius: 5px;
+    }
+    .win-badge-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--amber); animation: pulse 2s ease-in-out infinite;
+    }
+
+    /* ── Layout ───────────────────────────────────────────── */
+    .layout {
+      display: flex; height: calc(720px - 38px);
+      position: relative; z-index: 1;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────── */
+    .sidebar {
+      width: 210px; flex-shrink: 0;
+      background: var(--glass); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .sb-head {
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid rgba(217,119,6,0.06);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sb-logo {
+      width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0;
+      background: linear-gradient(145deg, #D97706 0%, #92400e 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--serif); font-size: 11px; font-weight: 700;
+      color: rgba(255,255,255,0.9); box-shadow: 0 2px 8px rgba(217,119,6,0.3);
+    }
+    .sb-name { font-family: var(--serif); font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .sb-body { flex: 1; padding: 10px 8px; }
+    .proj-row {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 6px; border-radius: 6px; cursor: default; margin-bottom: 3px;
+    }
+    .proj-chevron { font-size: 9px; color: var(--text-3); }
+    .proj-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--amber); flex-shrink: 0; }
+    .proj-name { font-size: 12px; font-weight: 600; color: var(--text); }
+    .file-item {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 6px 4px 20px; border-radius: 5px; margin-bottom: 1px;
+    }
+    .file-item.active { background: rgba(217,119,6,0.1); }
+    .file-icon { font-size: 9px; color: var(--text-3); }
+    .file-item.active .file-icon { color: var(--amber); }
+    .file-name { font-size: 12px; color: var(--text-2); }
+    .file-item.active .file-name { color: var(--amber-hi); font-weight: 500; }
+    .sb-foot {
+      padding: 8px 10px; border-top: 1px solid rgba(217,119,6,0.06);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .plan-tag {
+      font-size: 9px; color: var(--text-3); padding: 2px 6px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase;
+    }
+
+    /* ── Editor ───────────────────────────────────────────── */
+    .editor {
+      flex: 1; display: flex; flex-direction: column;
+      position: relative; overflow: hidden;
+      background: #0D0D0D;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      background: var(--glass); border-bottom: 1px solid var(--border);
+      padding: 5px 10px; display: flex; align-items: center; gap: 1px;
+    }
+    .tb { width: 26px; height: 26px; border-radius: 5px; border: none; background: transparent;
+      color: rgba(243,242,241,0.4); display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; cursor: default; }
+    .tb.on { background: rgba(217,119,6,0.14); color: var(--amber-hi); }
+    .tb-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.07); margin: 0 3px; }
+
+    /* Editor doc */
+    .editor-doc {
+      flex: 1; padding: 22px 30px; overflow: hidden;
+      font-family: var(--sans); position: relative;
+    }
+    .doc-title {
+      font-family: var(--serif); font-size: 22px; font-weight: 700;
+      color: var(--text); letter-spacing: -0.022em; margin-bottom: 18px; line-height: 1.2;
+    }
+    .doc-h2 {
+      font-family: var(--serif); font-size: 13px; font-weight: 700;
+      color: var(--text); margin-top: 14px; margin-bottom: 5px;
+    }
+    .doc-p { font-size: 12px; color: var(--text-2); line-height: 1.72; display: block; }
+    .doc-cursor {
+      display: inline-block; width: 2px; height: 13px; background: var(--amber);
+      border-radius: 1px; vertical-align: middle; margin-left: 1px;
+      animation: blink 1.05s step-end infinite;
+    }
+
+    /* Suggestion highlights */
+    .sugg {
+      background: rgba(254,243,199,0.2); border-bottom: 1.5px solid rgba(245,158,11,0.5);
+      border-radius: 2px; padding: 0 1px; transition: background 0.4s, border-color 0.4s;
+    }
+    .sugg.resolved { background: transparent; border-color: transparent; }
+
+    /* ⌘K Modal */
+    .cmd-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.42); backdrop-filter: blur(2px);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding-top: 28px; opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .cmd-overlay.visible { opacity: 1; pointer-events: all; }
+
+    .cmd-modal {
+      width: 400px;
+      background: rgba(18,14,9,0.98);
+      border: 1px solid rgba(217,119,6,0.28); border-top-color: rgba(217,119,6,0.42);
+      border-radius: 12px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.85), 0 0 40px rgba(217,119,6,0.07);
+      overflow: hidden;
+      transform: translateY(-6px) scale(0.97);
+      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .cmd-overlay.visible .cmd-modal { transform: none; }
+
+    .cmd-head {
+      padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.045);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .cmd-icon {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: rgba(217,119,6,0.14); border: 1px solid rgba(217,119,6,0.28);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: var(--amber-hi);
+    }
+    .cmd-label { font-size: 11px; font-weight: 700; color: var(--amber-hi); letter-spacing: 0.08em; text-transform: uppercase; }
+    .cmd-esc {
+      margin-left: auto; font-family: var(--mono); font-size: 9px; color: var(--text-3);
+      padding: 2px 6px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 4px;
+    }
+
+    .cmd-rows { padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+    .cmd-row {
+      padding: 8px 10px; border-radius: 7px;
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+      display: flex; align-items: center; justify-content: space-between; cursor: default;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .cmd-row.hi { background: rgba(217,119,6,0.09); border-color: rgba(217,119,6,0.22); }
+    .cmd-row-l { display: flex; align-items: center; gap: 8px; }
+    .cmd-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); transition: background 0.15s; }
+    .cmd-row.hi .cmd-dot { background: var(--amber); }
+    .cmd-rname { font-size: 12px; font-weight: 500; color: var(--text-2); transition: color 0.15s; }
+    .cmd-row.hi .cmd-rname { color: var(--amber-hi); }
+    .cmd-enter {
+      font-family: var(--mono); font-size: 9px; color: var(--amber);
+      padding: 2px 6px; background: rgba(217,119,6,0.1); border: 1px solid rgba(217,119,6,0.2); border-radius: 4px;
+    }
+
+    .cmd-inp {
+      padding: 8px; border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .cmd-inp-box {
+      width: 100%; padding: 7px 10px; font-size: 12px; font-family: var(--sans);
+      background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 7px; color: var(--text-2); outline: none; resize: none;
+      min-height: 32px; line-height: 1.5;
+    }
+
+    .cmd-gen {
+      padding: 8px; border-top: 1px solid rgba(255,255,255,0.04);
+      display: none;
+    }
+    .gen-lbl {
+      font-family: var(--mono); font-size: 9px; color: rgba(217,119,6,0.55);
+      letter-spacing: 0.09em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 5px; margin-bottom: 7px;
+    }
+    .gen-ldot { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); animation: pulse 0.9s ease-in-out infinite; }
+    .gen-out { font-family: var(--mono); font-size: 11px; color: var(--text-2); line-height: 1.65; min-height: 60px; }
+    .gen-cursor {
+      display: inline-block; width: 7px; height: 12px; background: var(--amber-hi);
+      border-radius: 1px; vertical-align: middle; margin-left: 2px;
+      animation: blink 0.65s step-end infinite;
+    }
+
+    /* ── Chat ─────────────────────────────────────────────── */
+    .chat {
+      width: 268px; flex-shrink: 0;
+      background: var(--glass); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    .chat-head {
+      padding: 9px 10px; border-bottom: 1px solid rgba(217,119,6,0.07);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .chat-icon { font-size: 13px; color: var(--amber); }
+    .chat-ttl { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+    .model-pill {
+      display: flex; align-items: center; gap: 3px; padding: 3px 7px;
+      background: rgba(217,119,6,0.1); border: 1px solid rgba(217,119,6,0.2); border-radius: 5px;
+      font-family: var(--mono); font-size: 9px; color: var(--amber-hi);
+    }
+
+    .chat-msgs { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+    .chat-empty { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 20px; line-height: 1.6; }
+    .msg-u {
+      align-self: flex-end; max-width: 88%;
+      padding: 7px 10px; border-radius: 10px 10px 3px 10px;
+      background: rgba(217,119,6,0.14); border: 1px solid rgba(217,119,6,0.2);
+      font-size: 11px; color: var(--text); line-height: 1.55;
+    }
+    .msg-a {
+      align-self: flex-start; max-width: 96%;
+      padding: 7px 10px; border-radius: 10px 10px 10px 3px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px; color: var(--text-2); line-height: 1.55;
+    }
+    .msg-a-lbl {
+      font-family: var(--mono); font-size: 8px; color: var(--amber);
+      letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .apply-btn {
+      margin-top: 6px; padding: 3px 8px; font-size: 9px; font-weight: 600;
+      background: rgba(217,119,6,0.12); border: 1px solid rgba(217,119,6,0.22);
+      border-radius: 4px; color: var(--amber-hi); cursor: default;
+      display: inline-flex; align-items: center; gap: 3px;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .apply-btn.show { opacity: 1; }
+
+    .chat-foot {
+      padding: 8px; border-top: 1px solid rgba(217,119,6,0.07);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .chat-in {
+      flex: 1; padding: 6px 8px; font-size: 11px; font-family: var(--sans);
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 7px; color: var(--text-2); height: 30px; line-height: 18px;
+    }
+    .chat-send {
+      width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
+      background: rgba(217,119,6,0.14); border: 1px solid rgba(217,119,6,0.22);
+      color: var(--amber-hi); display: flex; align-items: center; justify-content: center;
+      font-size: 11px; cursor: default;
+    }
+
+    /* ── Suggestion bar ───────────────────────────────────── */
+    #suggBar {
+      position: absolute; bottom: -60px; left: 50%; transform: translateX(-50%);
+      z-index: 50; display: flex; align-items: center; gap: 10px;
+      padding: 10px 18px; border-radius: 12px;
+      background: rgba(245,220,130,0.06); border: 1px solid rgba(217,119,6,0.28);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(217,119,6,0.06);
+      backdrop-filter: blur(20px);
+      transition: bottom 0.4s cubic-bezier(0.34,1.56,0.64,1);
+      white-space: nowrap;
+    }
+    #suggBar.up { bottom: 16px; }
+    .sugg-txt { font-size: 12px; font-weight: 500; color: rgba(245,200,100,0.9); }
+    .sugg-btn {
+      padding: 5px 12px; font-size: 11px; font-weight: 600;
+      border-radius: 7px; cursor: default; display: flex; align-items: center; gap: 5px;
+      transition: background 0.15s;
+    }
+    .sugg-btn.accept { background: #16a34a; color: #fff; }
+    .sugg-btn.accept.press { background: #15803d; }
+    .sugg-btn.reject { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+
+    /* ── Animations ───────────────────────────────────────── */
+    @keyframes pulse {
+      0%,100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(217,119,6,0.5); }
+      50%      { transform: scale(0.85); opacity: 0.6; }
+    }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+  </style>
+</head>
+<body>
+  <div id="shell">
+    <div class="ambient"></div>
+    <div id="fade"></div>
+
+    <!-- Window chrome -->
+    <div class="titlebar">
+      <div class="tl-group">
+        <span class="tl tl-r"></span>
+        <span class="tl tl-y"></span>
+        <span class="tl tl-g"></span>
+      </div>
+      <span class="win-label">PMind — Mobile Checkout Redesign · PRD</span>
+      <div class="win-badge"><span class="win-badge-dot"></span>Auto-saved</div>
+    </div>
+
+    <div class="layout">
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sb-head">
+          <div class="sb-logo">P</div>
+          <span class="sb-name">PMind</span>
+        </div>
+        <div class="sb-body">
+          <div class="proj-row">
+            <span class="proj-chevron">▾</span>
+            <div class="proj-dot"></div>
+            <span class="proj-name">Checkout v3</span>
+          </div>
+          <div class="file-item active"><span class="file-icon">▪</span><span class="file-name">PRD</span></div>
+          <div class="file-item"><span class="file-icon">▫</span><span class="file-name">Brief</span></div>
+          <div class="file-item"><span class="file-icon">▫</span><span class="file-name">Research</span></div>
+          <div class="file-item"><span class="file-icon">▫</span><span class="file-name">Tickets</span></div>
+        </div>
+        <div class="sb-foot">
+          <span class="plan-tag">Free</span>
+          <span style="font-size:11px;color:var(--text-3)">◑</span>
+        </div>
+      </div>
+
+      <!-- Editor -->
+      <div class="editor">
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="tb" style="font-size:10px;">↩</div>
+          <div class="tb" style="font-size:10px;">↪</div>
+          <div class="tb-sep"></div>
+          <div class="tb" style="font-size:9px;font-weight:800;">H1</div>
+          <div class="tb on" style="font-size:9px;font-weight:800;">H2</div>
+          <div class="tb" style="font-size:9px;font-weight:800;">H3</div>
+          <div class="tb-sep"></div>
+          <div class="tb" style="font-weight:800;">B</div>
+          <div class="tb" style="font-style:italic;">I</div>
+          <div class="tb" style="font-family:var(--mono);font-size:10px;">`</div>
+          <div class="tb-sep"></div>
+          <div class="tb">•≡</div>
+          <div class="tb">1≡</div>
+          <div class="tb" style="font-size:13px;">"</div>
+          <div class="tb-sep"></div>
+          <div class="tb" style="font-size:11px;">⌘L</div>
+          <div class="tb" style="font-size:11px;">⌘I</div>
+        </div>
+
+        <!-- Doc content -->
+        <div class="editor-doc" id="editorDoc">
+          <div class="doc-title">Mobile Checkout Redesign</div>
+
+          <div class="doc-h2">Problem Statement</div>
+          <span class="doc-p">Checkout abandonment at 34% vs. 18% industry benchmark. Primary drop-off at payment selection (step 3 of 4).</span>
+
+          <div class="doc-h2">Target Users</div>
+          <span class="doc-p">Mobile-first buyers aged 25–40, repeat purchasers, urban market. High-intent, time-sensitive, trust-driven.</span>
+
+          <div class="doc-h2">Success Metrics</div>
+          <span class="doc-p" id="metricsLine">
+            Reduce abandon rate to &lt;20%. Repeat purchase +15% YoY.<span class="doc-cursor" id="mainCursor"></span>
+          </span>
+
+          <!-- AI-generated tickets section (hidden initially) -->
+          <div id="aiSection" style="display:none; margin-top:14px;">
+            <div class="doc-h2" style="display:flex;align-items:center;gap:8px;">
+              Tickets
+              <span style="font-family:var(--mono);font-size:9px;padding:2px 7px;background:rgba(217,119,6,0.1);border:1px solid rgba(217,119,6,0.22);border-radius:4px;color:var(--amber-hi);font-weight:500;">AI · Product Brain</span>
+            </div>
+            <span class="doc-p" style="font-family:var(--mono);font-size:11px;line-height:1.7;white-space:pre-wrap;" id="aiDocText"></span>
+          </div>
+        </div>
+
+        <!-- ⌘K Modal -->
+        <div class="cmd-overlay" id="cmdOverlay">
+          <div class="cmd-modal">
+            <div class="cmd-head">
+              <div class="cmd-icon">⌘</div>
+              <span class="cmd-label">AI Command</span>
+              <span class="cmd-esc">esc</span>
+            </div>
+            <div class="cmd-rows" id="cmdRows">
+              <div class="cmd-row"><div class="cmd-row-l"><span class="cmd-dot"></span><span class="cmd-rname">Write PRD</span></div></div>
+              <div class="cmd-row hi" id="cmdTickets"><div class="cmd-row-l"><span class="cmd-dot"></span><span class="cmd-rname">Break into tickets</span></div><span class="cmd-enter">↵</span></div>
+              <div class="cmd-row"><div class="cmd-row-l"><span class="cmd-dot"></span><span class="cmd-rname">Product brief</span></div></div>
+              <div class="cmd-row"><div class="cmd-row-l"><span class="cmd-dot"></span><span class="cmd-rname">Stakeholder update</span></div></div>
+            </div>
+            <div class="cmd-inp" id="cmdInpArea">
+              <div class="cmd-inp-box" id="cmdInpBox" style="color:rgba(243,242,241,0.3);">Describe the feature or epic to break down…</div>
+            </div>
+            <div class="cmd-gen" id="cmdGen">
+              <div class="gen-lbl"><span class="gen-ldot"></span>Generating from Product Brain</div>
+              <div class="gen-out" id="genOut"><span class="gen-cursor"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat -->
+      <div class="chat">
+        <div class="chat-head">
+          <span class="chat-icon">✦</span>
+          <span class="chat-ttl">AI Chat</span>
+          <div class="model-pill">2.5 Flash <span style="font-size:7px;opacity:.7;">▾</span></div>
+        </div>
+        <div class="chat-msgs" id="chatMsgs">
+          <div class="chat-empty" id="chatEmpty">Ask anything about your document or product strategy.</div>
+        </div>
+        <div class="chat-foot">
+          <div class="chat-in" id="chatIn" style="color:rgba(243,242,241,0.28);line-height:18px;font-size:11px;">Ask anything…</div>
+          <div class="chat-send">→</div>
+        </div>
+      </div>
+
+    </div><!-- end layout -->
+
+    <!-- Suggestion bar -->
+    <div id="suggBar">
+      <span class="sugg-txt" id="suggTxt">3 suggestions — click to review</span>
+      <button class="sugg-btn accept" id="acceptBtn">✓ Accept all</button>
+      <button class="sugg-btn reject">✕ Reject all</button>
+    </div>
+
+  </div><!-- end shell -->
+
+  <script>
+    // ── Scale to window ────────────────────────────────────────
+    function scaleShell() {
+      const el = document.getElementById('shell');
+      const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+      el.style.transform = `scale(${s})`;
+      el.style.left = `${(window.innerWidth - 1280 * s) / 2}px`;
+      el.style.top = `${(window.innerHeight - 720 * s) / 2}px`;
+    }
+    scaleShell();
+    window.addEventListener('resize', scaleShell);
+
+    // ── Helpers ────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    function typeInto(el, text, speed = 38) {
+      return new Promise(resolve => {
+        el.style.color = '';
+        let i = 0;
+        const tick = () => {
+          if (i >= text.length) { resolve(); return; }
+          el.textContent = text.slice(0, ++i);
+          setTimeout(tick, speed + Math.random() * 20);
+        };
+        tick();
+      });
+    }
+
+    function streamInto(el, text, speed = 22) {
+      return new Promise(resolve => {
+        let i = 0;
+        const tick = () => {
+          if (i >= text.length) {
+            el.innerHTML = text.replace(/\n/g, '<br>');
+            resolve(); return;
+          }
+          const slice = text.slice(0, ++i);
+          el.innerHTML = slice.replace(/\n/g, '<br>') + '<span class="gen-cursor"></span>';
+          setTimeout(tick, speed + Math.random() * 18);
+        };
+        tick();
+      });
+    }
+
+    function fade(inOut) {
+      const el = $('fade');
+      el.style.transition = 'opacity 0.7s ease';
+      el.style.opacity = inOut === 'in' ? 1 : 0;
+      return wait(750);
+    }
+
+    function reset() {
+      // Clear chat messages except empty state
+      $('chatMsgs').innerHTML = '<div class="chat-empty" id="chatEmpty">Ask anything about your document or product strategy.</div>';
+      $('chatIn').textContent = 'Ask anything…';
+      $('chatIn').style.color = 'rgba(243,242,241,0.28)';
+      // Hide AI section
+      $('aiSection').style.display = 'none';
+      $('aiDocText').textContent = '';
+      // Close modal
+      $('cmdOverlay').classList.remove('visible');
+      // Hide suggestion bar
+      $('suggBar').classList.remove('up');
+      // Restore cursor
+      $('mainCursor').style.display = '';
+      // Restore cmd rows to default highlight
+      document.querySelectorAll('.cmd-row').forEach(r => r.classList.remove('hi'));
+      $('cmdTickets').classList.add('hi');
+      // Reset command input
+      $('cmdInpBox').textContent = 'Describe the feature or epic to break down…';
+      $('cmdInpBox').style.color = 'rgba(243,242,241,0.3)';
+      // Hide gen area
+      $('cmdGen').style.display = 'none';
+      $('cmdInpArea').style.display = '';
+      $('genOut').innerHTML = '<span class="gen-cursor"></span>';
+    }
+
+    // ── Main animation loop ────────────────────────────────────
+    async function runLoop() {
+      while (true) {
+        reset();
+
+        // Scene 0: initial state visible
+        await wait(1200);
+
+        // Scene 1: ⌘K modal opens
+        $('cmdOverlay').classList.add('visible');
+        await wait(600);
+
+        // Scene 2: command already highlighted (tickets), brief pause
+        await wait(700);
+
+        // Scene 3: type into input
+        $('cmdInpBox').style.color = '';
+        await typeInto($('cmdInpBox'), 'Payment flow — 3 epics to break down', 48);
+        await wait(500);
+
+        // Scene 4: switch to generating state
+        $('cmdInpArea').style.display = 'none';
+        $('cmdRows').style.display = 'none';
+        $('cmdGen').style.display = 'block';
+        $('genOut').innerHTML = '<span class="gen-cursor"></span>';
+        await wait(300);
+
+        // Scene 5: stream AI output into modal
+        const ticketOutput =
+`EPIC: Payment UX Overhaul
+
+STORY-001 · Pre-select saved card
+As a returning buyer, I want my saved
+card pre-selected on step 3 so checkout
+takes under 30 seconds.
+AC: Given card on file → step 3 auto-
+selects. Story points: 3
+
+STORY-002 · Surface wallet options
+Surface Apple Pay / Google Pay above-the-
+fold for mobile. Points: 5
+
+STORY-003 · Merge address + payment
+Returning users see 2-step flow, not 4.
+Points: 8`;
+        await streamInto($('genOut'), ticketOutput, 19);
+        await wait(1100);
+
+        // Scene 6: close modal, show AI section in doc
+        $('cmdOverlay').classList.remove('visible');
+        await wait(400);
+        $('mainCursor').style.display = 'none';
+
+        $('aiSection').style.display = 'block';
+        const docTicketText =
+`STORY-001  Pre-select saved card  [3 pts]
+STORY-002  Surface wallet options  [5 pts]
+STORY-003  Merge address + payment [8 pts]`;
+        $('aiDocText').textContent = docTicketText;
+        await wait(500);
+
+        // Scene 7: suggestion bar slides up
+        $('suggBar').classList.add('up');
+        await wait(2000);
+
+        // Scene 8: accept all
+        $('acceptBtn').classList.add('press');
+        await wait(350);
+        $('acceptBtn').classList.remove('press');
+        $('suggBar').classList.remove('up');
+        await wait(800);
+
+        // Scene 9: chat interaction
+        // Clear empty state
+        $('chatMsgs').innerHTML = '';
+        // Add user message
+        const userMsg = document.createElement('div');
+        userMsg.className = 'msg-u';
+        userMsg.textContent = '';
+        $('chatMsgs').appendChild(userMsg);
+        await typeInto(userMsg, 'Any gaps in the success metrics?', 42);
+        await wait(600);
+
+        // Add AI message
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'msg-a';
+        aiMsg.innerHTML = '<div class="msg-a-lbl">PMind AI</div><span id="aiReplyText"></span><div><span class="apply-btn" id="applyBtn">↳ Apply to doc</span></div>';
+        $('chatMsgs').appendChild(aiMsg);
+
+        const aiReply = 'Found 2 gaps: no leading indicator defined (e.g. payment_method_load_time), and no rollback threshold for the A/B test.';
+        let ri = 0;
+        await new Promise(res => {
+          const tick = () => {
+            if (ri >= aiReply.length) { res(); return; }
+            $('aiReplyText').textContent = aiReply.slice(0, ++ri);
+            setTimeout(tick, 20 + Math.random() * 15);
+          };
+          tick();
+        });
+        await wait(400);
+        $('applyBtn').classList.add('show');
+        await wait(2200);
+
+        // Scene 10: fade out, pause, then loop
+        await fade('in');
+        await wait(600);
+        reset();
+        await fade('out');
+        await wait(800);
+      }
+    }
+
+    // Start after fonts load
+    document.fonts.ready.then(() => {
+      setTimeout(runLoop, 800);
+    });
+  </script>
+</body>
+</html>
