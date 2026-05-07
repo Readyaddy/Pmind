@@ -50,31 +50,41 @@
       position:absolute; bottom:-60px; left:50%; transform:translateX(-50%);
       width:800px; height:260px; pointer-events:none;
       background:radial-gradient(ellipse, rgba(217,119,6,0.055) 0%, transparent 65%);
+      transition:all 1.1s cubic-bezier(0.22,1,0.36,1);
+    }
+    .s1-glow.bloom {
+      width:1400px; height:700px; bottom:-200px;
+      background:radial-gradient(ellipse, rgba(217,119,6,0.28) 0%, rgba(217,119,6,0.08) 40%, transparent 70%);
     }
     .prob-wrap { position:relative; z-index:1; max-width:720px; width:100%; padding:0 48px; text-align:center; }
 
     /* Animated lines */
-    .pl { opacity:0; transform:translateY(20px); transition:opacity 0.72s ease, transform 0.72s ease; }
-    .pl.show { opacity:1; transform:none; }
+    .pl { opacity:0; transform:translateY(22px); transition:opacity 0.72s ease, transform 0.72s ease; }
+    .pl.show { opacity:1; transform:translateY(0); }
 
     .pl-tag {
-      font-family:var(--mono); font-size:10px; letter-spacing:0.18em;
-      text-transform:uppercase; color:rgba(217,119,6,0.45);
-      display:flex; align-items:center; justify-content:center; gap:10px;
-      margin-bottom:44px;
+      font-family:var(--mono); font-size:13px; letter-spacing:0.2em;
+      text-transform:uppercase; color:rgba(217,119,6,0.7);
+      display:flex; align-items:center; justify-content:center; gap:12px;
+      margin-bottom:48px;
     }
-    .pl-tag::before, .pl-tag::after { content:''; height:1px; width:36px; background:rgba(217,119,6,0.18); }
+    .pl-tag::before, .pl-tag::after { content:''; height:1px; width:44px; background:rgba(217,119,6,0.3); }
 
-    .pl-norm { font-size:21px; color:rgba(243,242,241,0.42); font-weight:400; line-height:1.5; margin-bottom:6px; }
-    .pl-dim  { font-family:var(--mono); font-size:13px; color:rgba(243,242,241,0.22); letter-spacing:0.04em; margin-bottom:40px; }
-    .pl-big  { font-family:var(--serif); font-size:44px; font-weight:700; letter-spacing:-0.03em; color:var(--text); line-height:1.15; margin-bottom:6px; }
-    .pl-italic { font-family:var(--serif); font-size:38px; font-style:italic; font-weight:400; color:rgba(217,119,6,0.9); letter-spacing:-0.02em; margin-bottom:44px; }
+    .pl-norm   { font-size:28px; color:rgba(243,242,241,0.68); font-weight:400; line-height:1.45; margin-bottom:8px; }
+    .pl-dim    { font-size:18px; color:rgba(243,242,241,0.42); font-weight:300; letter-spacing:0.04em; margin-bottom:44px; }
+    .pl-big    { font-family:var(--serif); font-size:58px; font-weight:700; letter-spacing:-0.032em; color:var(--text); line-height:1.1; margin-bottom:8px; }
+    .pl-italic { font-family:var(--serif); font-size:50px; font-style:italic; font-weight:400; color:#F59E0B; letter-spacing:-0.022em; margin-bottom:52px;
+                 text-shadow: 0 0 60px rgba(245,158,11,0.35), 0 0 120px rgba(217,119,6,0.2); }
+    /* "Until now." — cinematic climax */
     .pl-until {
-      display:inline-flex; align-items:center; gap:8px;
-      font-family:var(--mono); font-size:11px; letter-spacing:0.14em;
-      text-transform:uppercase; color:rgba(217,119,6,0.6);
+      opacity:0; transform:scale(0.78) translateY(18px);
+      display:block;
+      font-family:var(--serif); font-size:78px; font-style:italic; font-weight:700;
+      letter-spacing:-0.04em; color:var(--amber-hi); line-height:1;
+      text-shadow: 0 0 60px rgba(245,158,11,0.7), 0 0 120px rgba(217,119,6,0.45), 0 0 220px rgba(217,119,6,0.25);
+      transition:opacity 1s ease, transform 1s cubic-bezier(0.34,1.56,0.64,1);
     }
-    .pl-until::before, .pl-until::after { content:''; height:1px; width:28px; background:rgba(217,119,6,0.25); }
+    .pl-until.show { opacity:1; transform:scale(1) translateY(0); }
 
     /* ══════════════════════════════════════════════════════════
        SCENE 2 — REVEAL
@@ -533,16 +543,40 @@
 
     // ── SCENE 1 ────────────────────────────────────────────────
     async function runS1() {
-      const seq = [
-        ['p0', 300],
-        ['p1', 900],
-        ['p2', 2000],
-        ['p3', 3200],
-        ['p4', 4600],
-        ['p5', 6200],
-      ];
-      seq.forEach(([id, ms]) => setTimeout(() => show(id), ms));
-      await wait(8000);
+      // Reset any dim state from previous loop
+      ['p0','p1','p2','p3','p4','p5'].forEach(id => {
+        $(id).classList.remove('show');
+        $(id).style.opacity = '';
+        $(id).style.transition = '';
+      });
+      document.querySelector('.s1-glow').classList.remove('bloom');
+
+      await wait(400); show('p0');
+      await wait(900); show('p1');
+      await wait(1300); show('p2');
+      await wait(1700);
+
+      // The accusation lands — dim the earlier setup lines
+      $('p1').style.transition = 'opacity 0.9s ease';
+      $('p2').style.transition = 'opacity 0.9s ease';
+      $('p1').style.opacity = '0.22';
+      $('p2').style.opacity = '0.16';
+      show('p3');
+      await wait(2000);
+      show('p4');
+      await wait(2000);
+
+      // Dramatic pause — everything fades to near-black
+      ['p0','p1','p2','p3','p4'].forEach(id => {
+        $(id).style.transition = 'opacity 1.1s ease';
+        $(id).style.opacity = '0.05';
+      });
+      await wait(1100);
+
+      // UNTIL NOW — amber bloom + big reveal
+      document.querySelector('.s1-glow').classList.add('bloom');
+      show('p5');
+      await wait(3200);
     }
 
     // ── SCENE 2 ────────────────────────────────────────────────
@@ -621,12 +655,18 @@ STORY-003  Merge address + payment [8 pts]`;
       $('capT').innerHTML   = 'AI Chat — ask your doc anything. Apply suggestions inline.';
       await wait(700);
 
-      // Chat: user message
+      // Type into the chat input field first
       $('chMsgs').innerHTML = '';
+      await typeEl($('chIn'), 'Any gaps in the success metrics?', 42);
+      await wait(380);
+
+      // Simulate "send" — clear input, bubble appears in msgs
+      $('chIn').textContent = 'Ask anything…';
+      $('chIn').style.color = 'rgba(243,242,241,0.28)';
       const uMsg = document.createElement('div');
       uMsg.className = 'msg-u';
+      uMsg.textContent = 'Any gaps in the success metrics?';
       $('chMsgs').appendChild(uMsg);
-      await typeEl(uMsg, 'Any gaps in the success metrics?', 42);
       await wait(600);
 
       // AI response
