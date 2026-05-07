@@ -51,34 +51,76 @@
     }
 
     /* ── Background ─────────────────────────────────────────── */
-    #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.45; }
+    #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.72; }
+
+    /* Film grain — animated noise texture for depth */
+    .bg-grain {
+      position: fixed; inset: -50%; width: 200%; height: 200%;
+      z-index: 0; pointer-events: none; opacity: 0.032;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 200px;
+      animation: grain 1.5s steps(8) infinite;
+    }
+    @keyframes grain {
+      0%,100%{ transform:translate(0,0); }     12%{ transform:translate(-3%,-2%); }
+      25%    { transform:translate(3%,3%); }    37%{ transform:translate(-2%,3%); }
+      50%    { transform:translate(4%,-1%); }   62%{ transform:translate(-3%,1%); }
+      75%    { transform:translate(2%,-3%); }   87%{ transform:translate(-4%,2%); }
+    }
+
+    /* Grid */
     .bg-grid {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background-image:
-        linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px);
+        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
       background-size: 72px 72px;
-      mask-image: radial-gradient(ellipse 90% 55% at 50% 0%, black 10%, transparent 70%);
-      -webkit-mask-image: radial-gradient(ellipse 90% 55% at 50% 0%, black 10%, transparent 70%);
+      mask-image: radial-gradient(ellipse 100% 65% at 50% 0%, black 5%, transparent 78%);
+      -webkit-mask-image: radial-gradient(ellipse 100% 65% at 50% 0%, black 5%, transparent 78%);
     }
+
+    /* Aurora — dramatic colour sweep at top of page */
+    .bg-aurora {
+      position: fixed; top: 0; left: -10%; right: -10%;
+      height: 60vh; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 110% 55% at 32% -18%, rgba(217,119,6,0.20) 0%, transparent 55%),
+        radial-gradient(ellipse 75%  50% at 72% -12%, rgba(146,64,14,0.13)  0%, transparent 52%),
+        radial-gradient(ellipse 55%  35% at 55%  -4%, rgba(245,158,11,0.07) 0%, transparent 48%);
+      filter: blur(36px);
+      animation: aurora-shift 18s ease-in-out infinite alternate;
+    }
+    @keyframes aurora-shift {
+      0%   { opacity:.7;  transform:translateX(-2%) scaleX(1.0); }
+      100% { opacity:1.0; transform:translateX(2%)  scaleX(1.1); }
+    }
+
+    /* Ambient gradient layer */
     .bg-amber {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background:
-        radial-gradient(ellipse 80% 50% at 50% -8%, rgba(217,119,6,0.07) 0%, transparent 60%),
-        radial-gradient(ellipse 45% 35% at 80% 10%, rgba(180,83,9,0.04) 0%, transparent 55%);
-      animation: drift 20s ease-in-out infinite alternate;
+        radial-gradient(ellipse 90% 55% at 50% -10%, rgba(217,119,6,0.12) 0%, transparent 58%),
+        radial-gradient(ellipse 50% 38% at 88%   8%, rgba(146,64,14,0.08)  0%, transparent 50%),
+        radial-gradient(ellipse 38% 28% at  8%   6%, rgba(245,158,11,0.05) 0%, transparent 46%);
+      animation: drift 24s ease-in-out infinite alternate;
     }
-    @keyframes drift { 0% { opacity:1; transform:scale(1); } 100% { opacity:.75; transform:scale(1.06); } }
+    @keyframes drift {
+      0%   { opacity:1;   transform:scale(1)    translateX(0); }
+      100% { opacity:.82; transform:scale(1.05) translateX(1.8%); }
+    }
+
+    /* Light beams */
     .beams { position: fixed; top:0; left:0; right:0; height:100vh; pointer-events:none; z-index:0; overflow:hidden; }
     .beam {
-      position: absolute; top:0; width:1px; height:70vh;
-      background: linear-gradient(180deg, transparent 0%, rgba(217,119,6,0.12) 25%, rgba(217,119,6,0.04) 65%, transparent 100%);
-      filter: blur(0.5px); transform-origin: top center;
+      position: absolute; top:0; transform-origin: top center;
+      background: linear-gradient(180deg, rgba(217,119,6,0.30) 0%, rgba(217,119,6,0.10) 35%, rgba(217,119,6,0.03) 70%, transparent 100%);
     }
-    .beam:nth-child(1){ left:28%; transform:rotate(-7deg); animation:flicker 8s  ease-in-out infinite; }
-    .beam:nth-child(2){ left:50%; transform:rotate(0deg);  animation:flicker 11s ease-in-out infinite 2s; width:2px; }
-    .beam:nth-child(3){ left:70%; transform:rotate(7deg);  animation:flicker 9s  ease-in-out infinite 4s; }
-    @keyframes flicker { 0%,100%{opacity:.3;} 50%{opacity:.85;} }
+    .beam:nth-child(1){ left:16%; width:1px; height:75vh; transform:rotate(-12deg); animation:flicker 8s  ease-in-out infinite;      filter:blur(0.8px); }
+    .beam:nth-child(2){ left:34%; width:2px; height:82vh; transform:rotate(-4deg);  animation:flicker 12s ease-in-out infinite 1.4s; filter:blur(2px); }
+    .beam:nth-child(3){ left:51%; width:1px; height:70vh; transform:rotate(1deg);   animation:flicker 9s  ease-in-out infinite 3.1s; filter:blur(0.8px); }
+    .beam:nth-child(4){ left:65%; width:3px; height:88vh; transform:rotate(7deg);   animation:flicker 14s ease-in-out infinite 0.7s; filter:blur(3px); }
+    .beam:nth-child(5){ left:82%; width:1px; height:62vh; transform:rotate(13deg);  animation:flicker 7s  ease-in-out infinite 5s;   filter:blur(0.8px); }
+    @keyframes flicker { 0%,100%{opacity:.18;} 42%{opacity:.72;} 68%{opacity:.28;} }
 
     /* ── Layout ─────────────────────────────────────────────── */
     .container { max-width: 1080px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
@@ -126,7 +168,43 @@
     .nav-btn:hover { background:rgba(217,119,6,0.16); box-shadow:0 0 22px rgba(217,119,6,0.12); }
 
     /* ── Hero ───────────────────────────────────────────────── */
-    .hero { padding-top:128px; padding-bottom:72px; text-align:center; }
+    .hero { padding-top:128px; padding-bottom:56px; text-align:center; }
+
+    /* ── Inline demo section ────────────────────────────────── */
+    .inline-demo { padding: 0 0 96px; position: relative; z-index: 1; }
+    .idemo-label {
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+      margin-bottom: 36px;
+    }
+    .idemo-line { flex: 0 0 52px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08)); }
+    .idemo-line:last-child { background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent); }
+    .idemo-text {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--text-3);
+    }
+    .idemo-wrap { position: relative; }
+    .idemo-glow {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 70%; height: 280px; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse, rgba(217,119,6,0.09) 0%, transparent 65%);
+    }
+    .idemo-ratio {
+      position: relative; width: 100%; padding-bottom: 56.25%;
+      border-radius: 12px; overflow: hidden; z-index: 1;
+      box-shadow:
+        0 0 0 1px rgba(217,119,6,0.14),
+        0 40px 100px rgba(0,0,0,0.65),
+        0 0 60px rgba(217,119,6,0.05);
+    }
+    .idemo-frame {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border: none; display: block; background: #000;
+    }
+    .idemo-caption {
+      margin-top: 16px; text-align: center;
+      font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em;
+    }
+    .idemo-caption span { color: rgba(217,119,6,0.4); }
     .hero-badge {
       display:inline-flex; align-items:center; gap:7px; padding:5px 14px; margin-bottom:44px;
       background:var(--amber-lo); border:1px solid var(--amber-bd); border-radius:100px;
@@ -497,9 +575,11 @@
 </head>
 <body>
   <canvas id="bg-canvas"></canvas>
+  <div class="bg-grain"></div>
   <div class="bg-grid"></div>
+  <div class="bg-aurora"></div>
   <div class="bg-amber"></div>
-  <div class="beams" aria-hidden="true"><div class="beam"></div><div class="beam"></div><div class="beam"></div></div>
+  <div class="beams" aria-hidden="true"><div class="beam"></div><div class="beam"></div><div class="beam"></div><div class="beam"></div><div class="beam"></div></div>
 
   <!-- Nav -->
   <nav>
@@ -521,131 +601,24 @@
       <p class="hero-sub">AI grounded in your strategy, your users, and your constraints — not just your last message.</p>
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
          target="_blank" rel="noopener noreferrer" class="btn-primary">Request Early Access →</a>
+    </div>
+  </section>
 
-      <!-- ── Real-app mockup ── -->
-      <div class="demo-wrap reveal">
-        <div class="demo-halo"></div>
-        <div class="app-window">
-
-          <!-- Window chrome -->
-          <div class="app-titlebar">
-            <div class="tl-group"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
-            <span class="app-fname">PMind — PRD · Mobile Checkout Redesign</span>
-          </div>
-
-          <!-- Three-panel app body -->
-          <div class="app-body">
-
-            <!-- ── Sidebar ── -->
-            <div class="app-sidebar">
-              <div class="sidebar-header">
-                <div class="sidebar-logo">P</div>
-                <span class="sidebar-appname">PMind</span>
-              </div>
-              <div class="sidebar-body">
-                <div class="proj-row">
-                  <span class="proj-chevron">▾</span>
-                  <div class="proj-dot"></div>
-                  <span class="proj-name">Checkout v3</span>
-                </div>
-                <div class="doc-item active"><span class="doc-icon">▪</span><span class="doc-name">PRD</span></div>
-                <div class="doc-item"><span class="doc-icon">▫</span><span class="doc-name">Brief</span></div>
-                <div class="doc-item"><span class="doc-icon">▫</span><span class="doc-name">Research</span></div>
-                <div class="doc-item"><span class="doc-icon">▫</span><span class="doc-name">Tickets</span></div>
-              </div>
-              <div class="sidebar-footer">
-                <span class="plan-badge">Free</span>
-                <span class="theme-btn">◑</span>
-              </div>
-            </div>
-
-            <!-- ── Editor ── -->
-            <div class="app-editor">
-              <!-- Toolbar matching EditorToolbar.tsx -->
-              <div class="editor-toolbar">
-                <button class="tb-btn" title="Undo">↩</button>
-                <button class="tb-btn" title="Redo">↪</button>
-                <div class="tb-sep"></div>
-                <button class="tb-btn" title="H1" style="font-size:9px;font-weight:700;">H1</button>
-                <button class="tb-btn on" title="H2" style="font-size:9px;font-weight:700;">H2</button>
-                <button class="tb-btn" title="H3" style="font-size:9px;font-weight:700;">H3</button>
-                <div class="tb-sep"></div>
-                <button class="tb-btn" title="Bold" style="font-weight:800;">B</button>
-                <button class="tb-btn" title="Italic" style="font-style:italic;">I</button>
-                <button class="tb-btn" title="Code" style="font-family:var(--mono);font-size:10px;">`</button>
-                <div class="tb-sep"></div>
-                <button class="tb-btn" title="Bullet">•≡</button>
-                <button class="tb-btn" title="Ordered">1≡</button>
-                <button class="tb-btn" title="Quote" style="font-size:14px;">"</button>
-                <div class="tb-sep"></div>
-                <button class="tb-btn" title="Link" style="font-size:12px;">⌘L</button>
-                <button class="tb-btn" title="Image" style="font-size:11px;">⌘I</button>
-              </div>
-
-              <!-- Document content -->
-              <div class="editor-content">
-                <div class="editor-h1">Mobile Checkout Redesign</div>
-                <div class="editor-body">
-                  <div class="editor-h2">Problem Statement</div>
-                  Checkout abandonment at 34% vs. 18% industry benchmark.<br>
-                  Primary drop-off at payment selection (step 3 of 4).<br><br>
-                  <div class="editor-h2">Target Users</div>
-                  Mobile-first buyers, 25–40, repeat purchasers,<br>
-                  high-intent urban market<span class="amber-cur"></span>
-                </div>
-              </div>
-
-              <!-- ⌘K modal — direct child of app-editor so it isn't clipped by editor-content overflow -->
-              <div class="cmd-modal-overlay" id="cmdOverlay">
-                <div class="cmd-modal" id="cmdModal">
-                  <div class="cmd-modal-header">
-                    <div class="cmd-modal-icon">⌘</div>
-                    <span class="cmd-modal-title">AI Command</span>
-                    <span class="cmd-modal-esc">esc</span>
-                  </div>
-                  <div class="cmd-list">
-                    <div class="cmd-row"><div class="cmd-row-left"><span class="cmd-row-dot"></span><span class="cmd-row-name">Write PRD</span></div></div>
-                    <div class="cmd-row active" id="activeCmd"><div class="cmd-row-left"><span class="cmd-row-dot"></span><span class="cmd-row-name">Break into tickets</span></div><span class="cmd-row-enter">↵</span></div>
-                    <div class="cmd-row"><div class="cmd-row-left"><span class="cmd-row-dot"></span><span class="cmd-row-name">Product brief</span></div></div>
-                    <div class="cmd-row"><div class="cmd-row-left"><span class="cmd-row-dot"></span><span class="cmd-row-name">Stakeholder update</span></div></div>
-                  </div>
-                  <div class="cmd-input-area">
-                    <div class="cmd-input-box" style="color:rgba(243,242,241,0.35);">Describe the feature or epic to break down…</div>
-                  </div>
-                  <div class="cmd-generating" id="cmdGenerating">
-                    <div class="gen-label"><span class="gen-dot"></span>Generating from Product Brain</div>
-                    <div class="gen-text" id="genText"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- ── Chat panel — matches CursorChat.tsx ── -->
-            <div class="app-chat">
-              <div class="chat-header">
-                <span class="chat-icon">✦</span>
-                <span class="chat-title">AI Chat</span>
-                <div class="model-pill">2.5 Flash <span class="model-pill-arrow">▾</span></div>
-              </div>
-              <div class="chat-msgs">
-                <div class="msg-user">Can you find gaps in the success metrics section?</div>
-                <div class="msg-ai">
-                  <div class="msg-ai-label">PMind AI</div>
-                  I found 3 gaps: no leading indicator defined, missing segment-level targets, and no rollback threshold specified.
-                  <div><span class="apply-btn">↳ Apply to doc</span></div>
-                </div>
-              </div>
-              <div class="chat-input-row">
-                <div class="chat-textarea" style="color:rgba(243,242,241,0.3);line-height:30px;font-size:11px;">Ask anything…</div>
-                <div class="chat-send">→</div>
-              </div>
-            </div>
-
-          </div><!-- end app-body -->
-        </div><!-- end app-window -->
-
-        <div class="kbd-row">Press <span class="kbd">⌘</span><span class="kbd">K</span> anywhere to invoke AI</div>
+  <!-- ── Inline demo ───────────────────────────────────────── -->
+  <section class="inline-demo">
+    <div class="container">
+      <div class="idemo-label">
+        <span class="idemo-line"></span>
+        <span class="idemo-text">See PMind in action</span>
+        <span class="idemo-line"></span>
       </div>
+      <div class="idemo-wrap reveal">
+        <div class="idemo-glow"></div>
+        <div class="idemo-ratio">
+          <iframe src="demo.html" class="idemo-frame" scrolling="no" title="PMind live demo"></iframe>
+        </div>
+      </div>
+      <p class="idemo-caption">40-second loop &nbsp;·&nbsp; <span>Problem → Product → AI in action → Early access</span></p>
     </div>
   </section>
 
@@ -768,26 +741,88 @@
   </footer>
 
   <script>
-    // ── Particle canvas ────────────────────────────────────────
+    // ── Canvas: ambient orbs + flow-field particles ────────────
     (function(){
-      const c=document.getElementById('bg-canvas'),ctx=c.getContext('2d');
-      let W,H,pts=[];
-      function resize(){W=c.width=innerWidth;H=c.height=innerHeight;}
-      resize(); window.addEventListener('resize',resize);
-      function rnd(a,b){return Math.random()*(b-a)+a;}
-      for(let i=0;i<110;i++) pts.push({x:rnd(0,innerWidth),y:rnd(0,innerHeight),r:rnd(.4,1.5),a:rnd(.04,.28),tw:rnd(0,Math.PI*2),tS:rnd(.0004,.0012),vx:rnd(-.12,.12),vy:rnd(-.06,.06)});
-      function frame(){
-        ctx.clearRect(0,0,W,H);
-        pts.forEach(p=>{
-          p.tw+=p.tS*60;
-          const al=p.a*(0.45+0.55*Math.sin(p.tw));
-          ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-          ctx.fillStyle=p.y<H*.5?`rgba(217,130,6,${al})`:`rgba(245,242,238,${al*.6})`;
-          ctx.fill();
-          p.x+=p.vx; p.y+=p.vy;
-          if(p.x<-4)p.x=W+4; if(p.x>W+4)p.x=-4;
-          if(p.y<-4)p.y=H+4; if(p.y>H+4)p.y=-4;
+      const c = document.getElementById('bg-canvas');
+      const ctx = c.getContext('2d');
+      let W, H, t = 0;
+
+      function resize() { W = c.width = innerWidth; H = c.height = innerHeight; }
+      resize(); window.addEventListener('resize', resize);
+
+      // ── Large ambient orbs ─────────────────────────────────
+      const orbs = [
+        { nx:0.14, ny:0.18, r:380, a:0.13, sp:0.19, ph:0.0  },
+        { nx:0.82, ny:0.42, r:320, a:0.09, sp:0.14, ph:2.1  },
+        { nx:0.50, ny:0.78, r:420, a:0.07, sp:0.11, ph:4.2  },
+        { nx:0.92, ny:0.12, r:260, a:0.10, sp:0.22, ph:1.1  },
+        { nx:0.28, ny:0.62, r:300, a:0.06, sp:0.16, ph:3.4  },
+      ];
+
+      function drawOrbs() {
+        orbs.forEach(o => {
+          const cx = (o.nx + Math.sin(t * o.sp + o.ph) * 0.09) * W;
+          const cy = (o.ny + Math.cos(t * o.sp * 0.65 + o.ph) * 0.07) * H;
+          const pulse = 1 + Math.sin(t * o.sp * 1.3 + o.ph) * 0.12;
+          const r = o.r * pulse;
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          g.addColorStop(0,    `rgba(217,119,6,${o.a})`);
+          g.addColorStop(0.38, `rgba(160,70,8,${o.a * 0.42})`);
+          g.addColorStop(1,    'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
         });
+      }
+
+      // ── Flow-field particles ───────────────────────────────
+      const N = 110;
+      const pts = Array.from({length: N}, () => ({
+        x:  Math.random() * innerWidth,
+        y:  Math.random() * innerHeight,
+        vx: 0, vy: 0,
+        life: Math.random(),
+        sz: 0.55 + Math.random() * 1.1,
+      }));
+
+      // Smooth noise-based angle from position + time
+      function fieldAngle(x, y) {
+        return (
+          Math.sin(x * 0.0022 + t * 0.38) * Math.cos(y * 0.0018 + t * 0.27) +
+          Math.sin((x + y) * 0.0012 + t * 0.44)
+        ) * Math.PI * 1.6;
+      }
+
+      function drawParticles() {
+        pts.forEach(p => {
+          const ang = fieldAngle(p.x, p.y);
+          p.vx = p.vx * 0.88 + Math.cos(ang) * 0.55;
+          p.vy = p.vy * 0.88 + Math.sin(ang) * 0.38;
+          p.x += p.vx; p.y += p.vy;
+          p.life += 0.0038;
+
+          if (p.life > 1 || p.x < -8 || p.x > W + 8 || p.y < -8 || p.y > H + 8) {
+            p.x = Math.random() * W; p.y = Math.random() * H;
+            p.vx = 0; p.vy = 0; p.life = 0;
+          }
+
+          const alpha = Math.sin(p.life * Math.PI) * 0.21;
+          ctx.fillStyle = p.y < H * 0.58
+            ? `rgba(217,128,6,${alpha})`
+            : `rgba(200,170,120,${alpha * 0.38})`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.fill();
+        });
+      }
+
+      // Seed initial black frame
+      ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+
+      function frame() {
+        t += 0.007;
+        // Partial clear — creates particle trails
+        ctx.fillStyle = 'rgba(8,8,8,0.20)';
+        ctx.fillRect(0, 0, W, H);
+        drawOrbs();
+        drawParticles();
         requestAnimationFrame(frame);
       }
       frame();
@@ -797,43 +832,6 @@
     const io=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('vis');});},{threshold:.07,rootMargin:'0px 0px -28px 0px'});
     document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
-    // ── ⌘K streaming animation ────────────────────────────────
-    const genEl=document.getElementById('cmdGenerating');
-    const genText=document.getElementById('genText');
-    const chunks=[
-      '**Epic: Payment UX Overhaul**\n\n',
-      'Story 1: As a returning buyer,\n',
-      'I want my saved card pre-selected\n',
-      'so I complete checkout faster.\n\n',
-      'AC: Given saved card on file,\n',
-      'when reaching step 3, then\n',
-      'default card is pre-selected.\n',
-      'Points: 3',
-    ];
-    let ci=0,chi=0,cur='';
-
-    function tick(){
-      if(ci>=chunks.length){setTimeout(reset,3600);return;}
-      const ch=chunks[ci];
-      if(chi<ch.length){
-        cur+=ch[chi];
-        genText.innerHTML=cur.replace(/\n/g,'<br>')+'<span class="gen-cur"></span>';
-        chi++;
-        setTimeout(tick,18+Math.random()*22);
-      } else { ci++;chi=0; setTimeout(tick,50); }
-    }
-    function startStream(){
-      genEl.style.display='block'; ci=0;chi=0;cur='';
-      genText.innerHTML='<span class="gen-cur"></span>';
-      setTimeout(tick,200);
-    }
-    function reset(){
-      const m=document.getElementById('cmdModal');
-      m.style.animation='none'; m.style.opacity='0';
-      genEl.style.display='none'; genText.innerHTML='';
-      setTimeout(()=>{ m.style.animation=''; setTimeout(startStream,1000); },900);
-    }
-    setTimeout(startStream,2600);
   </script>
 </body>
 </html>
