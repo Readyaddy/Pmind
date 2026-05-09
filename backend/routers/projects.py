@@ -25,6 +25,14 @@ class DocumentCreate(BaseModel):
     folder_id: str | None = None
 
 
+class DesignCreate(BaseModel):
+    title: str = "Untitled Design"
+    html: str = ""
+    css: str = ""
+    js: str = ""
+    framework: str = "vanilla"
+
+
 @router.get("/")
 async def list_projects(user_id: str = Depends(get_user_id)):
     supabase = get_supabase()
@@ -142,6 +150,59 @@ async def get_project_tree(project_id: str, user_id: str = Depends(get_user_id))
         .execute()
     )
     return {"folders": folders_result.data, "docs": docs_result.data}
+
+
+@router.post("/{project_id}/designs/")
+async def save_design(
+    project_id: str,
+    body: DesignCreate,
+    user_id: str = Depends(get_user_id),
+):
+    supabase = get_supabase()
+
+    # Find or create the "Designs" folder for this project
+    folder_result = (
+        supabase.table("folders")
+        .select("id")
+        .eq("project_id", project_id)
+        .eq("user_id", user_id)
+        .eq("name", "Designs")
+        .is_("parent_folder_id", None)
+        .execute()
+    )
+    if folder_result.data:
+        folder_id = folder_result.data[0]["id"]
+    else:
+        new_folder = (
+            supabase.table("folders")
+            .insert({
+                "user_id": user_id,
+                "project_id": project_id,
+                "name": "Designs",
+                "parent_folder_id": None,
+            })
+            .execute()
+        )
+        folder_id = new_folder.data[0]["id"]
+
+    doc_result = (
+        supabase.table("documents")
+        .insert({
+            "user_id": user_id,
+            "project_id": project_id,
+            "folder_id": folder_id,
+            "title": body.title,
+            "content": {
+                "_type": "design",
+                "html": body.html,
+                "css": body.css,
+                "js": body.js,
+                "framework": body.framework,
+            },
+        })
+        .execute()
+    )
+    return {"doc_id": doc_result.data[0]["id"], "folder_id": folder_id}
 
 
 @router.post("/{project_id}/folders/")

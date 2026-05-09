@@ -3,6 +3,7 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useCustomAuth as useAuth } from "@/hooks/useCustomAuth";
 import Editor from "@/components/Editor";
+import DesignViewer, { type DesignContent } from "@/components/agent/DesignViewer";
 
 interface Doc {
   id: string;
@@ -54,6 +55,16 @@ export default function DocPage({
       <div className="flex items-center justify-center h-full text-black/30 dark:text-white/30 text-sm">
         Loading...
       </div>
+    );
+  }
+
+  if (doc.content._type === "design") {
+    return (
+      <DesignViewer
+        content={doc.content as unknown as DesignContent}
+        title={doc.title}
+        onSave={(content, title) => handleSave(content as unknown as Record<string, unknown>, title)}
+      />
     );
   }
 

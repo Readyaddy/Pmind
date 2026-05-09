@@ -247,6 +247,9 @@ export default function CursorChat() {
   // Tagged files attached to the next outgoing message
   const [mentions, setMentions] = useState<MentionItem[]>([]);
 
+  const [lastDesignDocId, setLastDesignDocId] = useState<string | null>(null);
+  const isRefiningRef = useRef(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -920,7 +923,15 @@ export default function CursorChat() {
                             key={`art-${part.call.id}-${i}`}
                             args={part.call.args as ArtifactArgs}
                             status={status}
+                            projectId={projectId}
+                            userId={userId ?? undefined}
+                            existingDocId={isRefiningRef.current ? (lastDesignDocId ?? undefined) : undefined}
+                            onSaved={(docId) => {
+                              setLastDesignDocId(docId);
+                              isRefiningRef.current = false;
+                            }}
                             onRefine={status === "done" ? () => {
+                              isRefiningRef.current = true;
                               void handleSubmit(undefined, "Please critique this design using critique_design, then create an improved version with render_ui addressing all high-severity issues.");
                             } : undefined}
                           />

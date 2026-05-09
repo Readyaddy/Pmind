@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Eye, Code2, Copy, Check, ExternalLink, Maximize2, Minimize2, Loader2, Wand2 } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { Eye, Code2, Copy, Check, ExternalLink, Maximize2, Minimize2, Loader2, Wand2, FolderOpen } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export interface ArtifactArgs {
   title?: string;
@@ -35,11 +36,72 @@ ${js ? `<script>${js}</script>` : ""}
 </html>`;
 }
 
-export default function ArtifactCard({ args, status, onRefine }: { args: ArtifactArgs; status: "running" | "done" | "error"; onRefine?: () => void }) {
+interface ArtifactCardProps {
+  args: ArtifactArgs;
+  status: "running" | "done" | "error";
+  onRefine?: () => void;
+  projectId?: string;
+  userId?: string;
+  existingDocId?: string;
+  onSaved?: (docId: string) => void;
+}
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+export default function ArtifactCard({ args, status, onRefine, projectId, userId, existingDocId, onSaved }: ArtifactCardProps) {
   const [tab, setTab] = useState<Tab>("preview");
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState<Tab | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [savedDocId, setSavedDocId] = useState<string | null>(existingDocId ?? null);
+  const savedRef = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const router = useRouter();
+
+  // Auto-save once when status becomes "done"
+  useEffect(() => {
+    if (status !== "done" || savedRef.current || !projectId || !userId || !args.html) return;
+    savedRef.current = true;
+    saveDesign();
+  }, [status]);
+
+  const saveDesign = async () => {
+    setSaveState("saving");
+    const API = process.env.NEXT_PUBLIC_API_URL;
+    try {
+      if (existingDocId) {
+        await fetch(`${API}/documents/${existingDocId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${userId}` },
+          body: JSON.stringify({
+            title: args.title ?? "Untitled Design",
+            content: { _type: "design", html: args.html ?? "", css: args.css ?? "", js: args.js ?? "", framework: args.framework ?? "vanilla" },
+          }),
+        });
+        setSavedDocId(existingDocId);
+        onSaved?.(existingDocId);
+      } else {
+        const res = await fetch(`${API}/projects/${projectId}/designs/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${userId}` },
+          body: JSON.stringify({
+            title: args.title ?? "Untitled Design",
+            html: args.html ?? "",
+            css: args.css ?? "",
+            js: args.js ?? "",
+            framework: args.framework ?? "vanilla",
+          }),
+        });
+        const data = await res.json();
+        setSavedDocId(data.doc_id);
+        onSaved?.(data.doc_id);
+        window.dispatchEvent(new CustomEvent("pmind:refresh-tree", { detail: { projectId } }));
+      }
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+    }
+  };
 
   const srcDoc = useMemo(() => buildSrcDoc(args), [args]);
 
@@ -115,6 +177,25 @@ export default function ArtifactCard({ args, status, onRefine }: { args: Artifac
             <Wand2 size={9} strokeWidth={2.2} />
             <span>Refine</span>
           </button>
+        )}
+        {saveState === "saving" && (
+          <span className="text-[9.5px] text-black/35 dark:text-white/35 italic">Saving…</span>
+        )}
+        {saveState === "saved" && savedDocId && (
+          <button
+            onClick={() => {
+              const url = window.location.pathname.match(/\/projects\/([^/]+)/);
+              if (url) router.push(`/projects/${url[1]}/docs/${savedDocId}`);
+            }}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-500/10 ring-1 ring-emerald-200/60 dark:ring-emerald-500/20 hover:bg-emerald-100/80 transition-all"
+            title="Open in editor"
+          >
+            <FolderOpen size={9} strokeWidth={2.2} />
+            <span>Saved to Designs</span>
+          </button>
+        )}
+        {saveState === "error" && (
+          <span className="text-[9.5px] text-red-500 italic">Save failed</span>
         )}
         <button
           onClick={() => setExpanded((v) => !v)}
