@@ -76,6 +76,8 @@ export default function Sidebar() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingCreate, setPendingCreate] = useState<PendingCreate>(null);
   const [plan, setPlan] = useState<string>("free");
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingTreeIds, setLoadingTreeIds] = useState<Set<string>>(new Set());
 
   const loadedProjectsRef = useRef<Set<string>>(new Set());
   const renamingValueRef = useRef<string>("");
@@ -116,6 +118,7 @@ export default function Sidebar() {
   // ── Load projects ──────────────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
     if (!userId) return;
+    setLoadingProjects(true);
     try {
       const res = await fetch(`${API}/projects/`, {
         headers: { Authorization: `Bearer ${userId}` },
@@ -129,6 +132,7 @@ export default function Sidebar() {
         }
       }
     } catch { /* backend unreachable */ }
+    finally { setLoadingProjects(false); }
   }, [userId, API, storedProjectId, setActiveProject]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
@@ -158,6 +162,7 @@ export default function Sidebar() {
       if (!userId) return;
       if (!force && loadedProjectsRef.current.has(projectId)) return;
       loadedProjectsRef.current.add(projectId);
+      setLoadingTreeIds(prev => new Set(prev).add(projectId));
       try {
         const res = await fetch(`${API}/projects/${projectId}/tree`, {
           headers: { Authorization: `Bearer ${userId}` },
@@ -167,6 +172,9 @@ export default function Sidebar() {
           setTreeByProject(prev => ({ ...prev, [projectId]: data }));
         }
       } catch { /* ignore */ }
+      finally {
+        setLoadingTreeIds(prev => { const s = new Set(prev); s.delete(projectId); return s; });
+      }
     },
     [userId, API]
   );
@@ -412,7 +420,15 @@ export default function Sidebar() {
           className="px-3 py-3 flex items-center gap-2 cursor-pointer hover:bg-black/[0.025] dark:hover:bg-white/[0.025] transition-colors border-b border-black/[0.04] dark:border-white/[0.04] group"
           onClick={() => setShowPicker(v => !v)}
         >
-          {selectedProject ? (
+          {loadingProjects ? (
+            <>
+              <div className="w-6 h-6 rounded-lg bg-black/[0.06] dark:bg-white/[0.06] animate-pulse flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-2 w-10 rounded bg-black/[0.05] dark:bg-white/[0.05] animate-pulse" />
+                <div className="h-3 w-24 rounded bg-black/[0.07] dark:bg-white/[0.07] animate-pulse" />
+              </div>
+            </>
+          ) : selectedProject ? (
             <>
               <div
                 className="w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold ring-1 ring-black/10 dark:ring-white/10 shadow-sm"
@@ -544,7 +560,13 @@ export default function Sidebar() {
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto thin-scroll py-2 text-sm min-h-0">
-        {projects.length === 0 ? (
+        {loadingProjects ? (
+          <div className="px-3 py-2 space-y-2.5 pm-fade-in">
+            {["75%", "55%", "85%", "65%", "70%"].map((w, i) => (
+              <div key={i} className="h-5 rounded-md bg-black/[0.05] dark:bg-white/[0.05] animate-pulse" style={{ width: w }} />
+            ))}
+          </div>
+        ) : projects.length === 0 ? (
           <div className="flex flex-col items-center mt-12 px-4 text-center pm-fade-in">
             <div className="w-9 h-9 rounded-xl bg-amber-100/60 dark:bg-amber/10 ring-1 ring-amber-200/50 dark:ring-amber/20 flex items-center justify-center mb-3">
               <Plus size={16} className="text-amber-700 dark:text-amber" strokeWidth={2.2} />
@@ -561,6 +583,12 @@ export default function Sidebar() {
           <p className="text-center text-[11.5px] italic text-black/30 dark:text-white/30 mt-10 px-4">
             Select a project above
           </p>
+        ) : selectedProjectId && loadingTreeIds.has(selectedProjectId) ? (
+          <div className="px-3 py-2 space-y-2.5 pm-fade-in">
+            {["70%", "85%", "55%", "75%", "60%"].map((w, i) => (
+              <div key={i} className="h-5 rounded-md bg-black/[0.05] dark:bg-white/[0.05] animate-pulse" style={{ width: w }} />
+            ))}
+          </div>
         ) : treeCtx ? (
           <TreeContext.Provider value={treeCtx}>
             <div>

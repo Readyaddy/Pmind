@@ -33,12 +33,31 @@ export default function AICommandModal({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedText, setStreamedText] = useState("");
   const [showExportModal, setShowExportModal] = useState(false);
+  const [thinkingPhrase, setThinkingPhrase] = useState("Thinking...");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { userId } = useCustomAuth();
+
+  const THINKING_PHRASES = [
+    "Thinking...",
+    "Reading your context...",
+    "Crafting a response...",
+    "Analyzing the brief...",
+    "Putting it together...",
+  ];
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!isStreaming || streamedText) return;
+    let i = 0;
+    const interval = setInterval(() => {
+      i = (i + 1) % THINKING_PHRASES.length;
+      setThinkingPhrase(THINKING_PHRASES[i]);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [isStreaming, streamedText]);
 
   const handleSubmit = async () => {
     if (!userInput.trim() || isStreaming) return;
@@ -139,6 +158,18 @@ export default function AICommandModal({
             className="w-full resize-none border-0 outline-none text-[15px] leading-relaxed bg-transparent text-black dark:text-ivory placeholder-black/30 dark:placeholder-white/30 min-h-[100px]"
           />
         </div>
+
+        {/* Thinking indicator — shown before first chunk arrives */}
+        {isStreaming && !streamedText && (
+          <div className="px-4 py-3 border-t border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/20 flex items-center gap-2.5">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <p className="text-[12px] text-black/50 dark:text-white/50 italic transition-all">{thinkingPhrase}</p>
+          </div>
+        )}
 
         {/* Streaming preview */}
         {streamedText && (
