@@ -9,6 +9,8 @@ from typing import List, Optional
 from llm.factory import get_llm_provider
 from prompts import get_system_prompt
 from deps import get_user_id, get_supabase
+from agent.runner import run_agent
+from agent.tools import _tiptap_to_text
 
 router = APIRouter()
 
@@ -450,3 +452,189 @@ async def review_ui(
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ── Agent ──────────────────────────────────────────────────────────────────────
+
+FREE_PROVIDER = "gemini"
+FREE_MODEL = "gemini-2.5-flash"
+
+
+class PendingDecision(BaseModel):
+    tool_call_id: str
+    decision: str  # "approve" | "deny"
+    reason: Optional[str] = None
+
+
+class AgentRequest(BaseModel):
+    messages: list
+    project_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    product_context: str = ""
+    document_context: str = ""
+    pending_decisions: Optional[List[PendingDecision]] = None
+    mentioned_doc_ids: Optional[List[str]] = None
+    mentioned_kb_ids: Optional[List[str]] = None
+
+
+def _get_plan(user_id: str) -> str:
+    try:
+        supabase = get_supabase()
+        res = supabase.table("user_subscriptions").select("plan").eq("user_id", user_id).execute()
+        return res.data[0]["plan"] if res.data else "free"
+    except Exception:
+        return "free"
+
+
+def _resolve_llm(user_id: str) -> tuple:
+    """Return (provider, model). Free users are locked to Gemini Flash."""
+    plan = _get_plan(user_id)
+    if plan == "free":
+        return FREE_PROVIDER, FREE_MODEL
+    provider = os.getenv("LLM_PROVIDER", FREE_PROVIDER)
+    model = os.getenv("LLM_MODEL", FREE_MODEL)
+    return provider, model
+
+
+@router.get("/agent/info")
+async def agent_info(user_id: str = Depends(get_user_id)):
+    plan = _get_plan(user_id)
+    provider, model = _resolve_llm(user_id)
+    return {
+        "plan": plan,
+        "provider": provider,
+        "model": model,
+        "locked": plan == "free",
+    }
+
+
+@router.post("/agent")
+async def ai_agent(
+    request: AgentRequest,
+    user_id: str = Depends(get_user_id),
+):
+    supabase = get_supabase()
+    provider, model = _resolve_llm(user_id)
+    is_resume = bool(request.pending_decisions)
+
+    # Thread + message persistence
+    thread_id = request.thread_id
+    if not thread_id and request.project_id and request.messages:
+        first_user = next(
+            (m for m in request.messages if isinstance(m, dict) and m.get("role") == "user"),
+            None,
+        )
+        title = ""
+        if first_user:
+            content = first_user.get("content") or ""
+            title = content[:60] if isinstance(content, str) else "New chat"
+        try:
+            res = supabase.table("chat_threads").insert({
+                "user_id": user_id,
+                "project_id": request.project_id,
+                "title": title or "New chat",
+            }).execute()
+            if res.data:
+                thread_id = res.data[0]["id"]
+        except Exception:
+            pass
+
+    if not is_resume and thread_id and request.messages:
+        user_msgs = [
+            m for m in request.messages
+            if isinstance(m, dict) and m.get("role") == "user"
+        ]
+        if user_msgs:
+            last_user = user_msgs[-1]
+            try:
+                supabase.table("chat_messages").insert({
+                    "thread_id": thread_id,
+                    "user_id": user_id,
+                    "role": "user",
+                    "content": last_user.get("content") or "",
+                }).execute()
+            except Exception:
+                pass
+
+    # Pre-load @-mentioned files into document_context
+    doc_ctx = request.document_context or ""
+    try:
+        if request.mentioned_doc_ids:
+            for doc_id in request.mentioned_doc_ids:
+                res = supabase.table("documents").select("title, content").eq("id", doc_id).eq("user_id", user_id).execute()
+                if res.data:
+                    row = res.data[0]
+                    text = _tiptap_to_text(row.get("content") or {})
+                    doc_ctx += f"\n\n--- @{row.get('title', 'doc')} ---\n{text[:3000]}"
+        if request.mentioned_kb_ids:
+            for kb_id in request.mentioned_kb_ids:
+                res = supabase.table("knowledge_chunks").select("content").eq("knowledge_document_id", kb_id).eq("user_id", user_id).limit(5).execute()
+                if res.data:
+                    combined = "\n".join(r["content"] for r in res.data)
+                    doc_ctx += f"\n\n--- @KB:{kb_id} ---\n{combined[:3000]}"
+    except Exception:
+        pass
+
+    pending = [d.model_dump() for d in (request.pending_decisions or [])]
+
+    async def generate():
+        final_text_parts: list = []
+        async for sse_chunk in run_agent(
+            messages=request.messages,
+            user_id=user_id,
+            project_id=request.project_id,
+            product_context=request.product_context,
+            document_context=doc_ctx,
+            pending_decisions=pending or None,
+            model=model,
+            provider=provider,
+        ):
+            try:
+                if sse_chunk.startswith("event: text"):
+                    data_line = [l for l in sse_chunk.split("\n") if l.startswith("data: ")]
+                    if data_line:
+                        payload = json.loads(data_line[0][6:])
+                        final_text_parts.append(payload.get("delta", ""))
+                elif sse_chunk.startswith("event: done"):
+                    final_text = "".join(final_text_parts)
+                    if thread_id and final_text.strip():
+                        try:
+                            if is_resume:
+                                existing = (
+                                    supabase.table("chat_messages")
+                                    .select("id")
+                                    .eq("thread_id", thread_id)
+                                    .eq("role", "assistant")
+                                    .order("created_at", desc=True)
+                                    .limit(1)
+                                    .execute()
+                                )
+                                if existing.data:
+                                    supabase.table("chat_messages").update({
+                                        "content": final_text,
+                                    }).eq("id", existing.data[0]["id"]).execute()
+                                else:
+                                    supabase.table("chat_messages").insert({
+                                        "thread_id": thread_id,
+                                        "user_id": user_id,
+                                        "role": "assistant",
+                                        "content": final_text,
+                                    }).execute()
+                            else:
+                                supabase.table("chat_messages").insert({
+                                    "thread_id": thread_id,
+                                    "user_id": user_id,
+                                    "role": "assistant",
+                                    "content": final_text,
+                                }).execute()
+                            supabase.table("chat_threads").update({
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            }).eq("id", thread_id).execute()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            yield sse_chunk
+
+    headers = {"X-Thread-Id": thread_id or ""}
+    return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
