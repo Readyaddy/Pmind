@@ -20,6 +20,7 @@
     "@tiptap/pm": "^2.4.0",
     "@tiptap/react": "^2.4.0",
     "@tiptap/starter-kit": "^2.4.0",
+    "@vercel/analytics": "^2.0.1",
     "autoprefixer": "^10.5.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
