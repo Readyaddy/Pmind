@@ -7,9 +7,21 @@ from routers import ai, documents, projects, folders, knowledge, integrations, c
 
 app = FastAPI(title="PM Cursor API")
 
+ALLOWED_ORIGINS = [
+    # Local development
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:8000",
+    # Production — Vercel
+    "https://pmind.vercel.app",
+    # Production — custom domain
+    "https://pmind.xyz",
+    "https://www.pmind.xyz",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://localhost:\d+",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
