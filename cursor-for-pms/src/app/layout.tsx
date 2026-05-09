@@ -9,8 +9,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
-  title: "PM Cursor",
-  description: "AI-native workspace for product managers",
+  title: "PMind — AI workspace for Product Managers",
+  description: "Write PRDs, generate tickets, and synthesize research with AI grounded in your product context.",
 };
 
 export default function RootLayout({

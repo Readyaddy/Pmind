@@ -80,6 +80,7 @@ export default function ProjectHomePage() {
     });
     if (res.ok) {
       const doc = await res.json();
+      window.dispatchEvent(new CustomEvent("pmind:refresh-tree", { detail: { projectId } }));
       router.push(`/projects/${projectId}/docs/${doc.id}`);
     }
   };
@@ -93,6 +94,7 @@ export default function ProjectHomePage() {
     });
     if (res.ok) {
       const doc = await res.json();
+      window.dispatchEvent(new CustomEvent("pmind:refresh-tree", { detail: { projectId } }));
       router.push(`/projects/${projectId}/docs/${doc.id}`);
     }
   };

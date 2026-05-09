@@ -50,7 +50,6 @@ class AIRequest(BaseModel):
     product_context: str = ""
     document_context: str = ""
     project_id: Optional[str] = None
-    model_override: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
@@ -63,7 +62,6 @@ class ChatRequest(BaseModel):
     document_context: str = ""
     project_id: Optional[str] = None
     thread_id: Optional[str] = None
-    model_override: Optional[str] = None
 
 
 class GenerateTicketsRequest(BaseModel):
@@ -75,7 +73,6 @@ class GenerateTicketsRequest(BaseModel):
 class ApplyRequest(BaseModel):
     current_content: str
     ai_suggestion: str
-    model_override: Optional[str] = None
 
 
 class SearchRequest(BaseModel):
@@ -94,7 +91,7 @@ class CreateThreadRequest(BaseModel):
 @router.post("/complete")
 async def ai_complete(request: AIRequest, user_id: str = Depends(get_user_id)):
     _check_usage(user_id, "complete")
-    provider = get_llm_provider(model_override=request.model_override)
+    provider = get_llm_provider()
     system_prompt = get_system_prompt(command=request.command, product_context=request.product_context)
     user_message = (
         f"Current document context:\n{request.document_context or 'Empty document'}\n\n"
@@ -156,60 +153,48 @@ Generate 2-4 epics with 2-5 stories each. Be specific, actionable, and grounded 
 
 @router.get("/threads")
 async def list_threads(project_id: str, user_id: str = Depends(get_user_id)):
-    try:
-        supabase = get_supabase()
-        res = (
-            supabase.table("chat_threads")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("project_id", project_id)
-            .order("updated_at", desc=True)
-            .execute()
-        )
-        return res.data or []
-    except Exception:
-        return []
+    supabase = get_supabase()
+    res = (
+        supabase.table("chat_threads")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("project_id", project_id)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    return res.data or []
 
 
 @router.post("/threads")
 async def create_thread(body: CreateThreadRequest, user_id: str = Depends(get_user_id)):
-    try:
-        supabase = get_supabase()
-        res = supabase.table("chat_threads").insert({
-            "user_id": user_id,
-            "project_id": body.project_id,
-            "title": body.title,
-        }).execute()
-        return res.data[0]
-    except Exception:
-        return {"id": None, "title": body.title}
+    supabase = get_supabase()
+    res = supabase.table("chat_threads").insert({
+        "user_id": user_id,
+        "project_id": body.project_id,
+        "title": body.title,
+    }).execute()
+    return res.data[0]
 
 
 @router.get("/threads/{thread_id}/messages")
 async def get_thread_messages(thread_id: str, user_id: str = Depends(get_user_id)):
-    try:
-        supabase = get_supabase()
-        res = (
-            supabase.table("chat_messages")
-            .select("*")
-            .eq("thread_id", thread_id)
-            .eq("user_id", user_id)
-            .order("created_at")
-            .execute()
-        )
-        return res.data or []
-    except Exception:
-        return []
+    supabase = get_supabase()
+    res = (
+        supabase.table("chat_messages")
+        .select("*")
+        .eq("thread_id", thread_id)
+        .eq("user_id", user_id)
+        .order("created_at")
+        .execute()
+    )
+    return res.data or []
 
 
 @router.delete("/threads/{thread_id}")
 async def delete_thread(thread_id: str, user_id: str = Depends(get_user_id)):
-    try:
-        supabase = get_supabase()
-        supabase.table("chat_messages").delete().eq("thread_id", thread_id).execute()
-        supabase.table("chat_threads").delete().eq("id", thread_id).eq("user_id", user_id).execute()
-    except Exception:
-        pass
+    supabase = get_supabase()
+    supabase.table("chat_messages").delete().eq("thread_id", thread_id).execute()
+    supabase.table("chat_threads").delete().eq("id", thread_id).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
@@ -218,7 +203,7 @@ async def delete_thread(thread_id: str, user_id: str = Depends(get_user_id)):
 @router.post("/chat")
 async def ai_chat(request: ChatRequest, user_id: str = Depends(get_user_id)):
     _check_usage(user_id, "chat")
-    provider = get_llm_provider(model_override=request.model_override)
+    provider = get_llm_provider()
     supabase = get_supabase()
     thread_id = request.thread_id
 
@@ -320,7 +305,7 @@ async def ai_chat(request: ChatRequest, user_id: str = Depends(get_user_id)):
 
 @router.post("/apply")
 async def ai_apply(request: ApplyRequest, user_id: str = Depends(get_user_id)):
-    provider = get_llm_provider(model_override=request.model_override)
+    provider = get_llm_provider()
     prompt = f"""CURRENT DOCUMENT:
 {request.current_content}
 
@@ -438,7 +423,6 @@ async def review_ui(
     image: UploadFile = File(...),
     prompt: str = Form(...),
     document_context: str = Form(""),
-    model_override: str = Form(""),
     user_id: str = Depends(get_user_id),
 ):
     import base64
@@ -446,14 +430,12 @@ async def review_ui(
     image_bytes = await image.read()
     image_b64 = base64.b64encode(image_bytes).decode()
 
-    vision_model = model_override or os.getenv("LLM_MODEL") or "gemini-2.5-flash"
-
     from google import genai as g
     client = g.Client(api_key=os.getenv("GOOGLE_API_KEY", ""))
 
     async def generate():
         for chunk in client.models.generate_content_stream(
-            model=vision_model,
+            model=os.getenv("LLM_MODEL", "gemini-2.5-flash-lite"),
             contents=[{"role": "user", "parts": [
                 {"inline_data": {"mime_type": image.content_type, "data": image_b64}},
                 {"text": (

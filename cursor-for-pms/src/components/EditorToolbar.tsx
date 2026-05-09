@@ -5,17 +5,20 @@ import { useRef } from "react";
 import {
   Bold,
   Italic,
+  Underline as UnderlineIcon,
   Heading1,
   Heading2,
   Heading3,
   List,
   ListOrdered,
+  ListChecks,
   Quote,
   Code,
   Code2,
   Minus,
   Link2,
   Image as ImageIcon,
+  Table as TableIcon,
   Undo,
   Redo,
 } from "lucide-react";
@@ -42,10 +45,10 @@ function ToolBtn({
         onClick();
       }}
       title={title}
-      className={`p-1.5 rounded-md transition-all ${
+      className={`p-1.5 rounded-lg transition-all ${
         active
-          ? "bg-amber-100 dark:bg-amber/15 text-amber-700 dark:text-amber"
-          : "text-black/40 dark:text-white/40 hover:text-black/80 dark:hover:text-white/80 hover:bg-black/5 dark:hover:bg-white/5"
+          ? "bg-amber-100/80 dark:bg-amber/15 text-amber-700 dark:text-amber ring-1 ring-amber-200/60 dark:ring-amber/20"
+          : "text-black/45 dark:text-white/40 hover:text-amber-700 dark:hover:text-amber hover:bg-amber-50/50 dark:hover:bg-amber/[0.06]"
       }`}
     >
       {children}
@@ -54,7 +57,7 @@ function ToolBtn({
 }
 
 function Divider() {
-  return <div className="w-px h-4 bg-black/10 dark:bg-white/10 mx-0.5" />;
+  return <div className="w-px h-4 bg-black/[0.08] dark:bg-white/[0.08] mx-1" />;
 }
 
 export default function EditorToolbar({ editor }: Props) {
@@ -86,7 +89,7 @@ export default function EditorToolbar({ editor }: Props) {
   };
 
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-0.5 px-4 py-2 border-b border-black/5 dark:border-white/5 bg-white/70 dark:bg-black/40 backdrop-blur-md overflow-x-auto scrollbar-hide">
+    <div className="sticky top-0 z-10 flex items-center gap-0.5 px-4 py-2 border-b border-black/[0.04] dark:border-white/[0.04] bg-white/75 dark:bg-black/45 backdrop-blur-xl backdrop-saturate-150 overflow-x-auto scrollbar-hide shadow-[0_1px_0_rgba(255,255,255,0.5)_inset,0_2px_8px_-2px_rgba(0,0,0,0.04)] dark:shadow-[0_1px_0_rgba(255,217,153,0.06)_inset,0_2px_8px_-2px_rgba(0,0,0,0.2)]">
       {/* History */}
       <ToolBtn onClick={() => editor.chain().focus().undo().run()} title="Undo (⌘Z)">
         <Undo size={14} />
@@ -138,6 +141,13 @@ export default function EditorToolbar({ editor }: Props) {
         <Italic size={14} />
       </ToolBtn>
       <ToolBtn
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        active={editor.isActive("underline")}
+        title="Underline (⌘U)"
+      >
+        <UnderlineIcon size={14} />
+      </ToolBtn>
+      <ToolBtn
         onClick={() => editor.chain().focus().toggleCode().run()}
         active={editor.isActive("code")}
         title="Inline code"
@@ -162,6 +172,13 @@ export default function EditorToolbar({ editor }: Props) {
       >
         <ListOrdered size={14} />
       </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        active={editor.isActive("taskList")}
+        title="Task list (checkboxes)"
+      >
+        <ListChecks size={14} />
+      </ToolBtn>
 
       <Divider />
 
@@ -185,6 +202,19 @@ export default function EditorToolbar({ editor }: Props) {
         title="Horizontal rule"
       >
         <Minus size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() =>
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run()
+        }
+        active={editor.isActive("table")}
+        title="Insert table"
+      >
+        <TableIcon size={14} />
       </ToolBtn>
 
       <Divider />

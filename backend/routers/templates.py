@@ -1,14 +1,15 @@
 import json
-import os
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from deps import get_user_id, get_supabase
 
 router = APIRouter()
 
+_TEMPLATES_PATH = Path(__file__).resolve().parent.parent / "data" / "templates.json"
+
 
 def _load_templates():
-    data_path = os.path.join(os.path.dirname(__file__), "..", "data", "templates.json")
-    with open(data_path) as f:
+    with open(_TEMPLATES_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

@@ -5,7 +5,15 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
+import Underline from "@tiptap/extension-underline";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import { Mark, mergeAttributes } from "@tiptap/core";
+import { marked } from "marked";
 import { useEffect, useState, useCallback } from "react";
 import AICommandModal from "./AICommandModal";
 import EditorToolbar from "./EditorToolbar";
@@ -14,6 +22,22 @@ import { useEditorStore } from "@/store/editorStore";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
 import { CheckCheck, X } from "lucide-react";
 import { toast } from "sonner";
+
+// Convert markdown → HTML so Tiptap parses it as real nodes (headings,
+// bullet lists, bold, etc) instead of dumping raw "# **foo**" text.
+marked.setOptions({ gfm: true, breaks: true });
+
+function mdToHtml(md: string): string {
+  // marked.parse returns string in sync mode (default). Use a try/catch in
+  // case the input is malformed; fall back to escaping the raw text.
+  try {
+    return marked.parse(md, { async: false }) as string;
+  } catch {
+    return md.replace(/[<>&]/g, (c) =>
+      c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;",
+    );
+  }
+}
 
 // Tiptap mark that highlights AI-suggested text in amber
 const SuggestionMark = Mark.create({
@@ -54,7 +78,7 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
   const [floatTool, setFloatTool] = useState<{ id: string; x: number; y: number } | null>(null);
   const { getContext } = useProductBrain();
   const context = getContext(projectId);
-  const { registerEditor, unregisterEditor } = useEditorStore();
+  const { registerEditor, unregisterEditor, setDocTitle } = useEditorStore();
   const { userId } = useCustomAuth();
 
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -66,8 +90,15 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
         placeholder: "Start writing, or press ⌘K for AI…",
       }),
       SuggestionMark,
+      Underline,
       Image.configure({ inline: false, allowBase64: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-amber-600 dark:text-amber underline underline-offset-2" } }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({ nested: true }),
     ],
     content: initialContent || "",
     editorProps: {
@@ -81,6 +112,7 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
       const firstLine = editor.getText().split("\n")[0]?.trim() || "Untitled";
       setIsSaving(true);
       onSave(content, firstLine);
+      setDocTitle(firstLine);
       setTimeout(() => setIsSaving(false), 2200);
     },
   });
@@ -96,6 +128,31 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Paste-as-markdown: when the clipboard has plain text containing markdown
+  // syntax (and no rich HTML), parse it through `marked` so tables, headings,
+  // task lists, etc. render instead of dropping in as a literal "# Hello".
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const looksLikeMarkdown = (s: string) =>
+      /(^|\n)\s*#{1,6}\s|(\*\*|__|`|~~|>\s)|(^|\n)\s*[-*+]\s|(^|\n)\s*\d+\.\s|(^|\n)\s*\|.*\|/m.test(s);
+    const handler = (e: ClipboardEvent) => {
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const html = cd.getData("text/html").trim();
+      const text = cd.getData("text/plain").trim();
+      // If the clipboard already has rich HTML, let Tiptap parse it normally
+      if (html) return;
+      if (!text || !looksLikeMarkdown(text)) return;
+      let parsed: string;
+      try { parsed = mdToHtml(text); } catch { return; }
+      e.preventDefault();
+      editor.chain().focus().insertContent(parsed).run();
+    };
+    dom.addEventListener("paste", handler);
+    return () => dom.removeEventListener("paste", handler);
+  }, [editor]);
 
 
   // Find `needle` across node boundaries, return {from, to} in doc positions.
@@ -181,7 +238,12 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
           );
         } else {
           // Fallback: insert suggestion as a new section at end of document
-          editor.chain().focus("end").insertContent(`\n\n---\n\n${suggestion}`).run();
+          editor
+            .chain()
+            .focus("end")
+            .insertContent("<hr/>")
+            .insertContent(mdToHtml(suggestion))
+            .run();
           toast.info("Couldn't match exact text — suggestion inserted at end of document.", {
             id: toastId,
           });
@@ -276,15 +338,21 @@ export default function Editor({ docId: _docId, projectId, initialContent, onSav
   // Register/unregister with EditorStore so CursorChat can call applyChanges
   useEffect(() => {
     if (!editor) return;
-    registerEditor(applyChanges, () => editor.getText());
+    const initialTitle = editor.getText().split("\n")[0]?.trim() || "Untitled";
+    registerEditor(applyChanges, () => editor.getText(), initialTitle);
     return () => unregisterEditor();
   }, [editor, applyChanges, registerEditor, unregisterEditor]);
 
   const handleAIOutput = useCallback(
     (text: string) => {
       if (!editor) return;
+      const html = mdToHtml(text);
       const isEmpty = editor.getText().trim().length === 0;
-      editor.chain().focus().insertContent(isEmpty ? text : `\n\n${text}`).run();
+      if (isEmpty) {
+        editor.chain().focus().insertContent(html).run();
+      } else {
+        editor.chain().focus("end").insertContent("<p></p>").insertContent(html).run();
+      }
     },
     [editor]
   );

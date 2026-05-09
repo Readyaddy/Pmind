@@ -9,7 +9,7 @@ const PLANS = [
   {
     id: "free",
     name: "Free",
-    price: "$0",
+    price: "₹0",
     period: "/month",
     features: [
       "20 AI requests / day",
@@ -25,7 +25,7 @@ const PLANS = [
   {
     id: "pro",
     name: "Pro",
-    price: "$29",
+    price: "₹999",
     period: "/month",
     features: [
       "Unlimited AI requests",
@@ -41,7 +41,7 @@ const PLANS = [
   {
     id: "team",
     name: "Team",
-    price: "$79",
+    price: "₹2,999",
     period: "/month",
     features: [
       "Everything in Pro",
@@ -56,12 +56,34 @@ const PLANS = [
   },
 ];
 
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (event: string, handler: (resp: { error?: { description?: string } }) => void) => void;
+    };
+  }
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function BillingPage() {
   const { userId } = useCustomAuth();
   const router = useRouter();
   const [subscription, setSubscription] = useState<{ plan: string; status: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const API = process.env.NEXT_PUBLIC_API_URL;
+  const RAZORPAY_KEY = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 
   useEffect(() => {
     if (!userId) return;
@@ -73,34 +95,96 @@ export default function BillingPage() {
       .catch(() => {});
   }, [userId, API]);
 
-  const handleUpgrade = async () => {
-    if (!userId) return;
+  // Step 1 + 2: Create order then open Razorpay modal
+  const handleUpgrade = async (plan: "pro" | "team") => {
+    if (!userId || !RAZORPAY_KEY) return;
     setLoading(true);
+    setError(null);
+
     try {
-      const res = await fetch(`${API}/billing/checkout`, {
+      // Step 1 — create order on backend
+      const orderRes = await fetch(`${API}/billing/create-order`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${userId}` },
+        headers: {
+          Authorization: `Bearer ${userId}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan }),
       });
-      const { url } = await res.json();
-      window.location.href = url;
-    } catch {
+      if (!orderRes.ok) throw new Error("Could not create order");
+      const { order_id, amount, currency } = await orderRes.json();
+
+      // Load Razorpay checkout.js
+      const loaded = await loadRazorpayScript();
+      if (!loaded) throw new Error("Razorpay failed to load — check your connection");
+
+      const planLabel = plan === "team" ? "Team Plan — Shared AI Workspace" : "Pro Plan — Unlimited AI for PMs";
+
+      // Step 2 — open checkout modal
+      const options = {
+        key: RAZORPAY_KEY,
+        order_id,
+        amount,
+        currency,
+        name: "PMind",
+        description: planLabel,
+        prefill: { name: "PMind User" },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          // Step 3 — verify signature on backend
+          const verifyRes = await fetch(`${API}/billing/verify-payment`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${userId}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ...response, plan }),
+          });
+
+          if (!verifyRes.ok) {
+            setError("Payment verification failed. Please contact support.");
+            setLoading(false);
+            return;
+          }
+
+          setSubscription({ plan: "pro", status: "active" });
+          router.replace("/billing?success=1");
+        },
+        modal: {
+          ondismiss: () => {
+            setLoading(false);
+          },
+        },
+        theme: { color: "#F59E0B" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (resp) => {
+        setError(`Payment failed: ${resp.error?.description ?? "Unknown error"}`);
+        setLoading(false);
+      });
+      rzp.open();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }
   };
 
-  const handleManage = async () => {
+  const handleCancel = async () => {
+    if (!confirm("Cancel Pro? You'll revert to the Free plan immediately.")) return;
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API}/billing/portal`, {
+      await fetch(`${API}/billing/cancel`, {
         method: "POST",
         headers: { Authorization: `Bearer ${userId}` },
       });
-      const { url } = await res.json();
-      window.location.href = url;
-    } catch {
-      setLoading(false);
-    }
+      setSubscription({ plan: "free", status: "active" });
+    } catch {}
+    setLoading(false);
   };
 
   const currentPlan = subscription?.plan ?? "free";
@@ -123,6 +207,12 @@ export default function BillingPage() {
             Upgrade to unlock unlimited AI and team collaboration features.
           </p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-sm text-red-600 dark:text-red-400 text-center">
+            {error}
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-6">
           {PLANS.map((plan) => (
@@ -165,17 +255,17 @@ export default function BillingPage() {
                   </span>
                   {plan.id !== "free" && (
                     <button
-                      onClick={handleManage}
+                      onClick={handleCancel}
                       disabled={loading}
-                      className="block w-full mt-2 py-1 text-xs text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors"
+                      className="block w-full mt-2 py-1 text-xs text-black/40 dark:text-white/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                     >
-                      Manage subscription →
+                      Cancel subscription
                     </button>
                   )}
                 </div>
               ) : (
                 <button
-                  onClick={plan.disabled ? undefined : handleUpgrade}
+                  onClick={plan.disabled ? undefined : () => handleUpgrade(plan.id as "pro" | "team")}
                   disabled={plan.disabled || loading}
                   className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
                     plan.highlight
@@ -193,8 +283,7 @@ export default function BillingPage() {
         </div>
 
         <p className="text-center text-[11px] text-black/30 dark:text-white/30 mt-8">
-          All plans include a 14-day free trial. No credit card required for Free.
-          Cancel anytime.
+          Secured by Razorpay. Cancel anytime.
         </p>
       </div>
     </div>

@@ -5,8 +5,11 @@ from .claude import ClaudeProvider
 from .openai_provider import OpenAIProvider
 
 
-def get_llm_provider(model_override: str | None = None) -> LLMProvider:
-    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+def get_llm_provider(
+    model_override: str | None = None,
+    provider_override: str | None = None,
+) -> LLMProvider:
+    provider = (provider_override or os.getenv("LLM_PROVIDER", "gemini")).lower()
     model = model_override or os.getenv("LLM_MODEL")
 
     if provider == "gemini":
