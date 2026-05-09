@@ -168,22 +168,22 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "render_ui",
         "description": (
             "Build a working UI preview the user can see, copy, and integrate. "
-            "Use for ANY visual artifact — mockup, component, dashboard, landing page, modal, card, form, table. "
-            "DO NOT describe the UI in prose; build it.\n\n"
-            "MANDATORY technical rules every build must follow:\n"
-            "• Spacing: 8px grid only (8, 16, 24, 32, 48, 64px) — no arbitrary values\n"
-            "• Type scale: body 16px/1.6, H1 32px/1.15/-0.02em, H2 26px, H3 21px, small 14px\n"
-            "• Font pairing: load a display font + body font via Google Fonts <link>. Never one generic sans-serif alone.\n"
-            "• Color: one primary + one accent. All text 4.5:1+ contrast on background (WCAG AA).\n"
-            "• Shadows: use elevation levels (low for cards, mid for dropdowns, high for modals) — not same shadow on everything\n"
-            "• Border radius: ONE consistent value site-wide (4/8/12px or pill buttons)\n"
-            "• Buttons: min 44px height, 12px 24px padding, action-verb copy, all 4 CSS states (hover/focus/active/disabled)\n"
-            "• All interactions: 150–200ms ease-in-out transitions, card hover translateY(-2px), focus: outline 3px primary\n"
-            "• Include prefers-reduced-motion media query\n\n"
-            "Pick ONE aesthetic (glassmorphism, brutalist, editorial, neo-tech, organic, etc.) and commit fully.\n\n"
-            "Sandbox: allow-scripts only — no JS fetch. Use Google Fonts <link>, Tailwind via framework arg, inline SVG. No external image URLs.\n\n"
-            "Anti-slop: no purple-pink gradient on white · no default blue-500 · no Inter as sole font · "
-            "no three identical evenly-spaced cards · no placeholder 'Image' rectangles · no missing hover states."
+            "Use this whenever they ask for ANY visual artifact — mockup, "
+            "component, dashboard, landing page, modal, card, form, table. "
+            "DO NOT describe the UI in prose; build it. Output renders in a "
+            "sandboxed iframe with Preview/HTML/CSS/JS tabs.\n\n"
+            "Quality bar: pick ONE clear aesthetic direction (glassmorphism, "
+            "brutalist, editorial, neo-tech, etc.) and execute it precisely. "
+            "Use distinctive typography (load Google Fonts via <link> if "
+            "needed — avoid plain Arial/Helvetica/Inter as the *only* choice). "
+            "One dominant color + one accent, not five faded ones. Asymmetric "
+            "layouts beat centered defaults. Add micro-details: hover states, "
+            "custom selection color, subtle motion, decorative borders.\n\n"
+            "Self-contained: sandbox is `allow-scripts` only — no JS fetches. "
+            "Use Google Fonts <link>, Tailwind via the `framework` arg, inline "
+            "SVG, or data URIs. No external images.\n\n"
+            "Anti-slop: avoid purple-pink gradients on white, default Tailwind "
+            "blue, three-evenly-spaced-cards, Inter as only font."
         ),
         "parameters": {
             "type": "object",
@@ -536,9 +536,9 @@ async def _edit_doc(ctx: dict, doc_id: str, new_content: str) -> dict:
     }
 
 
-CRITIC_SYSTEM_PROMPT = """You are a senior product designer reviewing a UI another designer just built. Your job: surface what's good, what's wrong, and what to fix — concretely and with specific values.
+CRITIC_SYSTEM_PROMPT = """You are a senior product designer reviewing a UI another designer just built. Your job: surface what's good, what's wrong, and what to fix — concretely.
 
-You output ONLY valid JSON in EXACTLY this shape (no markdown, no prose, no code fences):
+You output ONLY valid JSON in EXACTLY this shape (no markdown, no prose):
 
 {
   "verdict": "strong" | "decent" | "weak",
@@ -549,89 +549,33 @@ You output ONLY valid JSON in EXACTLY this shape (no markdown, no prose, no code
       "severity": "high" | "med" | "low",
       "area": "typography" | "color" | "spacing" | "hierarchy" | "polish" | "accessibility" | "ai_slop",
       "detail": "<the problem, in one sentence>",
-      "fix": "<concrete fix — exact CSS values, px numbers, font names where relevant>"
+      "fix": "<concrete fix — actionable, specific values when relevant>"
     }
   ],
   "improvement_summary": "<one paragraph: what to change to take this from current verdict to strong>"
 }
 
-Review rubric — go through EVERY item systematically:
+Review rubric — go through these systematically:
 
-1. AESTHETIC DIRECTION
-   - Is there ONE clear visual direction (glassmorphism, brutalist, editorial, neo-tech, etc.) executed precisely?
-   - Or is it generic-with-hints, a confused blend, or default-Tailwind with no soul?
-   - Most AI-generated UIs fail here — they nod at a style without committing.
+1. AESTHETIC DIRECTION — Is there one clear vision (glassmorphism, brutalist, editorial, neo-tech, etc.) executed precisely, OR is this generic-with-hints? Most UIs fail here.
 
-2. TYPOGRAPHY
-   - Is there a display font + body font pairing? Or just one generic sans-serif?
-   - Is the type scale consistent with a ratio (should be ~1.25x between levels)?
-     Expected: H1 ~32px, H2 ~26px, H3 ~21px, body 16px, small 14px, micro 12px
-   - Line-height appropriate? (Body: 1.5–1.6 | Headings: 1.1–1.25)
-   - Letter-spacing on headings? (Large headings benefit from -0.01 to -0.03em)
-   - Font weight variation used? (Body 400, labels 500–600, headings 700)
-   - Flag: plain Inter/Roboto/Arial as sole font with no display companion.
+2. TYPOGRAPHY — Distinctive type choices? Or default Arial/Inter/Roboto? Is there a display + body pairing? Type scale rhythm coherent? Line-height appropriate for size?
 
-3. COLOR
-   - ONE dominant primary + ONE accent — or a scattered five-color palette?
-   - Body text contrast: does it meet WCAG AA (4.5:1 on background)?
-   - Large text / headings: minimum 3:1?
-   - Default Tailwind blue-500 (#3B82F6) used without justification? Flag it.
-   - Purple-pink gradient on white? Flag it.
-   - Neutral family consistent (all zinc, or all slate, or warm grays — not mixed)?
+3. COLOR — One dominant + one accent, or five faded colors? Default Tailwind blue? Purple-pink-on-white slop? Contrast sufficient?
 
-4. SPACING & 8PX GRID
-   - All padding/margin values multiples of 8? (8, 16, 24, 32, 48, 64px)
-   - Arbitrary values like 13px, 22px, 37px are grid violations — flag them.
-   - Generous OR controlled-dense spacing — pick one. In-between reads as sloppy.
-   - Vertical rhythm between sections: 48–64px? Or cramped / over-spaced?
+4. SPACING & RHYTHM — Generous OR controlled-dense, not in-between? Asymmetry used? Centered-everything default? Padding/margin scale consistent?
 
-5. HIERARCHY
-   - Where does the eye land first? Is it the right place (CTA / headline)?
-   - Do headings have weight AND size contrast over body copy?
-   - Is the primary action button visually dominant over secondary actions?
-   - Is there a clear F-pattern or Z-pattern reading flow?
+5. HIERARCHY — Eye knows where to go first? CTA visually dominant? Headings have weight contrast?
 
-6. POLISH & MICRO-DETAILS
-   - Hover states on all interactive elements? (buttons, cards, links)
-     Expected: color shift / shadow elevation / subtle translateY(-2px)
-   - Focus rings? (outline: 3px solid primary; outline-offset: 2px)
-   - Transitions? (150–200ms ease-in-out on all interactive states)
-   - Button :active state? (transform: scale(0.97) or similar)
-   - prefers-reduced-motion media query present?
-   - Custom selection color, decorative micro-details, inner highlights?
+6. POLISH DETAILS — Hover states, focus rings, custom selection, subtle animations, decorative borders, inner highlights, dividers with intent?
 
-7. ACCESSIBILITY
-   - Semantic HTML? (<button> not <div onclick>, <label> for inputs, <nav>, <main>)
-   - All text 4.5:1+ contrast? Large text 3:1+?
-   - Focus indicators visible and high-contrast?
-   - Interactive elements minimum 44px height?
-   - Error states and form validation labeled — not color-only?
+7. ACCESSIBILITY — Sufficient contrast (WCAG AA at minimum)? Focus states visible? Semantic HTML?
 
-8. BUTTONS & CTAs
-   - Minimum height 44px (flag anything below)?
-   - Padding at least 12px 24px?
-   - CTA copy action-oriented? ("Submit" → "Save Changes"; "Click here" → "Get Started")
-   - All four states styled? (default, hover, focus, active/disabled)
+8. AI-SLOP CHECK — Does this scream "generated by AI"? Specific tells: purple gradients, evenly-spaced-three-cards, generic stock-icon CTAs, "Free / Pro / Enterprise" template, default sans-serif everywhere, lazy default shadows.
 
-9. AI-SLOP DETECTOR — flag any of these immediately as high severity:
-   - Purple or blue → pink gradient on white background
-   - Three identical evenly-spaced cards in a row with generic drop shadow
-   - Default Tailwind blue-500 as primary with zero customization
-   - One sans-serif font throughout (no display companion)
-   - "Free / Pro / Enterprise" pricing in a template-identical layout
-   - Centered hero: large headline + subtitle + two side-by-side buttons + gradient
-   - Placeholder rectangles labeled "Image" or "Photo"
-   - Every element has the same border-radius and box-shadow
-   - No interactive states on buttons or cards
+Be specific in `fix` — say "use Playfair Display 56px / 1.05 line-height for the H1 with -0.02em tracking" not "improve typography". Reference exact selectors/values when possible.
 
-Be SPECIFIC in `fix`: write exact CSS values, font names, and pixel numbers.
-  Good: "Switch H1 to Fraunces 700 48px / 1.1 line-height / -0.025em tracking"
-  Bad: "Improve the typography"
-
-  Good: "Card hover missing — add: .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.1); transition: all 200ms ease-in-out; }"
-  Bad: "Add hover effects"
-
-Aim for 3–7 issues ordered high → med → low. If the design is genuinely strong across all rubric items, say so — don't manufacture criticism.
+Aim for 3-6 issues. Order by severity. If the design is genuinely strong, say so — don't manufacture criticism.
 """
 
 
