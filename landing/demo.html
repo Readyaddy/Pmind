@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Introducing PMind</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --amber:    #D97706;
+      --amber-hi: #F59E0B;
+      --amber-lo: rgba(217,119,6,0.12);
+      --amber-bd: rgba(217,119,6,0.25);
+      --text:     #F3F2F1;
+      --text-2:   rgba(243,242,241,0.55);
+      --text-3:   rgba(243,242,241,0.26);
+      --glass:    rgba(22,22,22,0.94);
+      --border:   rgba(217,119,6,0.12);
+      --sans:     'Inter', sans-serif;
+      --serif:    'Playfair Display', serif;
+      --mono:     'JetBrains Mono', monospace;
+    }
+
+    html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+
+    /* ── Shell: 1280×720, scales to window ─────────────────── */
+    #shell { position:absolute; width:1280px; height:720px; transform-origin:top left; overflow:hidden; background:#000; }
+
+    /* ── Fade overlay ───────────────────────────────────────── */
+    #fade { position:absolute; inset:0; z-index:999; background:#000; opacity:1; pointer-events:none; transition:opacity 0.52s ease; }
+    #fade.clear { opacity:0; }
+
+    /* ── Scene base ─────────────────────────────────────────── */
+    .scene { position:absolute; inset:0; }
+
+    /* ══════════════════════════════════════════════════════════
+       SCENE 1 — PROBLEM
+    ══════════════════════════════════════════════════════════ */
+    #s1 {
+      background:#000;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+    }
+    .s1-noise {
+      position:absolute; inset:0; pointer-events:none; opacity:0.018;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size:200px;
+    }
+    .s1-glow {
+      position:absolute; bottom:-60px; left:50%; transform:translateX(-50%);
+      width:800px; height:260px; pointer-events:none;
+      background:radial-gradient(ellipse, rgba(217,119,6,0.055) 0%, transparent 65%);
+      transition:all 1.1s cubic-bezier(0.22,1,0.36,1);
+    }
+    .s1-glow.bloom {
+      width:1400px; height:700px; bottom:-200px;
+      background:radial-gradient(ellipse, rgba(217,119,6,0.28) 0%, rgba(217,119,6,0.08) 40%, transparent 70%);
+    }
+    .prob-wrap { position:relative; z-index:1; max-width:720px; width:100%; padding:0 48px; text-align:center; }
+
+    /* Animated lines */
+    .pl { opacity:0; transform:translateY(22px); transition:opacity 0.72s ease, transform 0.72s ease; }
+    .pl.show { opacity:1; transform:translateY(0); }
+
+    .pl-tag {
+      font-family:var(--mono); font-size:13px; letter-spacing:0.2em;
+      text-transform:uppercase; color:rgba(217,119,6,0.7);
+      display:flex; align-items:center; justify-content:center; gap:12px;
+      margin-bottom:48px;
+    }
+    .pl-tag::before, .pl-tag::after { content:''; height:1px; width:44px; background:rgba(217,119,6,0.3); }
+
+    .pl-norm   { font-size:28px; color:rgba(243,242,241,0.68); font-weight:400; line-height:1.45; margin-bottom:8px; }
+    .pl-dim    { font-size:18px; color:rgba(243,242,241,0.42); font-weight:300; letter-spacing:0.04em; margin-bottom:44px; }
+    .pl-big    { font-family:var(--serif); font-size:58px; font-weight:700; letter-spacing:-0.032em; color:var(--text); line-height:1.1; margin-bottom:8px; }
+    .pl-italic { font-family:var(--serif); font-size:50px; font-style:italic; font-weight:400; color:#F59E0B; letter-spacing:-0.022em; margin-bottom:52px;
+                 text-shadow: 0 0 60px rgba(245,158,11,0.35), 0 0 120px rgba(217,119,6,0.2); }
+    /* "Until now." — cinematic climax */
+    .pl-until {
+      opacity:0; transform:scale(0.78) translateY(18px);
+      display:block;
+      font-family:var(--serif); font-size:78px; font-style:italic; font-weight:700;
+      letter-spacing:-0.04em; color:var(--amber-hi); line-height:1;
+      text-shadow: 0 0 60px rgba(245,158,11,0.7), 0 0 120px rgba(217,119,6,0.45), 0 0 220px rgba(217,119,6,0.25);
+      transition:opacity 1s ease, transform 1s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .pl-until.show { opacity:1; transform:scale(1) translateY(0); }
+
+    /* ══════════════════════════════════════════════════════════
+       SCENE 2 — REVEAL
+    ══════════════════════════════════════════════════════════ */
+    #s2 {
+      background:#000;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+    }
+    .s2-glow {
+      position:absolute; top:46%; left:50%; transform:translate(-50%,-50%);
+      width:680px; height:460px; pointer-events:none;
+      background:radial-gradient(ellipse, rgba(217,119,6,0.17) 0%, transparent 62%);
+      animation:breathe 5s ease-in-out infinite alternate;
+    }
+    @keyframes breathe {
+      0%   { opacity:0.7; transform:translate(-50%,-52%) scale(1);    }
+      100% { opacity:1;   transform:translate(-50%,-48%) scale(1.07); }
+    }
+    .rv-wrap { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; }
+
+    .rv-intro {
+      font-family:var(--mono); font-size:11px; color:rgba(217,119,6,0.5);
+      letter-spacing:0.22em; text-transform:uppercase; margin-bottom:26px;
+      opacity:0; transition:opacity 0.7s ease;
+    }
+    .rv-intro.show { opacity:1; }
+
+    .rv-product {
+      display:flex; align-items:center; gap:20px; margin-bottom:26px;
+      opacity:0; transform:scale(0.84) translateY(12px);
+      transition:opacity 0.85s ease, transform 0.85s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .rv-product.show { opacity:1; transform:scale(1) translateY(0); }
+    .rv-mark {
+      width:64px; height:64px; border-radius:17px;
+      background:linear-gradient(145deg, #D97706 0%, #92400e 100%);
+      display:flex; align-items:center; justify-content:center;
+      font-family:var(--serif); font-size:32px; font-weight:700; color:rgba(255,255,255,0.92);
+      box-shadow:0 12px 44px rgba(217,119,6,0.52), 0 0 80px rgba(217,119,6,0.18), 0 0 0 1px rgba(217,119,6,0.22);
+    }
+    .rv-wordmark { font-family:var(--serif); font-size:82px; font-weight:700; letter-spacing:-0.04em; color:var(--text); line-height:1; }
+
+    .rv-tagline {
+      font-family:var(--serif); font-size:28px; font-style:italic;
+      color:rgba(243,242,241,0.62); letter-spacing:-0.016em; margin-bottom:14px;
+      opacity:0; transform:translateY(12px); transition:opacity 0.75s ease, transform 0.75s ease;
+    }
+    .rv-tagline.show { opacity:1; transform:none; }
+
+    .rv-sub {
+      font-size:15px; color:rgba(243,242,241,0.32); max-width:520px;
+      text-align:center; line-height:1.7;
+      opacity:0; transition:opacity 0.7s ease;
+    }
+    .rv-sub.show { opacity:1; }
+
+    /* ══════════════════════════════════════════════════════════
+       SCENE 3 — APP DEMO
+    ══════════════════════════════════════════════════════════ */
+    #s3 { background:#0A0A0A; display:flex; flex-direction:column; align-items:stretch; }
+
+    /* Caption bar */
+    .cap-bar {
+      height:46px; flex-shrink:0;
+      background:rgba(0,0,0,0.88); border-bottom:1px solid rgba(217,119,6,0.1);
+      display:flex; align-items:center; justify-content:center; gap:10px;
+    }
+    .cap-n { font-family:var(--mono); font-size:10px; color:rgba(217,119,6,0.4); letter-spacing:0.1em; }
+    .cap-sep { width:1px; height:14px; background:rgba(255,255,255,0.1); }
+    .cap-t { font-size:13px; font-weight:500; color:rgba(243,242,241,0.58); }
+    .cap-k { padding:2px 7px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.11); border-radius:4px; font-family:var(--mono); font-size:11px; color:rgba(255,255,255,0.42); }
+
+    #appWrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+    /* Window titlebar */
+    .app-tb {
+      height:36px; background:#080808; flex-shrink:0;
+      border-bottom:1px solid rgba(217,119,6,0.07);
+      display:flex; align-items:center; padding:0 14px; gap:10px;
+    }
+    .tlg { display:flex; gap:6px; }
+    .tl { width:11px; height:11px; border-radius:50%; }
+    .tl-r{background:#FF5F57;} .tl-y{background:#FFBD2E;} .tl-g{background:#28CA41;}
+    .tb-lbl { font-family:var(--mono); font-size:11px; color:rgba(255,255,255,0.18); }
+    .tb-sv { margin-left:auto; font-family:var(--mono); font-size:9px; color:rgba(217,119,6,0.38); padding:2px 7px; background:rgba(217,119,6,0.05); border:1px solid rgba(217,119,6,0.1); border-radius:4px; display:flex; align-items:center; gap:4px; }
+    .sv-dot { width:4px; height:4px; border-radius:50%; background:var(--amber); animation:blink 2s ease-in-out infinite; }
+
+    /* Three-panel layout */
+    .app-layout { flex:1; display:grid; grid-template-columns:198px 1fr 260px; overflow:hidden; }
+
+    /* Sidebar */
+    .app-sb { background:var(--glass); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+    .sb-hd { padding:11px 12px 9px; border-bottom:1px solid rgba(217,119,6,0.06); display:flex; align-items:center; gap:8px; }
+    .sb-lm { width:21px; height:21px; border-radius:5px; flex-shrink:0; background:linear-gradient(145deg,#D97706 0%,#92400e 100%); display:flex; align-items:center; justify-content:center; font-family:var(--serif); font-size:11px; font-weight:700; color:rgba(255,255,255,0.9); box-shadow:0 2px 8px rgba(217,119,6,0.3); }
+    .sb-nm { font-family:var(--serif); font-size:14px; font-weight:700; color:var(--text); letter-spacing:-0.02em; }
+    .sb-bd { flex:1; padding:10px 8px; }
+    .pr-row { display:flex; align-items:center; gap:5px; padding:5px 6px; border-radius:6px; margin-bottom:3px; }
+    .pr-ch { font-size:9px; color:var(--text-3); }
+    .pr-dot { width:7px; height:7px; border-radius:2px; background:var(--amber); flex-shrink:0; }
+    .pr-nm { font-size:12px; font-weight:600; color:var(--text); }
+    .fi { display:flex; align-items:center; gap:7px; padding:4px 6px 4px 20px; border-radius:5px; margin-bottom:1px; }
+    .fi.on { background:rgba(217,119,6,0.1); }
+    .fi-ic { font-size:9px; color:var(--text-3); }
+    .fi.on .fi-ic { color:var(--amber); }
+    .fi-nm { font-size:12px; color:var(--text-2); }
+    .fi.on .fi-nm { color:var(--amber-hi); font-weight:500; }
+    .sb-ft { padding:8px 10px; border-top:1px solid rgba(217,119,6,0.06); display:flex; align-items:center; justify-content:space-between; }
+    .plan-tag { font-size:9px; color:var(--text-3); padding:2px 6px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:4px; letter-spacing:0.05em; text-transform:uppercase; }
+
+    /* Editor */
+    .app-ed { display:flex; flex-direction:column; position:relative; overflow:hidden; background:#0D0D0D; }
+    .ed-tb { background:var(--glass); border-bottom:1px solid var(--border); padding:5px 10px; display:flex; align-items:center; gap:1px; flex-shrink:0; }
+    .tbb { width:26px; height:26px; border-radius:5px; border:none; background:transparent; color:rgba(243,242,241,0.36); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
+    .tbb.on { background:rgba(217,119,6,0.14); color:var(--amber-hi); }
+    .tbb-sp { width:1px; height:16px; background:rgba(255,255,255,0.07); margin:0 3px; }
+    .ed-doc { flex:1; padding:20px 28px; overflow:hidden; }
+    .d-title { font-family:var(--serif); font-size:21px; font-weight:700; color:var(--text); letter-spacing:-0.022em; margin-bottom:16px; line-height:1.2; }
+    .d-h2 { font-family:var(--serif); font-size:13px; font-weight:700; color:var(--text); margin-top:13px; margin-bottom:4px; }
+    .d-p { font-size:12px; color:var(--text-2); line-height:1.72; display:block; }
+    .d-cur { display:inline-block; width:2px; height:13px; background:var(--amber); border-radius:1px; vertical-align:middle; margin-left:1px; animation:blink 1.05s step-end infinite; }
+    #aiSection { margin-top:13px; display:none; }
+    .ai-badge { font-family:var(--mono); font-size:9px; padding:2px 7px; background:rgba(217,119,6,0.1); border:1px solid rgba(217,119,6,0.22); border-radius:4px; color:var(--amber-hi); font-weight:500; margin-left:6px; vertical-align:middle; }
+
+    /* ⌘K Modal */
+    .cmd-ov { position:absolute; inset:0; background:rgba(0,0,0,0.44); backdrop-filter:blur(2px); display:flex; align-items:flex-start; justify-content:center; padding-top:24px; opacity:0; pointer-events:none; transition:opacity 0.22s ease; }
+    .cmd-ov.vis { opacity:1; }
+    .cmd-win { width:388px; background:rgba(16,12,7,0.99); border:1px solid rgba(217,119,6,0.28); border-top-color:rgba(217,119,6,0.46); border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,0.9), 0 0 40px rgba(217,119,6,0.08); overflow:hidden; transform:translateY(-8px) scale(0.97); transition:transform 0.28s cubic-bezier(0.34,1.56,0.64,1); }
+    .cmd-ov.vis .cmd-win { transform:none; }
+    .cmd-hd { padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; gap:8px; }
+    .cmd-ic { width:22px; height:22px; border-radius:6px; background:rgba(217,119,6,0.14); border:1px solid rgba(217,119,6,0.28); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--amber-hi); }
+    .cmd-lbl { font-size:11px; font-weight:700; color:var(--amber-hi); letter-spacing:0.08em; text-transform:uppercase; }
+    .cmd-esc { margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--text-3); padding:2px 6px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:4px; }
+    .cmd-list { padding:8px; display:flex; flex-direction:column; gap:3px; }
+    .cmd-r { padding:8px 10px; border-radius:7px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:space-between; }
+    .cmd-r.hi { background:rgba(217,119,6,0.09); border-color:rgba(217,119,6,0.22); }
+    .cmd-rl { display:flex; align-items:center; gap:8px; }
+    .cmd-dt { width:5px; height:5px; border-radius:50%; background:var(--text-3); }
+    .cmd-r.hi .cmd-dt { background:var(--amber); }
+    .cmd-rn { font-size:12px; font-weight:500; color:var(--text-2); }
+    .cmd-r.hi .cmd-rn { color:var(--amber-hi); }
+    .cmd-en { font-family:var(--mono); font-size:9px; color:var(--amber); padding:2px 6px; background:rgba(217,119,6,0.1); border:1px solid rgba(217,119,6,0.2); border-radius:4px; }
+    .cmd-ia { padding:8px; border-top:1px solid rgba(255,255,255,0.04); }
+    .cmd-ib { width:100%; padding:7px 10px; font-size:12px; font-family:var(--sans); background:rgba(255,255,255,0.035); border:1px solid rgba(255,255,255,0.07); border-radius:7px; color:var(--text-2); }
+    .cmd-gn { padding:8px; border-top:1px solid rgba(255,255,255,0.04); display:none; }
+    .gen-lb { font-family:var(--mono); font-size:9px; color:rgba(217,119,6,0.55); letter-spacing:0.09em; text-transform:uppercase; display:flex; align-items:center; gap:5px; margin-bottom:7px; }
+    .gen-ld { width:5px; height:5px; border-radius:50%; background:var(--amber); animation:pulse 0.9s ease-in-out infinite; }
+    .gen-out { font-family:var(--mono); font-size:11px; color:var(--text-2); line-height:1.65; min-height:55px; }
+    .gen-cur { display:inline-block; width:7px; height:12px; background:var(--amber-hi); border-radius:1px; vertical-align:middle; margin-left:2px; animation:blink 0.65s step-end infinite; }
+
+    /* Chat panel */
+    .app-ch { background:var(--glass); border-left:1px solid var(--border); display:flex; flex-direction:column; }
+    .ch-hd { padding:9px 10px; border-bottom:1px solid rgba(217,119,6,0.07); display:flex; align-items:center; gap:6px; }
+    .ch-ic { font-size:13px; color:var(--amber); }
+    .ch-ttl { font-size:12px; font-weight:600; color:var(--text); flex:1; }
+    .ch-pill { display:flex; align-items:center; gap:3px; padding:3px 7px; background:rgba(217,119,6,0.1); border:1px solid rgba(217,119,6,0.2); border-radius:5px; font-family:var(--mono); font-size:9px; color:var(--amber-hi); }
+    .ch-msgs { flex:1; padding:10px 8px; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
+    .ch-empty { font-size:11px; color:var(--text-3); text-align:center; margin-top:14px; line-height:1.65; }
+    .msg-u { align-self:flex-end; max-width:88%; padding:7px 10px; border-radius:10px 10px 3px 10px; background:rgba(217,119,6,0.14); border:1px solid rgba(217,119,6,0.2); font-size:11px; color:var(--text); line-height:1.55; }
+    .msg-a { align-self:flex-start; max-width:96%; padding:7px 10px; border-radius:10px 10px 10px 3px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); font-size:11px; color:var(--text-2); line-height:1.55; }
+    .msg-lbl { font-family:var(--mono); font-size:8px; color:var(--amber); letter-spacing:0.07em; text-transform:uppercase; margin-bottom:4px; }
+    .apply-btn { margin-top:6px; padding:3px 8px; font-size:9px; font-weight:600; background:rgba(217,119,6,0.12); border:1px solid rgba(217,119,6,0.22); border-radius:4px; color:var(--amber-hi); display:inline-flex; align-items:center; gap:3px; }
+    .ch-ft { padding:8px; border-top:1px solid rgba(217,119,6,0.07); display:flex; align-items:center; gap:5px; }
+    .ch-in { flex:1; padding:6px 8px; font-size:11px; font-family:var(--sans); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:7px; color:var(--text-2); height:30px; line-height:18px; }
+    .ch-snd { width:26px; height:26px; border-radius:6px; flex-shrink:0; background:rgba(217,119,6,0.14); border:1px solid rgba(217,119,6,0.22); color:var(--amber-hi); display:flex; align-items:center; justify-content:center; font-size:11px; }
+
+    /* Suggestion bar */
+    #suggBar { position:absolute; bottom:-58px; left:50%; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:10px; padding:10px 18px; border-radius:12px; background:rgba(245,220,130,0.06); border:1px solid rgba(217,119,6,0.28); box-shadow:0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(217,119,6,0.06); backdrop-filter:blur(20px); transition:bottom 0.42s cubic-bezier(0.34,1.56,0.64,1); white-space:nowrap; }
+    #suggBar.up { bottom:14px; }
+    .sg-txt { font-size:12px; font-weight:500; color:rgba(245,200,100,0.9); }
+    .sg-btn { padding:5px 12px; font-size:11px; font-weight:600; border-radius:7px; display:flex; align-items:center; gap:5px; }
+    .sg-acc { background:#16a34a; color:#fff; transition:background .15s; }
+    .sg-rej { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.55); }
+
+    /* ══════════════════════════════════════════════════════════
+       SCENE 4 — CTA
+    ══════════════════════════════════════════════════════════ */
+    #s4 {
+      background:#000;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+    }
+    .s4-glow { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:700px; height:500px; pointer-events:none; background:radial-gradient(ellipse, rgba(217,119,6,0.14) 0%, transparent 60%); animation:breathe 5s ease-in-out infinite alternate; }
+    .ct-wrap { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; }
+    .ct-logo { display:flex; align-items:center; gap:14px; margin-bottom:22px; opacity:0; transform:translateY(-10px); transition:opacity 0.65s ease, transform 0.65s ease; }
+    .ct-logo.show { opacity:1; transform:none; }
+    .ct-lm { width:42px; height:42px; border-radius:11px; background:linear-gradient(145deg,#D97706 0%,#92400e 100%); display:flex; align-items:center; justify-content:center; font-family:var(--serif); font-size:21px; font-weight:700; color:rgba(255,255,255,0.92); box-shadow:0 6px 26px rgba(217,119,6,0.44); }
+    .ct-wm { font-family:var(--serif); font-size:34px; font-weight:700; letter-spacing:-0.03em; color:var(--text); }
+    .ct-badge { font-family:var(--mono); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:rgba(217,119,6,0.5); margin-bottom:22px; opacity:0; transition:opacity 0.55s ease; }
+    .ct-badge.show { opacity:1; }
+    .ct-h { font-family:var(--serif); font-size:46px; font-weight:700; line-height:1.18; letter-spacing:-0.03em; color:var(--text); text-align:center; max-width:680px; margin-bottom:14px; opacity:0; transform:translateY(16px); transition:opacity 0.75s ease, transform 0.75s ease; }
+    .ct-h.show { opacity:1; transform:none; }
+    .ct-h em { font-style:italic; font-weight:400; color:var(--amber-hi); }
+    .ct-sub { font-size:16px; color:rgba(243,242,241,0.36); margin-bottom:38px; text-align:center; max-width:520px; line-height:1.62; opacity:0; transition:opacity 0.6s ease; }
+    .ct-sub.show { opacity:1; }
+    .ct-btn { display:inline-flex; align-items:center; gap:10px; padding:17px 42px; font-size:17px; font-weight:600; background:linear-gradient(145deg,#D97706 0%,#92400e 100%); border-radius:10px; color:#fff; text-decoration:none; box-shadow:0 8px 34px rgba(217,119,6,0.4), 0 0 0 1px rgba(217,119,6,0.2); opacity:0; transform:translateY(10px); transition:opacity 0.65s ease 0.1s, transform 0.65s ease 0.1s; }
+    .ct-btn.show { opacity:1; transform:none; }
+    .ct-perks { display:flex; gap:28px; margin-top:22px; flex-wrap:wrap; justify-content:center; opacity:0; transition:opacity 0.55s ease; }
+    .ct-perks.show { opacity:1; }
+    .ct-perk { font-size:12px; color:rgba(243,242,241,0.28); display:flex; align-items:center; gap:5px; }
+    .ct-perk::before { content:'—'; color:var(--amber); font-weight:700; }
+
+    /* ── Shared animations ───────────────────────────────────── */
+    @keyframes blink  { 0%,100%{opacity:1;} 50%{opacity:0;} }
+    @keyframes pulse  { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.6;transform:scale(.85);} }
+  </style>
+</head>
+<body>
+  <div id="shell">
+    <div id="fade"></div>
+
+    <!-- ══ SCENE 1 — PROBLEM ══════════════════════════════════ -->
+    <div class="scene" id="s1">
+      <div class="s1-noise"></div>
+      <div class="s1-glow"></div>
+      <div class="prob-wrap">
+        <div class="pl pl-tag"  id="p0">The Problem</div>
+        <div class="pl pl-norm" id="p1">Every PM has access to powerful AI tools.</div>
+        <div class="pl pl-dim"  id="p2">ChatGPT &nbsp;·&nbsp; Gemini &nbsp;·&nbsp; Copilot &nbsp;·&nbsp; Claude</div>
+        <div class="pl pl-big"  id="p3">None of them know your product.</div>
+        <div class="pl pl-italic" id="p4">You re-explain it every single time.</div>
+        <div class="pl pl-until" id="p5">Until now.</div>
+      </div>
+    </div>
+
+    <!-- ══ SCENE 2 — REVEAL ═══════════════════════════════════ -->
+    <div class="scene" id="s2">
+      <div class="s2-glow"></div>
+      <div class="rv-wrap">
+        <div class="rv-intro"   id="rv0">Introducing</div>
+        <div class="rv-product" id="rv1">
+          <div class="rv-mark">P</div>
+          <span class="rv-wordmark">PMind</span>
+        </div>
+        <div class="rv-tagline" id="rv2">The workspace that thinks in product.</div>
+        <div class="rv-sub"     id="rv3">AI grounded in your strategy, your users, and your constraints —<br>not just your last message.</div>
+      </div>
+    </div>
+
+    <!-- ══ SCENE 3 — APP DEMO ════════════════════════════════ -->
+    <div class="scene" id="s3">
+      <!-- Caption bar -->
+      <div class="cap-bar">
+        <span class="cap-n" id="capN">01</span>
+        <div class="cap-sep"></div>
+        <span class="cap-t" id="capT">Press <span class="cap-k">⌘K</span> anywhere — generate PRDs, tickets, briefs grounded in your product</span>
+      </div>
+
+      <div id="appWrap">
+        <!-- Window chrome -->
+        <div class="app-tb">
+          <div class="tlg"><span class="tl tl-r"></span><span class="tl tl-y"></span><span class="tl tl-g"></span></div>
+          <span class="tb-lbl">PMind — Mobile Checkout Redesign · PRD</span>
+          <div class="tb-sv"><span class="sv-dot"></span>Saved</div>
+        </div>
+
+        <!-- Three panels -->
+        <div class="app-layout">
+
+          <!-- Sidebar -->
+          <div class="app-sb">
+            <div class="sb-hd">
+              <div class="sb-lm">P</div>
+              <span class="sb-nm">PMind</span>
+            </div>
+            <div class="sb-bd">
+              <div class="pr-row">
+                <span class="pr-ch">▾</span>
+                <div class="pr-dot"></div>
+                <span class="pr-nm">Checkout v3</span>
+              </div>
+              <div class="fi on"><span class="fi-ic">▪</span><span class="fi-nm">PRD</span></div>
+              <div class="fi"><span class="fi-ic">▫</span><span class="fi-nm">Brief</span></div>
+              <div class="fi"><span class="fi-ic">▫</span><span class="fi-nm">Research</span></div>
+              <div class="fi"><span class="fi-ic">▫</span><span class="fi-nm">Tickets</span></div>
+            </div>
+            <div class="sb-ft">
+              <span class="plan-tag">Free</span>
+              <span style="font-size:11px;color:var(--text-3)">◑</span>
+            </div>
+          </div>
+
+          <!-- Editor -->
+          <div class="app-ed" id="appEd">
+            <div class="ed-tb">
+              <div class="tbb" style="font-size:10px;">↩</div><div class="tbb" style="font-size:10px;">↪</div>
+              <div class="tbb-sp"></div>
+              <div class="tbb" style="font-size:9px;font-weight:800;">H1</div><div class="tbb on" style="font-size:9px;font-weight:800;">H2</div><div class="tbb" style="font-size:9px;font-weight:800;">H3</div>
+              <div class="tbb-sp"></div>
+              <div class="tbb" style="font-weight:800;">B</div><div class="tbb" style="font-style:italic;">I</div><div class="tbb" style="font-family:var(--mono);font-size:10px;">`</div>
+              <div class="tbb-sp"></div>
+              <div class="tbb">•≡</div><div class="tbb">1≡</div><div class="tbb" style="font-size:13px;">"</div>
+              <div class="tbb-sp"></div>
+              <div class="tbb" style="font-size:11px;">⌘L</div><div class="tbb" style="font-size:11px;">⌘I</div>
+            </div>
+            <div class="ed-doc">
+              <div class="d-title">Mobile Checkout Redesign</div>
+              <div class="d-h2">Problem Statement</div>
+              <span class="d-p">Checkout abandonment at 34% vs. 18% industry benchmark. Drop-off at payment selection (step 3 of 4).</span>
+              <div class="d-h2">Target Users</div>
+              <span class="d-p">Mobile-first buyers, 25–40, repeat purchasers. High-intent, trust-driven.</span>
+              <div class="d-h2">Success Metrics</div>
+              <span class="d-p">Reduce abandon to &lt;20%. Repeat purchase +15% YoY.<span class="d-cur" id="mainCur"></span></span>
+              <div id="aiSection">
+                <div class="d-h2">Tickets <span class="ai-badge">AI · Product Brain</span></div>
+                <span id="aiDocText" style="font-family:var(--mono);font-size:11px;color:var(--text-2);white-space:pre;display:block;line-height:1.7;margin-top:5px;"></span>
+              </div>
+            </div>
+            <!-- ⌘K Modal -->
+            <div class="cmd-ov" id="cmdOv">
+              <div class="cmd-win">
+                <div class="cmd-hd">
+                  <div class="cmd-ic">⌘</div>
+                  <span class="cmd-lbl">AI Command</span>
+                  <span class="cmd-esc">esc</span>
+                </div>
+                <div class="cmd-list" id="cmdList">
+                  <div class="cmd-r"><div class="cmd-rl"><span class="cmd-dt"></span><span class="cmd-rn">Write PRD</span></div></div>
+                  <div class="cmd-r hi"><div class="cmd-rl"><span class="cmd-dt"></span><span class="cmd-rn">Break into tickets</span></div><span class="cmd-en">↵</span></div>
+                  <div class="cmd-r"><div class="cmd-rl"><span class="cmd-dt"></span><span class="cmd-rn">Product brief</span></div></div>
+                  <div class="cmd-r"><div class="cmd-rl"><span class="cmd-dt"></span><span class="cmd-rn">Stakeholder update</span></div></div>
+                </div>
+                <div class="cmd-ia" id="cmdIa">
+                  <div class="cmd-ib" id="cmdIb" style="color:rgba(243,242,241,0.28);">Describe the feature to break down…</div>
+                </div>
+                <div class="cmd-gn" id="cmdGn">
+                  <div class="gen-lb"><span class="gen-ld"></span>Generating from Product Brain</div>
+                  <div class="gen-out" id="genOut"><span class="gen-cur"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat -->
+          <div class="app-ch">
+            <div class="ch-hd">
+              <span class="ch-ic">✦</span>
+              <span class="ch-ttl">AI Chat</span>
+              <div class="ch-pill">2.5 Flash <span style="font-size:7px;opacity:.7;">▾</span></div>
+            </div>
+            <div class="ch-msgs" id="chMsgs">
+              <div class="ch-empty">Ask anything about your document or product strategy.</div>
+            </div>
+            <div class="ch-ft">
+              <div class="ch-in" id="chIn" style="color:rgba(243,242,241,0.28);line-height:18px;">Ask anything…</div>
+              <div class="ch-snd">→</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Suggestion bar -->
+      <div id="suggBar">
+        <span class="sg-txt">3 suggestions ready</span>
+        <button class="sg-btn sg-acc" id="accBtn">✓ Accept all</button>
+        <button class="sg-btn sg-rej">✕ Reject all</button>
+      </div>
+
+    </div><!-- end s3 -->
+
+    <!-- ══ SCENE 4 — CTA ══════════════════════════════════════ -->
+    <div class="scene" id="s4">
+      <div class="s4-glow"></div>
+      <div class="ct-wrap">
+        <div class="ct-logo"  id="ct0"><div class="ct-lm">P</div><span class="ct-wm">PMind</span></div>
+        <div class="ct-badge" id="ct1">Private Beta · Limited Spots</div>
+        <div class="ct-h"     id="ct2">The AI workspace PMs<br>were <em>waiting for.</em></div>
+        <div class="ct-sub"   id="ct3">Built for PMs who ship. Grounded in your product — not generic templates.</div>
+        <a  class="ct-btn"   id="ct4"
+            href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
+            target="_blank">Request Early Access →</a>
+        <div class="ct-perks" id="ct5">
+          <span class="ct-perk">Free during beta</span>
+          <span class="ct-perk">Shape the roadmap</span>
+          <span class="ct-perk">Founding member pricing</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end shell -->
+
+  <script>
+    // ── Scale to window ────────────────────────────────────────
+    function scale() {
+      const el = document.getElementById('shell');
+      const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+      el.style.transform = `scale(${s})`;
+      el.style.left  = Math.round((window.innerWidth  - 1280 * s) / 2) + 'px';
+      el.style.top   = Math.round((window.innerHeight - 720  * s) / 2) + 'px';
+    }
+    scale();
+    window.addEventListener('resize', scale);
+
+    // ── Utilities ──────────────────────────────────────────────
+    const $  = id => document.getElementById(id);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const show = id => $(id).classList.add('show');
+    const hide = id => $(id).classList.remove('show');
+
+    async function typeEl(el, text, spd = 42) {
+      el.style.color = '';
+      let i = 0;
+      return new Promise(r => {
+        const t = () => {
+          if (i >= text.length) { r(); return; }
+          el.textContent = text.slice(0, ++i);
+          setTimeout(t, spd + Math.random() * 22);
+        };
+        t();
+      });
+    }
+
+    async function streamEl(el, text, spd = 20) {
+      let i = 0;
+      return new Promise(r => {
+        const t = () => {
+          if (i >= text.length) { el.innerHTML = text.replace(/\n/g, '<br>'); r(); return; }
+          el.innerHTML = text.slice(0, ++i).replace(/\n/g, '<br>') + '<span class="gen-cur"></span>';
+          setTimeout(t, spd + Math.random() * 16);
+        };
+        t();
+      });
+    }
+
+    async function fadeOut(ms = 500) {
+      const fd = $('fade');
+      fd.style.transition = `opacity ${ms}ms ease`;
+      fd.style.opacity = '1';
+      await wait(ms + 80);
+    }
+    async function fadeIn(ms = 520) {
+      const fd = $('fade');
+      fd.style.transition = `opacity ${ms}ms ease`;
+      fd.style.opacity = '0';
+      await wait(ms + 80);
+    }
+
+    // ── Scene 3 reset ──────────────────────────────────────────
+    function resetS3() {
+      $('chMsgs').innerHTML = '<div class="ch-empty">Ask anything about your document or product strategy.</div>';
+      $('chIn').textContent = 'Ask anything…';
+      $('chIn').style.color = 'rgba(243,242,241,0.28)';
+      $('aiSection').style.display   = 'none';
+      $('aiDocText').textContent     = '';
+      $('cmdOv').classList.remove('vis');
+      $('suggBar').classList.remove('up');
+      $('mainCur').style.display     = '';
+      $('cmdList').style.display     = '';
+      $('cmdIa').style.display       = '';
+      $('cmdGn').style.display       = 'none';
+      $('cmdIb').textContent         = 'Describe the feature to break down…';
+      $('cmdIb').style.color         = 'rgba(243,242,241,0.28)';
+      $('genOut').innerHTML          = '<span class="gen-cur"></span>';
+      $('capN').textContent          = '01';
+      $('capT').innerHTML            = 'Press <span class="cap-k">⌘K</span> anywhere — generate PRDs, tickets, briefs grounded in your product';
+    }
+
+    // ── SCENE 1 ────────────────────────────────────────────────
+    async function runS1() {
+      // Reset any dim state from previous loop
+      ['p0','p1','p2','p3','p4','p5'].forEach(id => {
+        $(id).classList.remove('show');
+        $(id).style.opacity = '';
+        $(id).style.transition = '';
+      });
+      document.querySelector('.s1-glow').classList.remove('bloom');
+
+      await wait(400); show('p0');
+      await wait(900); show('p1');
+      await wait(1300); show('p2');
+      await wait(1700);
+
+      // The accusation lands — dim the earlier setup lines
+      $('p1').style.transition = 'opacity 0.9s ease';
+      $('p2').style.transition = 'opacity 0.9s ease';
+      $('p1').style.opacity = '0.22';
+      $('p2').style.opacity = '0.16';
+      show('p3');
+      await wait(2000);
+      show('p4');
+      await wait(2000);
+
+      // Dramatic pause — everything fades to near-black
+      ['p0','p1','p2','p3','p4'].forEach(id => {
+        $(id).style.transition = 'opacity 1.1s ease';
+        $(id).style.opacity = '0.05';
+      });
+      await wait(1100);
+
+      // UNTIL NOW — amber bloom + big reveal
+      document.querySelector('.s1-glow').classList.add('bloom');
+      show('p5');
+      await wait(3200);
+    }
+
+    // ── SCENE 2 ────────────────────────────────────────────────
+    async function runS2() {
+      await wait(350);   show('rv0');
+      await wait(750);   show('rv1');
+      await wait(850);   show('rv2');
+      await wait(800);   show('rv3');
+      await wait(2400);
+    }
+
+    // ── SCENE 3 ────────────────────────────────────────────────
+    async function runS3() {
+      resetS3();
+      await wait(800);
+
+      // ⌘K modal opens
+      $('cmdOv').classList.add('vis');
+      await wait(650);
+
+      // Type input
+      $('cmdIb').style.color = '';
+      await typeEl($('cmdIb'), 'Mobile checkout — 3 payment epics', 45);
+      await wait(480);
+
+      // Switch to generating state
+      $('cmdList').style.display = 'none';
+      $('cmdIa').style.display   = 'none';
+      $('cmdGn').style.display   = 'block';
+      $('genOut').innerHTML      = '<span class="gen-cur"></span>';
+      await wait(300);
+
+      // Stream AI output
+      await streamEl($('genOut'),
+`EPIC: Payment UX Overhaul
+
+STORY-001 · Pre-select saved card
+Returning buyers see their saved card
+pre-selected on step 3. One tap confirm.
+AC: Card on file → auto-selected. [3 pts]
+
+STORY-002 · Surface wallet options
+Apple Pay / Google Pay above-the-fold
+for all mobile sessions. [5 pts]
+
+STORY-003 · Merge address + payment
+2-step flow for returning users (was 4).
+AC: Verified buyers skip re-entry. [8 pts]`, 19);
+
+      await wait(950);
+
+      // Close modal, show tickets in doc
+      $('cmdOv').classList.remove('vis');
+      await wait(380);
+      $('mainCur').style.display   = 'none';
+      $('aiSection').style.display = 'block';
+      $('aiDocText').textContent   =
+`STORY-001  Pre-select saved card   [3 pts]
+STORY-002  Surface wallet options  [5 pts]
+STORY-003  Merge address + payment [8 pts]`;
+      await wait(480);
+
+      // Suggestion bar
+      $('suggBar').classList.add('up');
+      await wait(1800);
+
+      // Accept all
+      $('accBtn').style.background = '#15803d';
+      await wait(300);
+      $('accBtn').style.background = '';
+      $('suggBar').classList.remove('up');
+      await wait(650);
+
+      // Transition caption to chat
+      $('capN').textContent = '02';
+      $('capT').innerHTML   = 'AI Chat — ask your doc anything. Apply suggestions inline.';
+      await wait(700);
+
+      // Type into the chat input field first
+      $('chMsgs').innerHTML = '';
+      await typeEl($('chIn'), 'Any gaps in the success metrics?', 42);
+      await wait(380);
+
+      // Simulate "send" — clear input, bubble appears in msgs
+      $('chIn').textContent = 'Ask anything…';
+      $('chIn').style.color = 'rgba(243,242,241,0.28)';
+      const uMsg = document.createElement('div');
+      uMsg.className = 'msg-u';
+      uMsg.textContent = 'Any gaps in the success metrics?';
+      $('chMsgs').appendChild(uMsg);
+      await wait(600);
+
+      // AI response
+      const aMsg = document.createElement('div');
+      aMsg.className = 'msg-a';
+      aMsg.innerHTML = '<div class="msg-lbl">PMind AI</div><span id="aiRep"></span><div><span class="apply-btn" id="apBtn" style="opacity:0;transition:opacity .35s">↳ Apply to doc</span></div>';
+      $('chMsgs').appendChild(aMsg);
+      await wait(200);
+
+      const reply = '2 gaps: no leading indicator defined (e.g. payment_load_time_p95), and no A/B rollback threshold specified.';
+      let ri = 0;
+      await new Promise(r => {
+        const t = () => {
+          if (ri >= reply.length) { r(); return; }
+          $('aiRep').textContent = reply.slice(0, ++ri);
+          setTimeout(t, 18 + Math.random() * 14);
+        };
+        t();
+      });
+      await wait(400);
+      $('apBtn').style.opacity = '1';
+      await wait(2200);
+    }
+
+    // ── SCENE 4 ────────────────────────────────────────────────
+    async function runS4() {
+      ['ct0','ct1','ct2','ct3','ct4','ct5'].forEach(id => hide(id));
+      await wait(250);
+      show('ct0'); await wait(520);
+      show('ct1'); await wait(620);
+      show('ct2'); await wait(560);
+      show('ct3'); await wait(440);
+      show('ct4'); await wait(420);
+      show('ct5'); await wait(4200);
+    }
+
+    // ── Main loop ──────────────────────────────────────────────
+    async function main() {
+      const scenes = ['s1','s2','s3','s4'];
+      while (true) {
+        // S1
+        scenes.forEach((id, i) => $(id).style.zIndex = id === 's1' ? 2 : 1);
+        await fadeIn(600);
+        await runS1();
+        await fadeOut(520); await wait(180);
+
+        // S2
+        $('s1').style.zIndex = 1; $('s2').style.zIndex = 2;
+        await fadeIn(600);
+        await runS2();
+        await fadeOut(520); await wait(180);
+
+        // S3
+        $('s2').style.zIndex = 1; $('s3').style.zIndex = 2;
+        await fadeIn(500);
+        await runS3();
+        await fadeOut(520); await wait(180);
+
+        // S4
+        $('s3').style.zIndex = 1; $('s4').style.zIndex = 2;
+        await fadeIn(600);
+        await runS4();
+        await fadeOut(600); await wait(350);
+
+        // Reset text for next loop
+        ['p0','p1','p2','p3','p4','p5'].forEach(id => $(id).classList.remove('show'));
+        ['rv0','rv1','rv2','rv3'].forEach(id => $(id).classList.remove('show'));
+      }
+    }
+
+    document.fonts.ready.then(() => {
+      $('fade').style.opacity = '1';
+      setTimeout(main, 500);
+    });
+  </script>
+</body>
+</html>

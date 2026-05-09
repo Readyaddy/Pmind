@@ -1,7 +1,8 @@
-# PM Cursor — Codebase Context Reference
+# PMind — Codebase Context Reference
 
 > Quick-reference for all files, their purpose, key exports, and cross-cutting patterns.
-> Current phase: Phase 2 complete, Phase 3 (Jira/Linear) pending.
+> Current phase: Phase 4 complete (billing, JWT auth, model selector, chat threads, global search, templates).
+> App name: **PMind** (formerly PM Cursor).
 
 ---
 
@@ -11,26 +12,32 @@
 pm_cursor/
 ├── CLAUDE.md                        # Dev instructions & vision
 ├── CODEBASE_CONTEXT.md              # ← this file
+├── DESIGN.md                        # UI design system notes
+├── landing/                         # Standalone PMind beta landing page (NOT part of Next.js app)
+│   ├── index.html                   # Single-file dark amber landing page with animations
+│   └── vercel.json                  # Vercel static deployment config
 ├── backend/                         # FastAPI Python backend (port 8000)
 │   ├── main.py                      # App entry, CORS, router mounts
-│   ├── deps.py                      # DI: get_supabase(), get_user_id()
+│   ├── deps.py                      # DI: get_supabase(), get_user_id() — now verifies Clerk JWT
 │   ├── prompts.py                   # AI system prompt templates
 │   ├── requirements.txt             # Python deps
 │   ├── .env                         # Secrets (not committed)
 │   ├── llm/
 │   │   ├── base.py                  # LLMProvider ABC
-│   │   ├── factory.py               # get_llm_provider() — reads LLM_PROVIDER env
+│   │   ├── factory.py               # get_llm_provider(model_override?) — reads LLM_PROVIDER env
 │   │   ├── gemini.py                # Gemini provider (default)
 │   │   ├── claude.py                # Claude provider
 │   │   └── openai_provider.py       # OpenAI provider
 │   └── routers/
-│       ├── ai.py                    # POST /ai/complete, /ai/chat, /ai/generate-tickets
+│       ├── ai.py                    # /ai/* — complete, chat (threaded+RAG), generate-tickets, apply, search, review-ui
 │       ├── projects.py              # CRUD /projects + tree + folders
 │       ├── documents.py             # CRUD /documents/{id}
 │       ├── folders.py               # PUT/DELETE /folders/{id}
 │       ├── context.py               # GET/PUT /{project_id}/context (Product Brain)
 │       ├── knowledge.py             # POST/GET/DELETE /knowledge (RAG uploads)
-│       └── integrations.py          # Phase 3: Jira + Linear connect/export
+│       ├── integrations.py          # Jira + Linear connect/export
+│       ├── billing.py               # Stripe subscription management
+│       └── templates.py             # PM document templates
 │
 ├── cursor-for-pms/                  # Next.js 15 frontend (port 3000)
 │   ├── package.json
@@ -41,6 +48,8 @@ pm_cursor/
 │       │   ├── layout.tsx            # Root: ClerkProvider + ThemeProvider
 │       │   ├── page.tsx              # Home redirect
 │       │   ├── sign-in/             # Clerk sign-in
+│       │   ├── billing/
+│       │   │   └── page.tsx          # Billing / subscription management page
 │       │   └── projects/
 │       │       ├── page.tsx          # Projects list
 │       │       ├── layout.tsx        # Projects shell
@@ -49,23 +58,27 @@ pm_cursor/
 │       │           ├── page.tsx      # Project home
 │       │           ├── docs/[docId]/page.tsx      # Document editor page
 │       │           ├── knowledge/[docId]/page.tsx
-│       │           └── settings/page.tsx           # Phase 3: integrations settings
+│       │           └── settings/page.tsx           # Integrations settings
 │       ├── components/
-│       │   ├── Editor.tsx            # Tiptap editor + Cmd+K listener
-│       │   ├── AICommandModal.tsx    # Cmd+K modal — tickets command stays open for export
-│       │   ├── TicketExportModal.tsx # Phase 3: structured ticket preview + Jira/Linear export
-│       │   ├── IntegrationSettings.tsx  # Phase 3: connect/disconnect Jira & Linear
-│       │   ├── CursorChat.tsx        # Right-panel chat → /ai/chat (RAG-aware)
+│       │   ├── Editor.tsx            # Tiptap editor + Cmd+K + EditorToolbar + Image/Link extensions
+│       │   ├── EditorToolbar.tsx     # Sticky formatting toolbar (bold, H1-H3, lists, image upload, link)
+│       │   ├── AICommandModal.tsx    # Cmd+K modal — model_override from localStorage
+│       │   ├── TicketExportModal.tsx # Structured ticket preview + Jira/Linear export
+│       │   ├── IntegrationSettings.tsx  # Connect/disconnect Jira & Linear
+│       │   ├── CursorChat.tsx        # Right-panel chat — model picker, thread history, RAG, markdown rendering
+│       │   ├── GlobalSearch.tsx      # Full-screen global search (semantic + text)
 │       │   ├── ProductBrain.tsx      # Right-panel context textarea (Zustand only)
 │       │   ├── Sidebar.tsx           # Left-panel project+file tree + settings gear icon
 │       │   ├── FileTreeItem.tsx      # Recursive tree node component
 │       │   ├── KnowledgeBase.tsx     # Upload/manage RAG docs
 │       │   ├── ProductBrainWrapper.tsx
+│       │   ├── ProjectsShortcutWrapper.tsx
 │       │   ├── ThemeProvider.tsx
 │       │   └── ThemeToggle.tsx
 │       ├── store/
 │       │   ├── productBrain.ts       # Zustand: contexts map (localStorage)
-│       │   └── activeProject.ts      # Zustand: active project id
+│       │   ├── activeProject.ts      # Zustand: active project id
+│       │   └── editorStore.ts        # Zustand: editor state (active doc, panel tabs, etc.)
 │       ├── hooks/
 │       │   └── useCustomAuth.ts      # Clerk + dev-mode override
 │       └── lib/
@@ -78,7 +91,9 @@ pm_cursor/
     ├── supabase_phase2_chat.sql           # Phase 2: chat_threads, chat_messages
     ├── supabase_phase2_rag.sql            # Phase 2: knowledge_documents, knowledge_chunks
     ├── supabase_phase2b_storage.sql       # Phase 2b: knowledge-files storage bucket
-    └── supabase_phase3_integrations.sql   # Phase 3: user_integrations table ← RUN THIS
+    ├── supabase_phase3_integrations.sql   # Phase 3: user_integrations table
+    ├── supabase_phase4_billing.sql        # Phase 4: user_subscriptions, usage_logs ← RUN THIS
+    └── supabase_phase4_search.sql         # Phase 4: match_all_knowledge_chunks RPC ← RUN THIS
 ```
 
 ---
@@ -94,7 +109,9 @@ app.include_router(documents.router,     prefix="/documents")
 app.include_router(folders.router,       prefix="/folders")
 app.include_router(ai.router,            prefix="/ai")
 app.include_router(knowledge.router,     prefix="/knowledge")
-app.include_router(integrations.router,  prefix="/integrations")   # Phase 3
+app.include_router(integrations.router,  prefix="/integrations")
+app.include_router(billing.router,       prefix="/billing")
+app.include_router(templates.router,     prefix="/templates")
 ```
 
 CORS: allows `http://localhost:*` with credentials.
@@ -110,9 +127,9 @@ def get_supabase() -> Client:
     # Uses: SUPABASE_URL, SUPABASE_SERVICE_KEY env vars
 
 def get_user_id(authorization: str = Header(...)) -> str:
-    # ⚠️ INSECURE: strips "Bearer " prefix, returns raw value as user ID
-    # TODO Stage 3: verify Clerk JWT with CLERK_SECRET_KEY
-    return authorization.replace("Bearer ", "")
+    # Dev mode: NEXT_PUBLIC_DEV_MODE=true → returns "dev_user_123" without verification
+    # Production: verifies Clerk JWT using CLERK_SECRET_KEY, extracts sub claim
+    # Raises 401 if token is invalid or missing
 ```
 
 **Pattern**: Every authenticated endpoint does `user_id: str = Depends(get_user_id)` and passes it as a `.eq("user_id", user_id)` filter on all Supabase queries.
@@ -145,9 +162,10 @@ Strategy pattern for LLM providers.
 
 ```python
 # factory.py
-def get_llm_provider() -> LLMProvider:
+def get_llm_provider(model_override: str | None = None) -> LLMProvider:
+    # model_override takes priority over LLM_MODEL env var
     # Reads LLM_PROVIDER env var: "gemini" (default) | "claude" | "openai"
-    # Reads LLM_MODEL env var for model name override
+    # Reads LLM_MODEL env var for default model name
 
 # base.py — ABC
 class LLMProvider:
@@ -163,38 +181,60 @@ LLM_PROVIDER=claude   LLM_MODEL=claude-sonnet-4-6   ANTHROPIC_API_KEY=...
 LLM_PROVIDER=openai   LLM_MODEL=gpt-4o              OPENAI_API_KEY=...
 ```
 
+**Model override flow**: User selects model in CursorChat dropdown → stored in `localStorage["pm_cursor_model"]` → read by CursorChat, Editor (apply), and AICommandModal → sent as `model_override` in every AI request body → factory uses it instead of env var default.
+
 ---
 
 ### `backend/routers/ai.py`
 ```
-POST /ai/complete          ← Cmd+K modal (no auth — cost exposure risk)
-POST /ai/chat              ← Chat sidebar (no auth)
-POST /ai/generate-tickets  ← Structured ticket JSON for export (no auth)
+POST /ai/complete          ← Cmd+K modal (AICommandModal)
+POST /ai/chat              ← Chat sidebar (CursorChat) — threaded, persisted, RAG-aware
+POST /ai/generate-tickets  ← Structured ticket JSON for TicketExportModal
+POST /ai/apply             ← Inline document diffs
+POST /ai/search            ← Semantic + text search
+POST /ai/review-ui         ← Multimodal screenshot review (vision model)
+GET  /ai/threads           ← List chat threads for a project
+POST /ai/threads           ← Create new chat thread
+GET  /ai/threads/{id}/messages  ← Thread message history
+DELETE /ai/threads/{id}    ← Delete thread + messages
 ```
+
+**Free-tier rate limiting**: `_check_usage(user_id, endpoint)` enforces `FREE_LIMIT = 20` AI requests/day. Checks `user_subscriptions` table for plan; non-free users skip the check. Logs each request to `usage_logs`. All wrapped in try/except so missing tables don't break the app.
 
 **`/ai/complete`** request body:
 ```json
 { "command": "prd|tickets|brief|update|interview|custom",
   "user_input": "...",
   "product_context": "...",
-  "document_context": "..." }
+  "document_context": "...",
+  "project_id": "uuid-or-null",
+  "model_override": "gemini-2.5-flash" }
 ```
 
 **`/ai/chat`** request body:
 ```json
 { "messages": [{"role": "user|assistant", "content": "..."}],
   "document_context": "...",
-  "project_id": "uuid-or-null" }
+  "project_id": "uuid-or-null",
+  "thread_id": "uuid-or-null",
+  "model_override": "gemini-2.5-flash" }
 ```
-When `project_id` is provided, embeds the last user message via Gemini embeddings and calls `match_knowledge_chunks` RPC in Supabase for RAG context.
+- Auto-creates a thread on first message (title = first 60 chars of user message)
+- Persists user message before streaming, assistant reply after streaming completes
+- RAG: embeds last user message via Gemini `gemini-embedding-2`, calls `match_knowledge_chunks` RPC
+- Returns `X-Thread-Id` response header so frontend can track newly-created threads
 
-**`/ai/generate-tickets`** request body:
+**`/ai/apply`** request body:
 ```json
-{ "user_input": "...", "product_context": "...", "document_context": "..." }
+{ "current_content": "...", "ai_suggestion": "...", "model_override": "..." }
 ```
-Returns structured JSON (non-streaming): `{ "epics": [{ "title", "description", "stories": [{ "title", "description", "acceptance_criteria", "story_points" }] }] }`. Used by `TicketExportModal`. Strips markdown fences if the LLM wraps output in them.
+Returns: `{ "changes": [{ "find": "exact text", "replace": "new text" }] }`
+
+**`/ai/review-ui`**: multipart form with `image` (file), `prompt`, `document_context`, `model_override`. Uses vision-capable Gemini model, defaults to `gemini-2.5-flash`.
 
 **SSE format** (complete + chat only): backend sends `data: <chunk>\n\n`, newlines escaped as `\\n`. Final frame: `data: [DONE]\n\n`.
+
+**Thread CRUD**: all wrapped in try/except — return empty data gracefully when `chat_threads`/`chat_messages` tables don't exist yet.
 
 ---
 
@@ -231,37 +271,53 @@ DELETE /folders/{id}    delete_folder
 ---
 
 ### `backend/routers/integrations.py`
-Phase 3 — Jira and Linear integration management.
+Jira and Linear integration management.
 
 ```
 GET    /integrations/status          → { jira: {connected, domain?, email?}, linear: {connected} }
 POST   /integrations/jira            connect Jira  body: {domain, email, api_token}
 DELETE /integrations/jira            disconnect
-GET    /integrations/jira/projects   → [{key, name, id}]  (requires connected)
+GET    /integrations/jira/projects   → [{key, name, id}]
 POST   /integrations/jira/export     create tickets  body: {project_key, tickets: Epic[]}
 POST   /integrations/linear          connect Linear  body: {api_key}
 DELETE /integrations/linear          disconnect
-GET    /integrations/linear/teams    → [{id, name, key}]  (requires connected)
+GET    /integrations/linear/teams    → [{id, name, key}]
 POST   /integrations/linear/export   create issues   body: {team_id, tickets: Epic[]}
 ```
 
-All endpoints require `Authorization: Bearer {userId}` header.
+Credentials stored in `user_integrations` table as JSONB config.
 
-**Credentials stored** in `user_integrations` table as JSONB config. Jira verifies via `GET /rest/api/3/myself`. Linear verifies via `{ viewer { id } }` GraphQL query.
+---
 
-**Jira export** creates Epics then Stories under each epic using `customfield_10014` (Epic Link). Uses Atlassian Document Format (ADF) for descriptions via `_adf()` helper.
+### `backend/routers/billing.py`
+Stripe subscription management.
 
-**Linear export** uses GraphQL `issueCreate` mutation, setting `parentId` to link stories to epics.
-
-**Tickets payload shape** (both Jira and Linear export):
-```json
-[{ "title": "...", "description": "...", "stories": [{ "title", "description", "acceptance_criteria": [] }] }]
 ```
+GET    /billing/status          → current plan + subscription info
+POST   /billing/checkout        create Stripe checkout session
+POST   /billing/portal          create Stripe customer portal session
+POST   /billing/webhook         Stripe webhook handler (updates user_subscriptions)
+```
+
+Plans: `free` | `pro`. Reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` env vars.
+
+---
+
+### `backend/routers/templates.py`
+PM document templates.
+
+```
+GET  /templates/          list available templates
+GET  /templates/{id}      get template content (Tiptap JSON)
+POST /templates/{id}/use  create new document from template (returns document id)
+```
+
+Templates are stored as JSON in the backend (not in Supabase) and represent common PM artifacts: PRD, OKR planning, sprint review, competitor analysis, one-pager, interview synthesis.
 
 ---
 
 ### `backend/routers/context.py`
-Product Brain per-project singleton (stored as a sentinel `context_chunks` row):
+Product Brain per-project singleton:
 ```
 GET  /context/{project_id}/context   → {content: "..."}
 PUT  /context/{project_id}/context   body: {content: "..."}
@@ -303,11 +359,24 @@ export function useCustomAuth() {
 ### `cursor-for-pms/src/components/Editor.tsx`
 Tiptap editor wrapper. Props: `{ docId, projectId, initialContent, onSave }`.
 
-- Renders `EditorContent` with StarterKit + Placeholder extensions
+- Renders `EditorContent` with StarterKit + Placeholder + **Image** + **Link** extensions
+  - `Image.configure({ inline: false, allowBase64: true })` — base64 images embed directly in Tiptap JSON
+  - `Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-amber-600 dark:text-amber underline..." } })`
+- Renders `<EditorToolbar editor={editor} />` above `EditorContent`
 - Listens for `Cmd+K` / `Ctrl+K` → opens `AICommandModal`
 - `onSave` called on every `editor.onUpdate` (debounced 2s in `docs/[docId]/page.tsx`)
-- Passes `productContext` from Zustand to `AICommandModal`
-- Passes `editor.getText()` as `documentContext` to `AICommandModal`
+- AI Apply: reads `localStorage.getItem("pm_cursor_model") || "gemini-2.5-flash"` for model selection
+
+---
+
+### `cursor-for-pms/src/components/EditorToolbar.tsx`
+Sticky formatting toolbar that sits above the Tiptap editor. Props: `{ editor: Editor | null }`.
+
+Uses `onMouseDown + e.preventDefault()` pattern on all buttons to prevent editor blur before running commands.
+
+**Buttons:** Undo, Redo | H1, H2, H3 | Bold, Italic, Inline Code | Bullet List, Ordered List | Blockquote, Code Block | Horizontal Rule | Link (prompts for URL), Image Upload (FileReader → base64 → `setImage`).
+
+Image upload flow: `<input type="file" accept="image/*">` → `FileReader.readAsDataURL()` → `editor.chain().focus().setImage({ src: reader.result }).run()`. Images embed directly in the document as base64; no backend upload needed.
 
 ---
 
@@ -318,109 +387,90 @@ Commands: `prd | tickets | brief | update | interview | custom`
 
 Flow:
 1. User selects command + types input → clicks Generate or presses Enter
-2. Calls `POST /ai/complete` (no auth header)
-3. Streams SSE response, unescapes `\\n → \n`
-4. On completion: calls `onOutput(fullText)` → Editor inserts text into document
-5. Non-tickets commands: modal closes. Tickets command: modal stays open, shows **"Export to Jira / Linear ↗"** button
-6. Export button click → renders `<TicketExportModal>` on top; closing the export modal also closes AICommandModal
-
----
-
-### `cursor-for-pms/src/components/TicketExportModal.tsx`
-Phase 3 — structured ticket preview and one-click export. Props: `{ userInput, productContext, documentContext, onClose }`.
-
-On mount (parallel): fetches `GET /integrations/status` + calls `POST /ai/generate-tickets`.
-
-**UI states:** `generating` → main view → `exporting` → `success` / `error`
-
-**Right panel has two modes depending on connection state:**
-
-_No integrations connected_ — shows "Connect your issue tracker" with Jira and Linear cards. Clicking a card expands an inline connect form (no navigation away). `handleConnect` calls `POST /integrations/{type}`, then `refreshStatus()` which re-fetches status and auto-switches to the destination selector. "Connect & Continue" label makes the intent clear.
-
-_At least one connected_ — shows destination selector buttons (Jira / Linear), lazy-loads projects or teams on selection, project/team `<select>` dropdown, then Export button.
-
-After connecting one integration, a dashed `+ Connect Linear` / `+ Connect Jira` button appears so the user can add the second without leaving.
-
-Export calls `POST /integrations/jira/export` or `/linear/export`. Success state lists all created tickets with `ExternalLink` icons.
-
-**Key internal state:**
-```typescript
-connectingTo: 'jira' | 'linear' | null   // which inline form is open
-jiraDomain/jiraEmail/jiraToken            // Jira form fields
-linearKey                                 // Linear form field
-destination: 'jira' | 'linear' | null    // selected export target
-selectedProject / selectedTeam            // chosen Jira project key / Linear team id
-exportState: 'idle' | 'exporting' | 'success' | 'error'
-```
-
----
-
-### `cursor-for-pms/src/components/IntegrationSettings.tsx`
-Phase 3 — connection management UI. No props (reads userId from `useCustomAuth`).
-
-On mount: fetches `GET /integrations/status`.
-
-Jira card: domain + email + API token inputs → `POST /integrations/jira` (validates credentials before saving). Shows connected domain/email + Disconnect button when connected.
-
-Linear card: API key input → `POST /integrations/linear`. Shows connected status + Disconnect button.
-
-Both cards link to their respective token management pages.
-
----
-
-### `cursor-for-pms/src/app/projects/[projectId]/settings/page.tsx`
-Phase 3 — settings page at `/projects/[id]/settings`. Renders `<IntegrationSettings>`. Accessible via gear icon (⚙) on each project row in the Sidebar.
+2. Reads `localStorage["pm_cursor_model"]` for `model_override`
+3. Calls `POST /ai/complete` with `Authorization` header
+4. Streams SSE response, unescapes `\\n → \n`
+5. On completion: calls `onOutput(fullText)` → Editor inserts text into document
+6. Non-tickets commands: modal closes. Tickets command: modal stays open, shows **"Export to Jira / Linear ↗"** button
 
 ---
 
 ### `cursor-for-pms/src/components/CursorChat.tsx`
 Right sidebar chat. No props — reads `projectId` from `useParams()`.
 
-Flow:
-1. User types message → sends `POST /ai/chat` with message history + document context + project_id
-2. Streams SSE, renders each message bubble
-3. "Copy to Apply" button on assistant messages (copies to clipboard)
+**Model selector**: Dropdown in header lets user pick the Gemini model. Selection persisted to `localStorage["pm_cursor_model"]` and read by Editor and AICommandModal too.
+
+```typescript
+const GEMINI_MODELS = [
+  { id: "gemini-2.5-flash",           label: "2.5 Flash" },
+  { id: "gemini-2.5-flash-lite",      label: "2.5 Flash Lite" },
+  { id: "gemini-3-flash-preview",     label: "3 Flash Preview" },
+  { id: "gemini-3.1-flash-lite-preview", label: "3.1 Flash Lite" },
+  { id: "gemini-2.0-flash",           label: "2.0 Flash" },
+];
+```
+
+**Thread history**: Left panel lists threads from `GET /ai/threads?project_id=...`. Selecting a thread loads messages from `GET /ai/threads/{id}/messages`. Deleting calls `DELETE /ai/threads/{id}`. Thread rows use `<div role="button">` (not `<button>`) to avoid nested button HTML violation.
+
+**Markdown rendering**: AI messages rendered via `<ReactMarkdown remarkPlugins={[remarkGfm]}>` with `chat-markdown` CSS class for themed styling.
+
+**Design**: Uses `glass-pane` CSS class (NOT inline rgba styles). Message bubbles: user = `bg-amber-100/50 dark:bg-amber-900/20`, AI = `bg-white/50 dark:bg-black/20`. Tailwind tokens consistent with Sidebar.
+
+**Empty state**: Shows 3 suggested prompts.
+
+---
+
+### `cursor-for-pms/src/components/GlobalSearch.tsx`
+Full-screen search overlay. Calls `POST /ai/search` with semantic + text results.
+
+```typescript
+// Search scopes: "project" (current project only) | "all" (across all projects)
+// Results: knowledge chunks (vector similarity) + document titles (text match)
+// Each result shows type badge, content preview, similarity score
+```
+
+---
+
+### `cursor-for-pms/src/app/billing/page.tsx`
+Billing and subscription management page.
+
+- Shows current plan (free / pro)
+- Upgrade button → calls `POST /billing/checkout` → redirects to Stripe Checkout
+- Manage subscription button → calls `POST /billing/portal` → redirects to Stripe Customer Portal
+- Shows usage stats (AI requests today vs. limit)
+
+---
+
+### `cursor-for-pms/src/components/TicketExportModal.tsx`
+Structured ticket preview and one-click export. Props: `{ userInput, productContext, documentContext, onClose }`.
+
+On mount (parallel): fetches `GET /integrations/status` + calls `POST /ai/generate-tickets`.
+
+**UI states:** `generating` → main view → `exporting` → `success` / `error`
+
+**Right panel:** No integrations → inline connect forms. Connected → destination selector, project/team dropdown, Export button.
+
+---
+
+### `cursor-for-pms/src/components/IntegrationSettings.tsx`
+Jira + Linear connection management. Fetches `GET /integrations/status` on mount.
 
 ---
 
 ### `cursor-for-pms/src/components/ProductBrain.tsx`
-Right sidebar product context. Optional prop `projectId` (falls back to URL params).
-
-- Reads/writes `useProductBrain()` Zustand store only (localStorage)
-- Shows char count and "Active" badge
-- ⚠️ **Not synced to backend** — `context.py` endpoints unused
+Right sidebar product context. Reads/writes `useProductBrain()` Zustand store only (localStorage). ⚠️ **Not synced to backend**.
 
 ---
 
 ### `cursor-for-pms/src/components/Sidebar.tsx`
 Left panel project + file tree. No props.
 
-**Button layout per project row (Phase 3 update):**
-- `Settings2` gear icon — **always visible** (not hover-gated). Dimmed on inactive projects, amber-tinted on active project. Navigates to `/projects/[id]/settings`.
-- Edit controls (Pencil rename, FolderPlus, FilePlus, Trash2 delete) — wrapped in a nested `<span>` with `opacity-0 group-hover:opacity-100` so they stay hidden until hover. Keeps the sidebar clean while the settings entry point remains permanently discoverable.
-
-Key state:
-```typescript
-projects: Project[]               // from GET /projects/
-treeByProject: Record<id, {folders, docs}>  // from GET /projects/{id}/tree
-expanded: Set<string>             // which projects are expanded
-expandedFolders: Set<string>      // which folders are open
-pendingCreate: PendingCreate      // inline create input state
-```
-
-Auth header factory: `() => ({ Authorization: \`Bearer \${userId}\`, "Content-Type": "application/json" })`
-
-Tree loading: guarded by `loadedProjectsRef` — each project fetched exactly once per session.
+Settings gear icon always visible per project row (not hover-gated). Navigates to `/projects/[id]/settings`. Edit controls (rename, add folder/doc, delete) are `opacity-0 group-hover:opacity-100`.
 
 ---
 
 ### `cursor-for-pms/src/components/KnowledgeBase.tsx`
-File upload component inside Sidebar. Prop: `{ projectId }`.
-
-- Accepts PDF/DOCX/TXT via `<input type="file">`
-- POSTs as FormData to `POST /knowledge/` with `Authorization` header
-- Lists uploaded docs, shows delete button
-- Download via signed URL
+File upload (PDF/DOCX/TXT) to RAG pipeline. POSTs as FormData to `POST /knowledge/`.
 
 ---
 
@@ -436,26 +486,8 @@ interface ProductBrainStore {
 
 ---
 
-### `cursor-for-pms/src/app/projects/[projectId]/page.tsx`
-Project home page — shown when navigating to a project without a document open.
-
-On mount fetches (parallel): project list (for name), knowledge docs, **integration status** (`GET /integrations/status`).
-
-**Sections:**
-1. Project name header
-2. Quick actions grid (New Document, New Folder, Knowledge Base upload)
-3. Knowledge Base file list
-4. **Integrations / Issue Tracker section (Phase 3)** — two side-by-side cards (Jira, Linear). Connected state: green badge + domain. Disconnected state: `Connect →` link to `/projects/[id]/settings`. Hint copy when both disconnected: *"Connect Jira or Linear to export AI-generated tickets from Cmd+K → Break into tickets."* Settings link in section header.
-5. Tips callout
-
-**New state:** `integrations: IntegrationStatus` — `{ jira: {connected, domain?, email?}, linear: {connected} }`
-
----
-
-### `cursor-for-pms/src/app/projects/[projectId]/docs/[docId]/page.tsx`
-Document editor page. Loads doc from `GET /documents/{docId}`, renders `<Editor>`.
-
-Auto-save: debounced 2s via `setTimeout` in `handleSave` — calls `PUT /documents/{docId}`.
+### `cursor-for-pms/src/store/editorStore.ts`
+Zustand store for editor UI state (active document, right panel tab selection, etc.). Not persisted to localStorage.
 
 ---
 
@@ -471,7 +503,6 @@ documents        (id uuid PK, user_id text, project_id uuid FK→projects, folde
 folders          (id uuid PK, user_id text, project_id uuid FK→projects,
                   parent_folder_id uuid FK→folders self-ref, name text, created_at, updated_at)
 context_chunks   (id uuid PK, user_id text, project_id uuid, title text, content text, created_at)
-  -- Product Brain stored as row where title = '__product_brain__'
 
 -- RAG
 knowledge_documents (id uuid PK, project_id uuid, user_id text, filename, file_type,
@@ -479,15 +510,21 @@ knowledge_documents (id uuid PK, project_id uuid, user_id text, filename, file_t
 knowledge_chunks    (id uuid PK, knowledge_document_id uuid FK, user_id text,
                      content text, embedding vector(768), created_at)
 
--- Chat (tables exist, not yet used by frontend)
+-- Chat (threaded, persisted)
 chat_threads     (id uuid PK, user_id text, project_id uuid, title, created_at, updated_at)
 chat_messages    (id uuid PK, thread_id uuid FK, user_id text, role text, content, created_at)
 
--- Phase 3: Integrations
+-- Integrations
 user_integrations (id uuid PK, user_id text, integration_type text CHECK IN ('jira','linear'),
-                   config jsonb,   -- {domain,email,api_token} for Jira | {api_key} for Linear
-                   is_active boolean, created_at, updated_at,
+                   config jsonb, is_active boolean, created_at, updated_at,
                    UNIQUE(user_id, integration_type))
+
+-- Billing (Phase 4) — run supabase_phase4_billing.sql
+user_subscriptions (id uuid PK, user_id text UNIQUE, plan text DEFAULT 'free',
+                    stripe_customer_id text, stripe_subscription_id text,
+                    status text, current_period_end timestamptz, created_at, updated_at)
+usage_logs         (id uuid PK, user_id text, endpoint text, created_at)
+  -- One row per AI request; used for free-tier rate limiting (20 req/day)
 ```
 
 ### RLS
@@ -496,8 +533,9 @@ All tables have `user_id = auth.uid()::text` policy. Backend uses service key (b
 ### Supabase Storage
 Bucket: `knowledge-files`. Path: `{user_id}/{project_id}/{filename}`. Signed URL expiry: 1hr.
 
-### RPC
-`match_knowledge_chunks(query_embedding, match_threshold, match_count, p_project_id)` — pgvector similarity search, used by `/ai/chat`.
+### RPC Functions
+- `match_knowledge_chunks(query_embedding, match_threshold, match_count, p_project_id)` — pgvector similarity search within a project, used by `/ai/chat`
+- `match_all_knowledge_chunks(query_embedding, match_threshold, match_count, p_user_id)` — cross-project search, used by `/ai/search` with `scope=all` — run `supabase_phase4_search.sql`
 
 ---
 
@@ -530,11 +568,37 @@ headers: { Authorization: `Bearer ${userId}` }
 // userId = "dev_user_123" in dev mode, Clerk userId in prod
 ```
 
+### Model Selection
+```typescript
+// Persisted across components via localStorage
+const model = localStorage.getItem("pm_cursor_model") || "gemini-2.5-flash";
+// Set in CursorChat dropdown, read in CursorChat + Editor (apply) + AICommandModal
+// Sent to backend as model_override field on all AI request bodies
+```
+
 ### Dev Mode
 ```
-NEXT_PUBLIC_DEV_MODE=true  →  userId = "dev_user_123", skips Clerk entirely
+NEXT_PUBLIC_DEV_MODE=true  →  userId = "dev_user_123", skips Clerk entirely, skips rate limiting
 ```
-Set in `cursor-for-pms/.env`. Checked in `middleware.ts`, `useCustomAuth.ts`, `lib/auth.ts`.
+Set in `cursor-for-pms/.env`. Checked in `middleware.ts`, `useCustomAuth.ts`, `lib/auth.ts`, `backend/deps.py`.
+
+---
+
+## Landing Page (`landing/`)
+
+Standalone static page — **not part of the Next.js app**, deployed separately to Vercel.
+
+- **File**: `landing/index.html` — single dark amber static page for PMind beta signups
+- **Config**: `landing/vercel.json` — `@vercel/static` build
+- **Excluded from main repo**: `landing/` is in `.gitignore`; must be deployed from its own repo or folder
+
+**Page structure**: Nav → Hero (two-column with animated product mockup) → Why PMs need this → Features grid → How it works → PM quotes → Signup CTA → Footer
+
+**CTA**: Links to Google Form at `https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform` (opens in new tab, NOT embedded)
+
+**Background**: dot grid (CSS `::before`), amber ambient glows (CSS `::after` animated), CSS light beams (`.beam`), canvas sparkle particles (JS)
+
+**Hero visual**: 3D-tilted fake editor card with blinking cursor, AI suggestion card (slides in with `aiCardFloat` animation), floating ticket card, ⌘K keyboard hint
 
 ---
 
@@ -542,29 +606,38 @@ Set in `cursor-for-pms/.env`. Checked in `middleware.ts`, `useCustomAuth.ts`, `l
 
 | # | Issue | File | Severity |
 |---|-------|------|----------|
-| 1 | `folders` table may not exist in Supabase | Run `supabase_phase1_filetree.sql` | 🔴 High |
-| 2 | JWT not verified — raw userId trusted | `backend/deps.py:get_user_id` | 🔴 High |
-| 3 | `/ai/complete`, `/ai/chat`, `/ai/generate-tickets` unauthenticated | `backend/routers/ai.py` | 🔴 High |
-| 4 | `user_integrations` table not yet in Supabase | Run `supabase_phase3_integrations.sql` | 🔴 Required for Phase 3 |
-| 5 | ProductBrain not synced to DB | `frontend/ProductBrain.tsx` → `backend/context.py` unused | 🟡 Medium |
-| 6 | RAG embeddings hardcoded to Gemini | `backend/routers/ai.py`, `knowledge.py` | 🟡 Medium |
-| 7 | Chat history not persisted | `CursorChat.tsx` — `chat_threads/messages` tables unused | 🟡 Medium |
+| 1 | ProductBrain not synced to DB | `ProductBrain.tsx` → `context.py` endpoints unused | 🟡 Medium |
+| 2 | RAG embeddings hardcoded to Gemini | `backend/routers/ai.py`, `knowledge.py` | 🟡 Medium |
+| 3 | Stripe billing not wired to Supabase in prod | `billing.py` webhook + `supabase_phase4_billing.sql` needed | 🟡 Medium |
+| 4 | `chat_threads`/`chat_messages` tables may not exist | Run `supabase_phase2_chat.sql` | 🟡 Medium |
+| 5 | `user_subscriptions`/`usage_logs` tables may not exist | Run `supabase_phase4_billing.sql` | 🟡 Required for billing |
+| 6 | `match_all_knowledge_chunks` RPC may not exist | Run `supabase_phase4_search.sql` | 🟡 Required for global search |
 
 ---
 
-## Phase 3 Status — COMPLETE ✓
+## Phase 4 Status — COMPLETE ✓
 
-### Files created
-- [x] `supabase_phase3_integrations.sql` — `user_integrations` table (run in Supabase SQL editor)
-- [x] `backend/routers/integrations.py` — connect/disconnect Jira & Linear, list projects/teams, export
-- [x] `cursor-for-pms/src/components/IntegrationSettings.tsx` — Jira + Linear connection UI
-- [x] `cursor-for-pms/src/components/TicketExportModal.tsx` — ticket tree preview + export
-- [x] `cursor-for-pms/src/app/projects/[projectId]/settings/page.tsx` — settings page
+### New backend files
+- [x] `backend/routers/billing.py` — Stripe subscription management
+- [x] `backend/routers/templates.py` — PM document templates
+- [x] `supabase_phase4_billing.sql` — `user_subscriptions`, `usage_logs` tables
+- [x] `supabase_phase4_search.sql` — `match_all_knowledge_chunks` RPC
 
-### Files modified
-- [x] `backend/main.py` — mounts `integrations.router` at `/integrations`
-- [x] `backend/routers/ai.py` — added `POST /ai/generate-tickets`
-- [x] `cursor-for-pms/src/components/AICommandModal.tsx` — "Export to Jira / Linear ↗" after tickets
-- [x] `cursor-for-pms/src/components/Sidebar.tsx` — settings gear always visible; edit controls remain hover-only
-- [x] `cursor-for-pms/src/components/TicketExportModal.tsx` — inline connect flow (no navigation away when not connected)
-- [x] `cursor-for-pms/src/app/projects/[projectId]/page.tsx` — Integrations section with live status cards
+### New frontend files
+- [x] `cursor-for-pms/src/components/EditorToolbar.tsx` — rich text formatting toolbar
+- [x] `cursor-for-pms/src/components/GlobalSearch.tsx` — semantic + text search overlay
+- [x] `cursor-for-pms/src/store/editorStore.ts` — editor UI state store
+- [x] `cursor-for-pms/src/app/billing/page.tsx` — billing management page
+
+### Modified files
+- [x] `backend/deps.py` — JWT verification (Clerk) with dev bypass
+- [x] `backend/llm/factory.py` — `model_override` parameter
+- [x] `backend/routers/ai.py` — `model_override` on all AI endpoints, threaded chat with persistence, usage tracking, `review-ui` model fix, all thread CRUD in try/except
+- [x] `cursor-for-pms/src/components/Editor.tsx` — EditorToolbar, Image extension (base64), Link extension
+- [x] `cursor-for-pms/src/components/CursorChat.tsx` — model picker dropdown, thread history panel, ReactMarkdown rendering, `glass-pane` design system compliance
+- [x] `cursor-for-pms/src/components/AICommandModal.tsx` — `model_override` from localStorage
+
+### Landing page
+- [x] `landing/index.html` — PMind beta signup page (deployed separately to Vercel)
+- [x] `landing/vercel.json` — static deployment config
+- [x] `.gitignore` — `landing/` excluded from main repo

@@ -10,6 +10,10 @@ backend/.env
 
 # Node
 cursor-for-pms/node_modules/
+landing/node_modules/
+landing/frames/
+landing/package.json
+landing/package-lock.json
 cursor-for-pms/.next/
 cursor-for-pms/out/
 cursor-for-pms/.env
