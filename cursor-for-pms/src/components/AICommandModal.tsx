@@ -13,6 +13,14 @@ const COMMANDS = [
   { id: "custom", label: "Custom", placeholder: "Ask anything..." },
 ];
 
+const THINKING_PHRASES = [
+  "Thinking...",
+  "Reading your context...",
+  "Crafting a response...",
+  "Analyzing the brief...",
+  "Putting it together...",
+];
+
 interface Props {
   onClose: () => void;
   onOutput: (text: string) => void;
@@ -36,14 +44,6 @@ export default function AICommandModal({
   const [thinkingPhrase, setThinkingPhrase] = useState("Thinking...");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { userId } = useCustomAuth();
-
-  const THINKING_PHRASES = [
-    "Thinking...",
-    "Reading your context...",
-    "Crafting a response...",
-    "Analyzing the brief...",
-    "Putting it together...",
-  ];
 
   useEffect(() => {
     inputRef.current?.focus();
