@@ -638,7 +638,7 @@ export default function CursorChat() {
     } finally {
       setIsStreaming(false);
     }
-  }, [activeThreadId, productContext, projectId, getText, streamAgentInto]);
+  }, [activeThreadId, productContext, projectId, getText, streamAgentInto, selectedModel]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e?: React.FormEvent, overrideText?: string) => {
