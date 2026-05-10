@@ -1,3 +1,4 @@
+import logging
 import os
 import hmac
 import hashlib
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 from deps import get_user_id, get_supabase
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
@@ -43,6 +45,7 @@ async def create_order(body: CreateOrderRequest, user_id: str = Depends(get_user
     amount = PLAN_AMOUNTS[plan]
     if amount < 100:
         raise HTTPException(status_code=400, detail="Amount must be at least 100 paise")
+    logger.info("Creating order — user=%s plan=%s amount=%d", user_id, plan, amount)
     client = get_client()
     order = client.order.create({
         "amount": amount,
@@ -50,6 +53,7 @@ async def create_order(body: CreateOrderRequest, user_id: str = Depends(get_user
         "receipt": f"{plan}_{user_id[:20]}",
         "notes": {"user_id": user_id, "plan": plan},
     })
+    logger.info("Order created — order_id=%s user=%s plan=%s", order["id"], user_id, plan)
     return {
         "order_id": order["id"],
         "amount": order["amount"],
@@ -70,9 +74,11 @@ async def verify_payment(body: VerifyPaymentRequest, user_id: str = Depends(get_
     ).hexdigest()
 
     if not hmac.compare_digest(expected, body.razorpay_signature):
+        logger.warning("Payment signature mismatch — user=%s order=%s", user_id, body.razorpay_order_id)
         raise HTTPException(status_code=400, detail="Payment signature verification failed")
 
     plan = body.plan if body.plan in PLAN_AMOUNTS else "pro"
+    logger.info("Payment verified — user=%s plan=%s payment_id=%s", user_id, plan, body.razorpay_payment_id)
     supabase = get_supabase()
     supabase.table("user_subscriptions").upsert(
         {
@@ -136,6 +142,7 @@ async def razorpay_webhook(request: Request):
 
     event = json.loads(payload)
     event_type = event.get("event")
+    logger.info("Webhook received — event=%s", event_type)
     supabase = get_supabase()
 
     if event_type == "payment.captured":

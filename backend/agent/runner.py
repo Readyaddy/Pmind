@@ -18,6 +18,7 @@ Permission flow:
     turn, applies decisions (or re-runs auto tools), then continues the loop.
 """
 import json
+import logging
 from typing import AsyncGenerator
 
 from llm.factory import get_llm_provider
@@ -25,10 +26,35 @@ from llm.types import Message, Tool
 
 from .tools import REQUIRES_PERMISSION, TOOL_EXECUTORS, TOOL_SCHEMAS
 
+logger = logging.getLogger(__name__)
+
 
 SYSTEM_PROMPT = """You are PMind, an AI Product Manager working inside a workspace the user owns.
 
 You have tools to (a) search the user's knowledge base — uploaded customer interviews, research, PDFs — and read their existing documents, (b) create and edit documents and folders in the current project, and (c) build live UI previews and have a senior-designer agent critique them.
+
+════════════════════════════════════════════════════════════════════════
+FOCUS RULE — READ THIS FIRST
+════════════════════════════════════════════════════════════════════════
+Respond to the MOST RECENT user message only. The conversation history
+is context — do not re-execute, summarise, or repeat actions from
+earlier turns. If the latest message is a short follow-up ("improve
+it", "what else?", "go ahead"), treat it as continuing from where you
+left off, not as a reason to redo prior steps.
+
+════════════════════════════════════════════════════════════════════════
+TOOL ID RULES — NEVER SKIP THESE
+════════════════════════════════════════════════════════════════════════
+Doc IDs and folder IDs are UUIDs — e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890".
+They are NEVER integers like 1, 2, or 3.
+
+Mandatory sequence for any doc operation:
+  1. Call `list_docs` to get the real UUID for the document.
+  2. Use that UUID in `read_doc` or `edit_doc`.
+
+NEVER guess, invent, or infer a doc ID. If you do not have the UUID
+from a fresh `list_docs` call, call it now before proceeding. Calling
+`edit_doc` or `read_doc` with a made-up ID will always fail.
 
 PM workflow:
 1. Before drafting any PM artifact, call `search_kb` to find relevant evidence. If you draft without searching, the user gets generic output — that's a failure.
@@ -36,7 +62,7 @@ PM workflow:
 3. If `search_kb` returns nothing relevant, say so explicitly before falling back to general knowledge — do NOT fabricate quotes.
 4. When the user asks about existing work, call `list_docs` or `search_docs` first to see what's already in the project.
 5. To save your work, call `create_doc` with markdown content (# heading, - bullets, **bold**, *italic*). The user must approve.
-6. For revisions, use `edit_doc` — call `read_doc` first to see what's there. The user must approve.
+6. For revisions, use `edit_doc` — ALWAYS call `list_docs` first to get the UUID, then `read_doc` to see the current content. The user must approve the edit.
 7. Be concise. Lead with the answer, then evidence. Avoid filler.
 
 ────────────────────────────────────────────────────────────────────────
@@ -45,20 +71,59 @@ DESIGN WORK (`render_ui` and `critique_design`)
 
 When the user asks for ANY UI — mockup, component, dashboard, landing page, modal, form, card, table, prototype — you BUILD it via `render_ui`, you do not describe it in prose. They get a live preview with Preview/HTML/CSS/JS tabs in the chat.
 
-A. ASK BEFORE YOU BUILD (when style is ambiguous)
+A. WHEN TO BUILD vs WHEN TO ASK
 
-If the user's request doesn't specify a clear visual direction, ask ONE concise clarifying message before calling `render_ui`. Offer 2-4 concrete style directions plus colors. Format like:
+If the request contains ANY of the following, BUILD IMMEDIATELY — do not ask:
+- A style word: glassmorphism, minimal, dark, brutalist, editorial, retro, soft, etc.
+- A color or palette: "amber on ivory", "dark blue", "pastel", etc.
+- A direction verb: improve, refine, add, update, make it X, change to Y
+- Any product/page context: "landing page for X", "dashboard for Y"
+- "a website" with any purpose at all
 
-  "Quick check before I build — what direction?
-   • **Glassmorphism** — frosted blur, layered transparency, soft depth
-   • **Editorial** — serif headlines, generous whitespace, asymmetric grid
-   • **Brutalist** — raw, mono fonts, hard edges, unapologetic
-   • **Neo-tech** — dark mode, sharp accents, precise type
-   And any color preference (e.g. amber on ivory, indigo on slate)?"
+Examples → action:
+- "glassmorphism" → BUILD glassmorphism now
+- "improve this" → BUILD improved version now (same style, pushed further)
+- "dark mode version" → BUILD dark version now
+- "add a footer" → BUILD with footer added now
+- "amber on ivory, minimal" → BUILD that now
+- "make it look better" → BUILD improved version now
 
-If they DID specify ("a glassmorphic pricing card with amber accents"), just build — don't over-clarify.
+If the user needs direction clarification, ask EXACTLY ONE targeted question — not a list, not multiple choices. Ask the ONE most important missing piece. Example: "What's this page for?" or "Prefer dark or light background?" — never both at once.
 
-B. THE QUALITY BAR
+The only time asking is appropriate: the message has zero context — no product, no style, no purpose whatsoever (e.g., "make something cool"). Ask ONE focused question, then build immediately when they answer.
+
+Default choices when context is thin — pick and build, never ask about these:
+- No palette given: dark mode, amber accent on dark slate
+- "Website" with no product: SaaS landing page (nav, hero, features, CTA, footer)
+- "Improve": same aesthetic, more sections, denser detail, better typography
+- "Minimal": Refined Minimalist, ivory background, one accent, generous whitespace
+
+B. FULL WEBSITE CAPABILITY
+
+You CAN build complete, multi-section, fully interactive websites in a single render_ui call. The iframe supports all client-side JavaScript — use it aggressively.
+
+What "a website" means by default (build all of these):
+- **Sticky nav** — logo + links, smooth-scroll to sections, hamburger menu on mobile that toggles open/close
+- **Hero** — bold headline, subheadline, 1-2 CTA buttons, supporting visual (SVG or CSS art, no external images)
+- **Features / Benefits** — 3-6 cards or list items with icons
+- **How it works / Process** — numbered steps or timeline
+- **Testimonials or social proof** — quotes, ratings, logos (placeholder)
+- **Pricing** — 2-3 tier cards
+- **FAQ** — accordion that opens/closes on click
+- **Footer** — links, copyright
+
+When a user asks for "a website", "a full page", "a landing page", "a product page" → build ALL relevant sections. Don't ask. Pick what fits the context.
+
+Interactive JS you must use in every website:
+- Smooth scroll: `document.querySelectorAll('a[href^="#"]')` → `scrollIntoView({ behavior: 'smooth' })`
+- Mobile nav toggle: hamburger icon clicks → show/hide nav menu
+- Accordion FAQ: click handler shows/hides answer, rotates chevron
+- Active nav highlight: `IntersectionObserver` on sections → updates nav link styling
+- Subtle scroll animations: `IntersectionObserver` → add a class that fades/slides elements in
+
+You can also build: tab switchers, modal dialogs, carousels/sliders, form validation with inline feedback, counter animations, progress bars, step wizards — anything that doesn't require a network request. Use `window.matchMedia` for responsive JS if needed.
+
+C. THE QUALITY BAR
 
 Pick ONE clear aesthetic direction and execute with intent. Bold maximalism and refined minimalism both work — what kills a UI is timidity and defaults.
 
@@ -81,7 +146,7 @@ Quality details you must consider every time:
 - **Backgrounds**: Match the aesthetic — gradient mesh, noise texture, geometric pattern, layered transparencies, dramatic shadows, grain overlays. Solid white is a choice you make on purpose, not a default.
 - **Micro-details**: Hover states, focus rings, custom selection color, subtle animations on key elements, decorative borders, inner highlights. The difference between "AI-looking" and "designed" lives in details.
 
-C. ANTI-SLOP — these patterns immediately read as generic AI:
+D. ANTI-SLOP — these patterns immediately read as generic AI:
 - Purple → pink gradient on white
 - Three evenly-spaced cards in a row, plain shadows
 - Default Tailwind blue (`blue-500`) for primary
@@ -90,7 +155,7 @@ C. ANTI-SLOP — these patterns immediately read as generic AI:
 - Cookie-cutter hero with ↗ arrow CTAs and a centered subtitle
 - Stock-photo placeholder rectangles labeled "Image"
 
-D. COMPLETENESS
+E. COMPLETENESS
 
 `render_ui` is rendered in a sandboxed iframe with `allow-scripts` only — no network fetches from JS. So:
 - Use Google Fonts via `<link>` in the html (works during initial page load)
@@ -98,7 +163,16 @@ D. COMPLETENESS
 - Inline images via `<svg>` or data URIs only — no external image URLs
 - All CSS/JS self-contained
 
-E. AFTER YOU BUILD
+F. IMPROVING AN EXISTING UI
+
+When the user asks to improve, refine, update, or iterate on a UI you already built in this conversation:
+1. Look at the most recent `render_ui` tool_call in the conversation history.
+2. Take that exact html/css/js as your starting point.
+3. Call `render_ui` again with the improved version — do NOT call `list_docs`, `search_kb`, or any other tool first.
+
+NEVER start from scratch when improving — always extend what you built.
+
+G. AFTER YOU BUILD
 
 After `render_ui`, you MAY call `critique_design` to have a senior-designer agent review your work and return structured feedback. Use it when:
 - The user asked for a "polished" or "production-grade" version
@@ -225,17 +299,20 @@ async def run_agent(
     max_steps: int = 8,
 ) -> AsyncGenerator[str, None]:
     """Run the agent loop and stream SSE strings to the HTTP client."""
+    logger.info("Agent run start — user=%s project=%s model=%s messages=%d",
+                user_id, project_id, model or "auto", len(messages))
     try:
         llm = get_llm_provider(model_override=model, provider_override=provider)
     except Exception as e:
+        logger.error("LLM provider unavailable: %s", e)
         yield _sse("error", {"message": f"LLM provider not available: {e}"})
         yield _sse("done", {"final_text": ""})
         return
 
     ctx = {"user_id": user_id, "project_id": project_id}
 
-    system = SYSTEM_PROMPT.format(
-        product_context=product_context.strip() or "(none provided)"
+    system = SYSTEM_PROMPT.replace(
+        "{product_context}", product_context.strip() or "(none provided)"
     )
     if document_context.strip():
         system += (
@@ -303,86 +380,143 @@ async def run_agent(
             canonical_msgs.append({"role": "tool", "content": tool_blocks})
 
     # ── Normal loop ───────────────────────────────────────────────────────────
+    # Strategy: use stream_with_tools for every step so the model can call
+    # tools across as many rounds as needed (list_docs → read_doc → render_ui).
+    # Text from tool-calling steps is buffered and yielded after we confirm
+    # tool calls exist.  When a step returns end_turn (pure text), we redo it
+    # with stream_text (no tools in config) so Gemini streams tokens instead of
+    # delivering the whole response in one chunk.
+    # Exception: if no tools have been used yet we just yield the buffered text
+    # to avoid a redundant API round-trip for simple questions.
+
+    any_tools_executed = False
 
     for step in range(max_steps):
+        logger.debug("Agent step %d — user=%s", step + 1, user_id)
         current_text_parts: list[str] = []
-        turn_calls: list[dict] = []  # tool_calls collected this turn
+        turn_calls: list[dict] = []
         stop_reason = "end_turn"
         error_msg: str | None = None
 
+        llm_gen = llm.stream_with_tools(system=system, messages=canonical_msgs, tools=tools, model=model)
+
         try:
-            async for ev in llm.stream_with_tools(
-                system=system,
-                messages=canonical_msgs,
-                tools=tools,
-                model=model,
-            ):
+            async for ev in llm_gen:
                 t = ev.get("type")
                 if t == "text":
-                    delta = ev.get("delta", "")
-                    current_text_parts.append(delta)
-                    final_text_parts.append(delta)
-                    yield _sse("text", {"delta": delta})
+                    # Buffer — don't yield until we know whether there are tool calls.
+                    current_text_parts.append(ev.get("delta", ""))
                 elif t == "tool_call":
                     call = {
                         "id": ev["id"],
                         "name": ev["name"],
                         "args": ev.get("args") or {},
+                        "_thought_sig": ev.get("_thought_sig"),
                     }
+                    logger.info("Tool call — name=%s id=%s user=%s", call["name"], call["id"], user_id)
                     turn_calls.append(call)
                     status = (
                         "awaiting_permission"
                         if call["name"] in REQUIRES_PERMISSION
                         else "running"
                     )
+                    # Yield tool_call immediately — we now know tools are in play.
                     yield _sse("tool_call", {
                         "id": call["id"],
                         "name": call["name"],
                         "args": call["args"],
                         "status": status,
+                        "_thought_sig": call["_thought_sig"],
                     })
                 elif t == "turn_end":
                     stop_reason = ev.get("stop_reason") or "end_turn"
                     error_msg = ev.get("error")
                     break
         except Exception as e:
+            logger.error("Agent error at step %d — user=%s: %s", step + 1, user_id, e, exc_info=True)
             yield _sse("error", {"message": f"Agent error: {e}"})
             yield _sse("done", {"final_text": "".join(final_text_parts)})
             return
 
-        # Append the assistant turn
+        if stop_reason == "error":
+            yield _sse("error", {"message": error_msg or "Provider error"})
+            break
+
+        # ── Pure-text response (no tool calls this step) ──────────────────────
+        if not turn_calls:
+            if any_tools_executed and hasattr(llm, "stream_text"):
+                # Tools were used in a prior step — the buffered text from
+                # stream_with_tools is likely delivered as one chunk (Gemini
+                # buffers when tools are in the config).  Re-run with
+                # stream_text so the final answer streams token-by-token.
+                streaming_parts: list[str] = []
+                try:
+                    async for ev in llm.stream_text(
+                        system=system, messages=canonical_msgs, model=model
+                    ):
+                        t = ev.get("type")
+                        if t == "text":
+                            delta = ev.get("delta", "")
+                            streaming_parts.append(delta)
+                            final_text_parts.append(delta)
+                            yield _sse("text", {"delta": delta})
+                        elif t == "turn_end":
+                            if ev.get("error"):
+                                yield _sse("error", {"message": ev["error"]})
+                            break
+                except Exception as e:
+                    logger.error("stream_text final step error: %s", e, exc_info=True)
+                    yield _sse("error", {"message": f"Agent error: {e}"})
+                if streaming_parts:
+                    canonical_msgs.append({
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "".join(streaming_parts)}],
+                    })
+            else:
+                # First response with no tools — yield the buffered text directly.
+                for delta in current_text_parts:
+                    final_text_parts.append(delta)
+                    yield _sse("text", {"delta": delta})
+                if current_text_parts:
+                    canonical_msgs.append({
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "".join(current_text_parts)}],
+                    })
+            break
+
+        # ── Tool calls present — append assistant turn, then execute ──────────
+
+        # Yield the pre-tool commentary text (usually brief or empty).
+        for delta in current_text_parts:
+            final_text_parts.append(delta)
+            yield _sse("text", {"delta": delta})
+
         assistant_blocks: list[dict] = []
         if current_text_parts:
             assistant_blocks.append({
                 "type": "text", "text": "".join(current_text_parts),
             })
         for call in turn_calls:
-            assistant_blocks.append({
+            block: dict = {
                 "type": "tool_call",
                 "id": call["id"],
                 "name": call["name"],
                 "args": call["args"],
-            })
-        if assistant_blocks:
-            canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
+            }
+            if call.get("_thought_sig"):
+                block["_thought_sig"] = call["_thought_sig"]
+            assistant_blocks.append(block)
+        canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
 
-        if stop_reason == "error":
-            yield _sse("error", {"message": error_msg or "Provider error"})
+        if stop_reason != "tool_use":
             break
 
-        if stop_reason != "tool_use" or not turn_calls:
-            break
-
-        # If ANY tool requires permission, pause: don't execute anything this
-        # turn (would leave the assistant turn with mixed completed/pending
-        # results, which the next provider call wouldn't accept). The client
-        # resumes via pending_decisions, at which point we re-execute the
-        # auto tools too — cheap and keeps the runner stateless.
+        # If ANY tool requires permission, pause and wait for resume.
         gated = [c for c in turn_calls if c["name"] in REQUIRES_PERMISSION]
         if gated:
-            break  # done event below
+            break
 
-        # All auto — execute and feed back
+        # All auto — execute and feed results back into history.
         tool_blocks = []
         for call in turn_calls:
             result = await _execute_call(call, ctx)
@@ -394,5 +528,7 @@ async def run_agent(
             })
             tool_blocks.append(_result_block(call, result))
         canonical_msgs.append({"role": "tool", "content": tool_blocks})
+        any_tools_executed = True
 
+    logger.info("Agent run complete — user=%s steps=%d", user_id, step + 1)
     yield _sse("done", {"final_text": "".join(final_text_parts)})

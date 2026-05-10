@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, type MutableRefObject } from "react";
 import { Eye, Code2, Copy, Check, ExternalLink, Maximize2, Minimize2, Loader2, Wand2, FolderOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -43,12 +43,13 @@ interface ArtifactCardProps {
   projectId?: string;
   userId?: string;
   existingDocId?: string;
+  existingDocIdRef?: MutableRefObject<string | null>;
   onSaved?: (docId: string) => void;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-export default function ArtifactCard({ args, status, onRefine, projectId, userId, existingDocId, onSaved }: ArtifactCardProps) {
+export default function ArtifactCard({ args, status, onRefine, projectId, userId, existingDocId, existingDocIdRef, onSaved }: ArtifactCardProps) {
   const [tab, setTab] = useState<Tab>("preview");
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState<Tab | null>(null);
@@ -68,9 +69,12 @@ export default function ArtifactCard({ args, status, onRefine, projectId, userId
   const saveDesign = async () => {
     setSaveState("saving");
     const API = process.env.NEXT_PUBLIC_API_URL;
+    // Use the ref value if available — it's always up-to-date even if the
+    // React state update hasn't propagated to this component's props yet.
+    const targetDocId = existingDocIdRef?.current ?? existingDocId;
     try {
-      if (existingDocId) {
-        await fetch(`${API}/documents/${existingDocId}`, {
+      if (targetDocId) {
+        await fetch(`${API}/documents/${targetDocId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${userId}` },
           body: JSON.stringify({
@@ -78,8 +82,8 @@ export default function ArtifactCard({ args, status, onRefine, projectId, userId
             content: { _type: "design", html: args.html ?? "", css: args.css ?? "", js: args.js ?? "", framework: args.framework ?? "vanilla" },
           }),
         });
-        setSavedDocId(existingDocId);
-        onSaved?.(existingDocId);
+        setSavedDocId(targetDocId);
+        onSaved?.(targetDocId);
       } else {
         const res = await fetch(`${API}/projects/${projectId}/designs/`, {
           method: "POST",

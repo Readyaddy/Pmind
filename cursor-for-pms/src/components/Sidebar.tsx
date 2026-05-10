@@ -115,21 +115,25 @@ export default function Sidebar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showPicker]);
 
-  // ── Load projects ──────────────────────────────────────────────────────────
+  // ── Load projects + plan in parallel ──────────────────────────────────────
   const loadProjects = useCallback(async () => {
     if (!userId) return;
     setLoadingProjects(true);
     try {
-      const res = await fetch(`${API}/projects/`, {
-        headers: { Authorization: `Bearer ${userId}` },
-      });
-      if (res.ok) {
-        const data: Project[] = await res.json();
+      const [projectsRes, planRes] = await Promise.all([
+        fetch(`${API}/projects/`, { headers: { Authorization: `Bearer ${userId}` } }),
+        fetch(`${API}/billing/subscription`, { headers: { Authorization: `Bearer ${userId}` } }).catch(() => null),
+      ]);
+      if (projectsRes.ok) {
+        const data: Project[] = await projectsRes.json();
         setProjects(data);
-        // If no project is selected yet, pick the first one
         if (!storedProjectId && data.length > 0) {
           setActiveProject(data[0].id, data[0].name);
         }
+      }
+      if (planRes?.ok) {
+        const sub = await planRes.json().catch(() => null);
+        if (sub?.plan) setPlan(sub.plan);
       }
     } catch { /* backend unreachable */ }
     finally { setLoadingProjects(false); }
@@ -146,15 +150,6 @@ export default function Sidebar() {
       }
     }
   }, [urlProjectId, projects, storedProjectId, setActiveProject]);
-
-  // Load plan badge
-  useEffect(() => {
-    if (!userId) return;
-    fetch(`${API}/billing/subscription`, { headers: { Authorization: `Bearer ${userId}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.plan) setPlan(d.plan); })
-      .catch(() => {});
-  }, [userId, API]);
 
   // ── Load tree for selected project ────────────────────────────────────────
   const loadTree = useCallback(

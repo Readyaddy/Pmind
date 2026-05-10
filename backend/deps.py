@@ -1,16 +1,22 @@
+import logging
 import os
 import httpx
 from fastapi import Header, HTTPException
 from supabase import create_client, Client
 
+logger = logging.getLogger(__name__)
 _jwks_cache = None
+_supabase_client: Client | None = None
 
 
 def get_supabase() -> Client:
-    return create_client(
-        os.getenv("SUPABASE_URL", ""),
-        os.getenv("SUPABASE_SERVICE_KEY", ""),
-    )
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(
+            os.getenv("SUPABASE_URL", ""),
+            os.getenv("SUPABASE_SERVICE_KEY", ""),
+        )
+    return _supabase_client
 
 
 def _get_jwks():
@@ -41,5 +47,6 @@ def get_user_id(authorization: str = Header(...)) -> str:
             options={"verify_aud": False},
         )
         return payload["sub"]
-    except Exception:
+    except Exception as e:
+        logger.warning("Auth failed — invalid token: %s", e)
         raise HTTPException(status_code=401, detail="Invalid or expired token")

@@ -184,6 +184,7 @@ function serializeForWire(messages: Message[]): Array<{
           id: p.call.id,
           name: p.call.name,
           args: p.call.args,
+          ...(p.call._thought_sig ? { _thought_sig: p.call._thought_sig } : {}),
         });
         // If this call already has a result on the client, mirror it as a
         // tool_result in the following tool turn so the server doesn't think
@@ -235,6 +236,11 @@ export default function CursorChat() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [applyingMsgId, setApplyingMsgId] = useState<string | null>(null);
   const [providerLabel, setProviderLabel] = useState<string>("");
+  const [agentPlan, setAgentPlan] = useState<"free" | "pro" | "team">("free");
+  const [proModels, setProModels] = useState<{ id: string; label: string; description: string }[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("pm_cursor_agent_model") ?? "") : ""
+  );
   const [trustWrites, setTrustWrites] = useState(false);
 
   // @-mention state
@@ -248,6 +254,7 @@ export default function CursorChat() {
   const [mentions, setMentions] = useState<MentionItem[]>([]);
 
   const [lastDesignDocId, setLastDesignDocId] = useState<string | null>(null);
+  const lastDesignDocIdRef = useRef<string | null>(null);
   const isRefiningRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -272,17 +279,27 @@ export default function CursorChat() {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`${API}/ai/agent/info`, {
-      headers: { Authorization: `Bearer ${userId}` },
-    })
+    const CACHE_KEY = `pm_agent_info_${userId}`;
+    const TTL = 5 * 60 * 1000; // 5 minutes
+    const applyInfo = (d: Record<string, unknown>) => {
+      const provider = (d.provider as string) || "";
+      setProviderLabel(provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : "");
+      setAgentPlan((d.plan as "free" | "pro" | "team") ?? "free");
+      if (Array.isArray(d.pro_models)) setProModels(d.pro_models as typeof proModels);
+    };
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached) as { data: Record<string, unknown>; ts: number };
+        if (Date.now() - ts < TTL) { applyInfo(data); return; }
+      }
+    } catch { /* ignore bad cache */ }
+    fetch(`${API}/ai/agent/info`, { headers: { Authorization: `Bearer ${userId}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!d) return;
-        const provider = (d.provider as string) || "";
-        const label = provider
-          ? provider.charAt(0).toUpperCase() + provider.slice(1)
-          : "";
-        setProviderLabel(label);
+        applyInfo(d);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: d, ts: Date.now() })); } catch { /* ignore */ }
       })
       .catch(() => {});
   }, [API, userId]);
@@ -506,6 +523,7 @@ export default function CursorChat() {
                 status,
                 summary: existing?.summary,
                 sources: existing?.sources,
+                _thought_sig: (payload._thought_sig as string) ?? existing?._thought_sig,
               };
               return { ...m, parts: upsertToolCall(m.parts, call) };
             }
@@ -588,6 +606,7 @@ export default function CursorChat() {
         project_id: projectId,
         thread_id: activeThreadId,
         pending_decisions: decisions,
+        ...(selectedModel ? { model_override: selectedModel } : {}),
       });
 
       if (trustWritesRef.current && awaitingIds.length > 0) {
@@ -691,6 +710,7 @@ export default function CursorChat() {
         project_id: projectId,
         thread_id: activeThreadId,
         mentioned_doc_ids: mentionedDocIds,
+        ...(selectedModel ? { model_override: selectedModel } : {}),
         mentioned_kb_ids: mentionedKbIds,
       });
 
@@ -746,7 +766,7 @@ export default function CursorChat() {
   );
 
   return (
-    <div className="w-[340px] glass-pane h-full flex flex-col rounded-2xl flex-shrink-0 transition-colors relative z-10 overflow-hidden">
+    <div className="w-[420px] glass-pane h-full flex flex-col rounded-2xl flex-shrink-0 transition-colors relative z-10 overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center gap-1.5 relative">
         {/* subtle amber accent line on the left edge */}
@@ -765,6 +785,29 @@ export default function CursorChat() {
             >
               {providerLabel}
             </span>
+          )}
+          {proModels.length > 0 && (
+            <select
+              value={agentPlan === "free" ? "" : selectedModel}
+              onChange={(e) => {
+                if (agentPlan === "free") return;
+                setSelectedModel(e.target.value);
+                localStorage.setItem("pm_cursor_agent_model", e.target.value);
+              }}
+              title={agentPlan === "free" ? "Upgrade to Pro to choose model" : "Choose model"}
+              className={`text-[10px] font-semibold bg-white dark:bg-zinc-800 border border-black/15 dark:border-white/15 rounded-md px-1.5 py-0.5 outline-none transition-colors ${
+                agentPlan === "free"
+                  ? "text-black/30 dark:text-white/30 cursor-not-allowed opacity-60"
+                  : "text-black/70 dark:text-white/80 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              }`}
+            >
+              <option value="">Auto</option>
+              {proModels.map((m) => (
+                <option key={m.id} value={m.id} title={m.description} disabled={agentPlan === "free"}>
+                  {m.label}{m.id.includes("preview") ? " ✦" : ""}
+                </option>
+              ))}
+            </select>
           )}
         </div>
 
@@ -842,163 +885,189 @@ export default function CursorChat() {
       )}
 
       {/* ── Messages ────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto thin-scroll px-4 py-5 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto thin-scroll px-4 py-5 flex flex-col gap-6">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-5 px-2 text-center pm-fade-in">
+          <div className="flex flex-col items-center justify-center h-full gap-5 px-3 text-center pm-fade-in">
             <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-amber-400/10 blur-xl scale-125" />
+              <div className="absolute inset-0 rounded-full bg-amber-400/10 blur-xl scale-150" />
               <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-100/80 to-amber-200/50 dark:from-amber/15 dark:to-amber/5 ring-1 ring-amber-200/60 dark:ring-amber/20">
                 <Sparkles size={20} className="text-amber-700 dark:text-amber" strokeWidth={1.8} />
               </div>
             </div>
             <div className="space-y-1.5">
-              <h3 className="font-serif text-[17px] font-semibold tracking-tight text-black/85 dark:text-ivory leading-tight">
-                Ground every answer in your data
+              <h3 className="font-serif text-[18px] font-semibold tracking-tight text-black/85 dark:text-ivory leading-tight">
+                Your PM co-pilot
               </h3>
-              <p className="text-[12px] text-black/45 dark:text-white/45 leading-relaxed max-w-[260px]">
-                Searches your KB, reads project docs, drafts new ones — with your approval.
+              <p className="text-[12.5px] text-black/45 dark:text-white/45 leading-relaxed max-w-[300px]">
+                Searches your research, reads your docs, and drafts artifacts — grounded in your actual data.
               </p>
             </div>
-            <div className="flex flex-col gap-1.5 w-full mt-2">
+            <div className="flex flex-col gap-2 w-full mt-1">
               {[
-                "Draft a PRD from my customer interviews",
-                "What are the top problems users mention?",
-                "Create a folder 'Specs' and a PRD inside",
+                { label: "Draft a PRD from my customer interviews", icon: "📋" },
+                { label: "What are the top pain points users mention?", icon: "🔍" },
+                { label: "Summarise what's already in this project", icon: "📂" },
               ].map((s) => (
                 <button
-                  key={s}
-                  onClick={() => setInput(s)}
-                  className="group text-left px-3 py-2.5 rounded-xl text-[11.5px] text-black/55 dark:text-white/45 glass-inset hover:bg-amber-50/60 dark:hover:bg-amber/[0.05] hover:text-amber-800 dark:hover:text-amber transition-all flex items-center gap-2 hover-lift"
+                  key={s.label}
+                  onClick={() => setInput(s.label)}
+                  className="group text-left px-3.5 py-3 rounded-xl text-[12px] text-black/60 dark:text-white/50 glass-inset hover:bg-amber-50/70 dark:hover:bg-amber/[0.06] hover:text-amber-900 dark:hover:text-amber transition-all flex items-center gap-2.5 hover-lift"
                 >
-                  <span className="flex-1 leading-snug">{s}</span>
-                  <span className="text-amber-500/60 group-hover:text-amber-600 dark:text-amber/40 dark:group-hover:text-amber transition-colors">→</span>
+                  <span className="text-[14px] flex-shrink-0">{s.icon}</span>
+                  <span className="flex-1 leading-snug">{s.label}</span>
+                  <span className="text-amber-400/50 group-hover:text-amber-500 dark:text-amber/30 dark:group-hover:text-amber transition-colors flex-shrink-0">↵</span>
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex flex-col gap-1.5 pm-slide-up ${msg.role === "user" ? "items-end" : "items-start"}`}
-            >
-              <div className="flex items-center gap-1.5 text-[10px] text-black/35 dark:text-white/35 font-bold uppercase tracking-[0.14em] px-1">
-                {msg.role === "user" ? (
-                  <span>You</span>
-                ) : (
-                  <>
-                    <Bot size={10} className="text-amber-600/70 dark:text-amber/70" />
-                    <span>Agent</span>
-                  </>
-                )}
-              </div>
-
+          messages.map((msg) => {
+            return (
               <div
-                className={`text-[13px] leading-relaxed rounded-2xl max-w-[95%] ${
-                  msg.role === "user"
-                    ? "px-3.5 py-2.5 bg-amber-100 text-amber-950 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-50 dark:ring-amber-400/25"
-                    : "px-3.5 py-3 glass-inset text-black/85 dark:text-ivory chat-markdown"
-                }`}
+                key={msg.id}
+                className={`flex flex-col gap-1.5 pm-slide-up ${msg.role === "user" ? "items-end" : "items-start"}`}
               >
+                {/* Sender label */}
+                <div className="flex items-center gap-1.5 text-[10px] text-black/30 dark:text-white/25 font-bold uppercase tracking-[0.14em] px-0.5">
+                  {msg.role === "user" ? (
+                    <span>You</span>
+                  ) : (
+                    <>
+                      <Bot size={9} className="text-amber-500/60 dark:text-amber/50" />
+                      <span>Agent</span>
+                    </>
+                  )}
+                </div>
+
                 {msg.role === "user" ? (
-                  messageText(msg)
-                ) : msg.parts.length === 0 ? (
-                  <span className="inline-flex gap-1 items-center text-amber-600/60 dark:text-amber/60">
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:0ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:300ms]" />
-                  </span>
+                  /* ── User bubble ─────────────────────────────── */
+                  <div className="max-w-[92%] px-4 py-2.5 rounded-2xl rounded-tr-sm bg-amber-100 text-amber-950 ring-1 ring-amber-200/80 dark:bg-amber-500/15 dark:text-amber-50 dark:ring-amber-400/25 text-[13.5px] leading-relaxed">
+                    {messageText(msg)}
+                  </div>
                 ) : (
-                  msg.parts.map((part, i) => {
-                    if (part.kind === "tool") {
-                      if (part.call.name === "render_ui") {
-                        const status: "running" | "done" | "error" =
-                          part.call.status === "done"
-                            ? "done"
-                            : part.call.status === "error"
-                            ? "error"
-                            : "running";
-                        return (
-                          <ArtifactCard
-                            key={`art-${part.call.id}-${i}`}
-                            args={part.call.args as ArtifactArgs}
-                            status={status}
-                            projectId={projectId}
-                            userId={userId ?? undefined}
-                            existingDocId={isRefiningRef.current ? (lastDesignDocId ?? undefined) : undefined}
-                            onSaved={(docId) => {
-                              setLastDesignDocId(docId);
-                              isRefiningRef.current = false;
-                            }}
-                            onRefine={status === "done" ? () => {
-                              isRefiningRef.current = true;
-                              void handleSubmit(undefined, "Please critique this design using critique_design, then create an improved version with render_ui addressing all high-severity issues.");
-                            } : undefined}
-                          />
-                        );
-                      }
-                      if (part.call.name === "critique_design") {
-                        const critiqueStatus: "running" | "done" | "error" =
-                          part.call.status === "done"
-                            ? "done"
-                            : part.call.status === "error"
-                            ? "error"
-                            : "running";
-                        return (
-                          <CritiqueCard
-                            key={`crit-${part.call.id}-${i}`}
-                            critique={(part.call.payload as Critique) ?? null}
-                            status={critiqueStatus}
-                          />
-                        );
-                      }
-                      if (isPermissionVisual(part.call)) {
-                        const resolved =
-                          part.call.status === "approved"
-                            ? "approved"
-                            : part.call.status === "denied"
-                            ? "denied"
-                            : null;
-                        return (
-                          <PermissionPrompt
-                            key={`perm-${part.call.id}-${i}`}
-                            call={part.call}
-                            resolved={resolved}
-                            onApprove={(cid) => handleApprove(msg.id, cid)}
-                            onDeny={(cid, reason) => handleDeny(msg.id, cid, reason)}
-                          />
-                        );
-                      }
-                      return <ToolCallBlock key={`tool-${part.call.id}-${i}`} call={part.call} />;
-                    }
-                    return (
-                      <div key={`text-${i}`}>
-                        {renderTextWithCitations(part.text, msg.sources)}
+                  /* ── Assistant message — parts rendered in natural order ── */
+                  <div className="w-full flex flex-col gap-2">
+
+                    {msg.parts.length === 0 ? (
+                      /* Initial thinking indicator — shown before first SSE event */
+                      <div className="flex items-center gap-2 py-1 text-[11.5px] text-black/40 dark:text-white/35">
+                        <span className="flex gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:0ms]" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:160ms]" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:320ms]" />
+                        </span>
+                        <span className="italic">Thinking…</span>
                       </div>
-                    );
-                  })
+                    ) : (
+                      /* Render parts in the order they arrived — text before tool blocks,
+                         tool blocks where they appear, final text after tool results */
+                      msg.parts.map((part, i) => {
+                        if (part.kind === "tool") {
+                          if (part.call.name === "render_ui") {
+                            const uiStatus: "running" | "done" | "error" =
+                              part.call.status === "done" ? "done"
+                              : part.call.status === "error" ? "error"
+                              : "running";
+                            return (
+                              <ArtifactCard
+                                key={`art-${part.call.id}-${i}`}
+                                args={part.call.args as ArtifactArgs}
+                                status={uiStatus}
+                                projectId={projectId}
+                                userId={userId ?? undefined}
+                                existingDocId={lastDesignDocId ?? undefined}
+                                existingDocIdRef={lastDesignDocIdRef}
+                                onSaved={(docId) => {
+                                  lastDesignDocIdRef.current = docId;
+                                  setLastDesignDocId(docId);
+                                  isRefiningRef.current = false;
+                                }}
+                                onRefine={uiStatus === "done" ? () => {
+                                  isRefiningRef.current = true;
+                                  void handleSubmit(undefined, "Please critique this design using critique_design, then create an improved version with render_ui addressing all high-severity issues.");
+                                } : undefined}
+                              />
+                            );
+                          }
+
+                          if (part.call.name === "critique_design") {
+                            return (
+                              <CritiqueCard
+                                key={`crit-${part.call.id}-${i}`}
+                                critique={(part.call.payload as Critique) ?? null}
+                                status={part.call.status === "done" ? "done" : part.call.status === "error" ? "error" : "running"}
+                              />
+                            );
+                          }
+
+                          if (isPermissionVisual(part.call)) {
+                            const resolved =
+                              part.call.status === "approved" ? "approved"
+                              : part.call.status === "denied" ? "denied"
+                              : null;
+                            return (
+                              <PermissionPrompt
+                                key={`perm-${part.call.id}-${i}`}
+                                call={part.call}
+                                resolved={resolved}
+                                onApprove={(cid) => handleApprove(msg.id, cid)}
+                                onDeny={(cid, reason) => handleDeny(msg.id, cid, reason)}
+                              />
+                            );
+                          }
+
+                          return <ToolCallBlock key={`tool-${part.call.id}-${i}`} call={part.call} />;
+                        }
+
+                        if (part.kind === "text" && part.text.trim()) {
+                          return (
+                            <div
+                              key={`text-${i}`}
+                              className="text-[13.5px] leading-[1.75] text-black/85 dark:text-ivory/90 chat-markdown"
+                            >
+                              {renderTextWithCitations(part.text, msg.sources)}
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })
+                    )}
+
+                    {/* Deduplicated sources after all content */}
+                    {msg.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[...new Map(msg.sources.map((s) => [s.id, s])).values()]
+                          .slice(0, 10)
+                          .map((s, idx) => (
+                            <CitationChip key={s.id} index={idx + 1} source={s} />
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Apply button */}
+                {msg.role === "assistant" && !isStreaming && messageText(msg).trim() && applyFn && (
+                  <button
+                    onClick={() => handleApply(messageText(msg), msg.id)}
+                    disabled={applyingMsgId === msg.id}
+                    className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-700/70 dark:text-amber/60 hover:text-amber-900 dark:hover:text-amber transition-colors ml-0.5 font-semibold tracking-wide disabled:opacity-40 group max-w-full"
+                    title={docTitle ? `Apply suggestions to "${docTitle}"` : "Apply to the open document"}
+                  >
+                    <CheckSquare size={10} className="group-hover:rotate-3 transition-transform flex-shrink-0" />
+                    <span className="truncate">
+                      {applyingMsgId === msg.id
+                        ? "Applying…"
+                        : docTitle
+                        ? `Apply to "${docTitle}"`
+                        : "Apply to open document"}
+                    </span>
+                  </button>
                 )}
               </div>
-
-              {msg.role === "assistant" && !isStreaming && messageText(msg) && applyFn && (
-                <button
-                  onClick={() => handleApply(messageText(msg), msg.id)}
-                  disabled={applyingMsgId === msg.id}
-                  className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-700/80 dark:text-amber/70 hover:text-amber-900 dark:hover:text-amber transition-colors ml-1.5 font-semibold tracking-wide disabled:opacity-40 group max-w-full"
-                  title={docTitle ? `Apply suggestions to "${docTitle}"` : "Apply to the open document"}
-                >
-                  <CheckSquare size={10} className="group-hover:rotate-3 transition-transform flex-shrink-0" />
-                  <span className="truncate">
-                    {applyingMsgId === msg.id
-                      ? "Applying…"
-                      : docTitle
-                      ? `Apply to "${docTitle}"`
-                      : "Apply to open document"}
-                  </span>
-                </button>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

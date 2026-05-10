@@ -1,3 +1,4 @@
+import base64
 from typing import Any, AsyncGenerator
 
 from google import genai
@@ -24,7 +25,7 @@ class GeminiProvider(LLMProvider):
             if chunk.text:
                 yield chunk.text
 
-    # ── Tool use ──────────────────────────────────────────────────────────────
+    # ── Tool use (non-streaming, so thought_signatures are intact) ────────────
 
     async def stream_with_tools(
         self,
@@ -34,6 +35,20 @@ class GeminiProvider(LLMProvider):
         tools: list[Tool],
         model: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream one assistant turn with tool detection.
+
+        Phase 1 — streaming: text tokens are yielded immediately so the UI
+        updates in real time.  Function-call parts are collected but not emitted.
+
+        Phase 2 — non-streaming (only when tool calls were found): re-runs
+        generate_content to get thought_signature bytes on each function_call
+        Part.  Gemini 2.5 thinking models attach these signatures and require
+        them to be echoed back on subsequent turns; they are only reliable on
+        the complete response object, not on individual stream chunks.
+
+        If Phase 1 yields no function calls the response is complete and no
+        second API call is made.
+        """
         gem_tool = gtypes.Tool(
             function_declarations=[
                 gtypes.FunctionDeclaration(
@@ -50,40 +65,132 @@ class GeminiProvider(LLMProvider):
         )
         contents = _to_gemini_contents(messages)
 
-        try:
-            saw_function_call = False
-            call_counter = 0
+        # ── Phase 1: streaming pass ─────────────────────────────────────────
+        # Stream text tokens immediately; collect function-call info.
 
+        stream_calls: list[tuple[str, dict]] = []  # (name, args) in order
+
+        try:
             async for chunk in await self.client.aio.models.generate_content_stream(
                 model=model or self.model,
                 contents=contents,
                 config=config,
             ):
-                # Streamed text
-                if chunk.text:
-                    yield {"type": "text", "delta": chunk.text}
-
-                # Function calls come on candidates -> content -> parts
                 cand = (chunk.candidates or [None])[0]
-                if not cand or not cand.content:
+                if not cand or not cand.content or not cand.content.parts:
+                    try:
+                        text = chunk.text
+                        if text:
+                            yield {"type": "text", "delta": text}
+                    except Exception:
+                        pass
+                    continue
+
+                for part in cand.content.parts or []:
+                    if getattr(part, "thought", False):
+                        continue
+                    part_text = getattr(part, "text", None)
+                    if part_text:
+                        yield {"type": "text", "delta": part_text}
+                    fc = getattr(part, "function_call", None)
+                    if fc and getattr(fc, "name", None):
+                        stream_calls.append((fc.name, dict(fc.args or {})))
+
+        except Exception as e:
+            yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
+            return
+
+        if not stream_calls:
+            # Pure text response — already fully streamed, no second call needed.
+            yield {"type": "turn_end", "stop_reason": "end_turn", "error": None}
+            return
+
+        # ── Phase 2: non-streaming for thought_signature ────────────────────
+        # Re-run generate_content so thought_signature bytes are present on
+        # each function_call Part.  Tool-call events are emitted from here.
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=model or self.model,
+                contents=contents,
+                config=config,
+            )
+
+            # Collect function_call Parts from complete response (in order).
+            ns_fc_parts: list = []
+            candidate = (response.candidates or [None])[0]
+            if candidate and candidate.content:
+                for part in candidate.content.parts or []:
+                    if getattr(part, "thought", False):
+                        continue
+                    fc = getattr(part, "function_call", None)
+                    if fc and getattr(fc, "name", None):
+                        ns_fc_parts.append(part)
+
+            # Emit tool_call events — names/args from Phase 1 (consistent with
+            # text already shown); thought_sig from Phase 2 at the same position.
+            for i, (stream_name, stream_args) in enumerate(stream_calls):
+                call_id = f"gem_{stream_name}_{i}"
+                ns_part = ns_fc_parts[i] if i < len(ns_fc_parts) else None
+                ts_bytes = getattr(ns_part, "thought_signature", None) if ns_part else None
+                yield {
+                    "type": "tool_call",
+                    "id": call_id,
+                    "name": stream_name,
+                    "args": stream_args,
+                    "_thought_sig": (
+                        base64.b64encode(ts_bytes).decode("ascii")
+                        if ts_bytes else None
+                    ),
+                }
+
+            yield {"type": "turn_end", "stop_reason": "tool_use", "error": None}
+
+        except Exception as e:
+            yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
+
+    # ── Text-only streaming (no tools config → true incremental streaming) ─────
+
+    async def stream_text(
+        self,
+        *,
+        system: str,
+        messages: list[Message],
+        model: str | None = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream a text response without tool declarations.
+
+        Omitting tools from the config enables true token-by-token streaming
+        (Gemini buffers responses when tools are present).  Use this for the
+        final response turn after all tools have been executed.
+        """
+        config = gtypes.GenerateContentConfig(system_instruction=system)
+        contents = _to_gemini_contents(messages)
+
+        try:
+            async for chunk in await self.client.aio.models.generate_content_stream(
+                model=model or self.model,
+                contents=contents,
+                config=config,
+            ):
+                cand = (chunk.candidates or [None])[0]
+                if not cand or not cand.content or not cand.content.parts:
+                    try:
+                        text = chunk.text
+                        if text:
+                            yield {"type": "text", "delta": text}
+                    except Exception:
+                        pass
                     continue
                 for part in cand.content.parts or []:
-                    fc = getattr(part, "function_call", None)
-                    if fc and fc.name:
-                        saw_function_call = True
-                        # Gemini doesn't return an id; synthesize a stable one
-                        call_id = f"gem_{fc.name}_{call_counter}"
-                        call_counter += 1
-                        yield {
-                            "type": "tool_call",
-                            "id": call_id,
-                            "name": fc.name,
-                            "args": dict(fc.args or {}),
-                        }
+                    # Skip internal reasoning parts from thinking models.
+                    if getattr(part, "thought", False):
+                        continue
+                    part_text = getattr(part, "text", None)
+                    if part_text:
+                        yield {"type": "text", "delta": part_text}
 
-            stop = "tool_use" if saw_function_call else "end_turn"
-            yield {"type": "turn_end", "stop_reason": stop, "error": None}
-
+            yield {"type": "turn_end", "stop_reason": "end_turn", "error": None}
         except Exception as e:
             yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
 
@@ -92,8 +199,7 @@ class GeminiProvider(LLMProvider):
 
 
 def _clean_schema_for_gemini(schema: dict[str, Any]) -> dict[str, Any]:
-    """Gemini's parameters schema rejects some JSON Schema fields (default,
-    additionalProperties on objects, etc). Strip the ones we use."""
+    """Strip JSON Schema fields Gemini rejects (default, additionalProperties)."""
     if not isinstance(schema, dict):
         return schema
     out = {k: v for k, v in schema.items() if k not in ("additionalProperties",)}
@@ -101,7 +207,6 @@ def _clean_schema_for_gemini(schema: dict[str, Any]) -> dict[str, Any]:
         out["properties"] = {
             k: _clean_schema_for_gemini(v) for k, v in out["properties"].items()
         }
-        # Strip 'default' from each property
         for v in out["properties"].values():
             if isinstance(v, dict):
                 v.pop("default", None)
@@ -109,15 +214,12 @@ def _clean_schema_for_gemini(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def _to_gemini_contents(messages: list[Message]) -> list[dict[str, Any]]:
-    """Canonical messages → Gemini `contents` list.
+    """Canonical messages → Gemini contents list.
 
-    Gemini uses role='user' for tool results too (with function_response parts)
-    and role='model' for assistant turns. The order of (function_call,
-    function_response) MUST match for the model to ground the next turn.
+    Restores thought_signature bytes on function_call parts so Gemini 2.5
+    thinking models don't reject the request with 400 INVALID_ARGUMENT.
     """
     contents: list[dict[str, Any]] = []
-    # Keep a map name->id for matching tool_results back to function_calls
-    # (Gemini doesn't track ids — match by name + order.)
     for m in messages:
         role = m["role"]
         content = m["content"]
@@ -147,12 +249,21 @@ def _to_gemini_contents(messages: list[Message]) -> list[dict[str, Any]]:
             if t == "text":
                 parts.append({"text": b["text"]})
             elif t == "tool_call":
-                parts.append({
-                    "function_call": {
-                        "name": b["name"],
-                        "args": b["args"] or {},
-                    }
-                })
+                fc_dict: dict[str, Any] = {
+                    "name": b["name"],
+                    "args": b.get("args") or {},
+                }
+                ts_b64 = b.get("_thought_sig")
+                # thought_signature belongs on the Part dict, not inside
+                # function_call — this is what Gemini 2.5 thinking models
+                # require when echoing back a prior function call.
+                part_dict: dict[str, Any] = {"function_call": fc_dict}
+                if ts_b64:
+                    try:
+                        part_dict["thought_signature"] = base64.b64decode(ts_b64)
+                    except Exception:
+                        pass
+                parts.append(part_dict)
         if parts:
             contents.append({"role": _role_for_gemini(role), "parts": parts})
 
@@ -164,7 +275,6 @@ def _role_for_gemini(role: str) -> str:
 
 
 def _name_from_id(call_id: str) -> str:
-    # ids are "gem_<name>_<n>"
     if call_id.startswith("gem_"):
         rest = call_id[4:]
         last_underscore = rest.rfind("_")

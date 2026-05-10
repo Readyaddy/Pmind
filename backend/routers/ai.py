@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from deps import get_user_id, get_supabase
 from agent.runner import run_agent
 from agent.tools import _tiptap_to_text
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FREE_LIMIT = 20  # AI requests per day on free tier
@@ -260,7 +262,7 @@ async def ai_chat(request: ChatRequest, user_id: str = Depends(get_user_id)):
                 for idx, row in enumerate(result.data):
                     rag_context += f"--- Excerpt {idx + 1} ---\n{row['content']}\n"
         except Exception as e:
-            print("RAG Error:", e)
+            logger.error("RAG context fetch failed: %s", e, exc_info=True)
 
     system_prompt = (
         "You are PM Cursor, an expert AI Product Manager assistant.\n"
@@ -304,6 +306,7 @@ async def ai_chat(request: ChatRequest, user_id: str = Depends(get_user_id)):
 
 
 # ── Apply ──────────────────────────────────────────────────────────────────────
+
 
 @router.post("/apply")
 async def ai_apply(request: ApplyRequest, user_id: str = Depends(get_user_id)):
@@ -380,7 +383,7 @@ async def ai_search(request: SearchRequest, user_id: str = Depends(get_user_id))
                 "similarity": row["similarity"],
             })
     except Exception as e:
-        print("Search embedding error:", e)
+        logger.error("Search embedding failed: %s", e, exc_info=True)
 
     # Full-text search on documents
     try:
@@ -412,7 +415,7 @@ async def ai_search(request: SearchRequest, user_id: str = Depends(get_user_id))
                 "similarity": 0.5,
             })
     except Exception as e:
-        print("Doc search error:", e)
+        logger.error("Doc search failed: %s", e, exc_info=True)
 
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return {"results": results[:10]}
@@ -466,6 +469,15 @@ class PendingDecision(BaseModel):
     reason: Optional[str] = None
 
 
+PRO_MODELS = [
+    {"id": "gemini-2.5-flash-lite",    "label": "2.5 Flash Lite",    "description": "Fastest & most affordable"},
+    {"id": "gemini-2.5-flash",         "label": "2.5 Flash",          "description": "Fast & balanced (default)"},
+    {"id": "gemini-2.5-pro",           "label": "2.5 Pro",            "description": "Most capable, best reasoning"},
+    {"id": "gemini-3-flash-preview",   "label": "3 Flash Preview",    "description": "Gemini 3 Flash (preview)"},
+    {"id": "gemini-3.1-pro-preview",   "label": "3.1 Pro Preview",    "description": "Most powerful — Gemini 3.1 Pro (preview)"},
+]
+
+
 class AgentRequest(BaseModel):
     messages: list
     project_id: Optional[str] = None
@@ -475,9 +487,12 @@ class AgentRequest(BaseModel):
     pending_decisions: Optional[List[PendingDecision]] = None
     mentioned_doc_ids: Optional[List[str]] = None
     mentioned_kb_ids: Optional[List[str]] = None
+    model_override: Optional[str] = None
 
 
 def _get_plan(user_id: str) -> str:
+    if os.getenv("NEXT_PUBLIC_DEV_MODE") == "true":
+        return "pro"
     try:
         supabase = get_supabase()
         res = supabase.table("user_subscriptions").select("plan").eq("user_id", user_id).execute()
@@ -486,13 +501,20 @@ def _get_plan(user_id: str) -> str:
         return "free"
 
 
-def _resolve_llm(user_id: str) -> tuple:
-    """Return (provider, model). Free users are locked to Gemini Flash."""
+def _resolve_llm(user_id: str, model_override: Optional[str] = None) -> tuple:
+    """Return (provider, model). Free users are locked to Gemini Flash.
+    Pro users may pick any model from PRO_MODELS via model_override."""
     plan = _get_plan(user_id)
     if plan == "free":
+        logger.debug("LLM resolve — user=%s plan=free model=%s", user_id, FREE_MODEL)
         return FREE_PROVIDER, FREE_MODEL
     provider = os.getenv("LLM_PROVIDER", FREE_PROVIDER)
+    valid_ids = {m["id"] for m in PRO_MODELS}
+    if model_override and model_override in valid_ids:
+        logger.info("LLM resolve — user=%s plan=%s model=%s (override)", user_id, plan, model_override)
+        return provider, model_override
     model = os.getenv("LLM_MODEL", FREE_MODEL)
+    logger.debug("LLM resolve — user=%s plan=%s model=%s (default)", user_id, plan, model)
     return provider, model
 
 
@@ -505,6 +527,7 @@ async def agent_info(user_id: str = Depends(get_user_id)):
         "provider": provider,
         "model": model,
         "locked": plan == "free",
+        "pro_models": PRO_MODELS,
     }
 
 
@@ -514,7 +537,7 @@ async def ai_agent(
     user_id: str = Depends(get_user_id),
 ):
     supabase = get_supabase()
-    provider, model = _resolve_llm(user_id)
+    provider, model = _resolve_llm(user_id, request.model_override)
     is_resume = bool(request.pending_decisions)
 
     # Thread + message persistence
@@ -579,40 +602,48 @@ async def ai_agent(
 
     async def generate():
         final_text_parts: list = []
-        async for sse_chunk in run_agent(
-            messages=request.messages,
-            user_id=user_id,
-            project_id=request.project_id,
-            product_context=request.product_context,
-            document_context=doc_ctx,
-            pending_decisions=pending or None,
-            model=model,
-            provider=provider,
-        ):
-            try:
-                if sse_chunk.startswith("event: text"):
-                    data_line = [l for l in sse_chunk.split("\n") if l.startswith("data: ")]
-                    if data_line:
-                        payload = json.loads(data_line[0][6:])
-                        final_text_parts.append(payload.get("delta", ""))
-                elif sse_chunk.startswith("event: done"):
-                    final_text = "".join(final_text_parts)
-                    if thread_id and final_text.strip():
-                        try:
-                            if is_resume:
-                                existing = (
-                                    supabase.table("chat_messages")
-                                    .select("id")
-                                    .eq("thread_id", thread_id)
-                                    .eq("role", "assistant")
-                                    .order("created_at", desc=True)
-                                    .limit(1)
-                                    .execute()
-                                )
-                                if existing.data:
-                                    supabase.table("chat_messages").update({
-                                        "content": final_text,
-                                    }).eq("id", existing.data[0]["id"]).execute()
+        try:
+            async for sse_chunk in run_agent(
+                messages=request.messages,
+                user_id=user_id,
+                project_id=request.project_id,
+                product_context=request.product_context,
+                document_context=doc_ctx,
+                pending_decisions=pending or None,
+                model=model,
+                provider=provider,
+            ):
+                try:
+                    if sse_chunk.startswith("event: text"):
+                        data_line = [l for l in sse_chunk.split("\n") if l.startswith("data: ")]
+                        if data_line:
+                            payload = json.loads(data_line[0][6:])
+                            final_text_parts.append(payload.get("delta", ""))
+                    elif sse_chunk.startswith("event: done"):
+                        final_text = "".join(final_text_parts)
+                        if thread_id and final_text.strip():
+                            try:
+                                if is_resume:
+                                    existing = (
+                                        supabase.table("chat_messages")
+                                        .select("id")
+                                        .eq("thread_id", thread_id)
+                                        .eq("role", "assistant")
+                                        .order("created_at", desc=True)
+                                        .limit(1)
+                                        .execute()
+                                    )
+                                    if existing.data:
+                                        supabase.table("chat_messages").update({
+                                            "content": final_text,
+                                        }).eq("id", existing.data[0]["id"]).execute()
+                                    else:
+                                        supabase.table("chat_messages").insert({
+                                            "thread_id": thread_id,
+                                            "user_id": user_id,
+                                            "role": "assistant",
+                                            "content": final_text,
+                                        }).execute()
                                 else:
                                     supabase.table("chat_messages").insert({
                                         "thread_id": thread_id,
@@ -620,21 +651,22 @@ async def ai_agent(
                                         "role": "assistant",
                                         "content": final_text,
                                     }).execute()
-                            else:
-                                supabase.table("chat_messages").insert({
-                                    "thread_id": thread_id,
-                                    "user_id": user_id,
-                                    "role": "assistant",
-                                    "content": final_text,
-                                }).execute()
-                            supabase.table("chat_threads").update({
-                                "updated_at": datetime.now(timezone.utc).isoformat()
-                            }).eq("id", thread_id).execute()
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            yield sse_chunk
+                                supabase.table("chat_threads").update({
+                                    "updated_at": datetime.now(timezone.utc).isoformat()
+                                }).eq("id", thread_id).execute()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                yield sse_chunk
+        except Exception as e:
+            logger.error("Agent stream error: %s", e, exc_info=True)
+            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+            yield f"event: done\ndata: {json.dumps({'final_text': ''})}\n\n"
 
-    headers = {"X-Thread-Id": thread_id or ""}
+    headers = {
+        "X-Thread-Id": thread_id or "",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
     return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)

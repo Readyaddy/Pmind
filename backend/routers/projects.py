@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from deps import get_supabase, get_user_id
@@ -134,21 +135,27 @@ async def create_project_document(
 @router.get("/{project_id}/tree")
 async def get_project_tree(project_id: str, user_id: str = Depends(get_user_id)):
     supabase = get_supabase()
-    folders_result = (
-        supabase.table("folders")
-        .select("id, name, parent_folder_id")
-        .eq("project_id", project_id)
-        .eq("user_id", user_id)
-        .execute()
+    loop = asyncio.get_running_loop()
+
+    folders_task = loop.run_in_executor(
+        None,
+        lambda: supabase.table("folders")
+            .select("id, name, parent_folder_id")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .execute(),
     )
-    docs_result = (
-        supabase.table("documents")
-        .select("id, title, folder_id, updated_at")
-        .eq("project_id", project_id)
-        .eq("user_id", user_id)
-        .order("updated_at", desc=True)
-        .execute()
+    docs_task = loop.run_in_executor(
+        None,
+        lambda: supabase.table("documents")
+            .select("id, title, folder_id, updated_at")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .limit(200)
+            .execute(),
     )
+    folders_result, docs_result = await asyncio.gather(folders_task, docs_task)
     return {"folders": folders_result.data, "docs": docs_result.data}
 
 

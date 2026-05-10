@@ -23,19 +23,37 @@ class LLMProvider(ABC):
         tools: list[Tool],
         model: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
-        """
-        Stream ONE assistant turn that may include text and tool calls.
+        """Stream ONE assistant turn that may include text and tool calls.
 
         Yields canonical events:
           {"type": "text", "delta": str}
           {"type": "tool_call", "id": str, "name": str, "args": dict}
           {"type": "turn_end", "stop_reason": ..., "error": str | None}
-
-        After a turn_end with stop_reason="tool_use", the runner is expected
-        to execute each tool, append a tool message to `messages`, and call
-        `stream_with_tools` again with the updated history.
         """
         raise NotImplementedError(
             f"{type(self).__name__} does not implement stream_with_tools"
         )
-        yield  # pragma: no cover  (makes this an async generator)
+        yield  # pragma: no cover
+
+    async def stream_text(
+        self,
+        *,
+        system: str,
+        messages: list[Message],
+        model: str | None = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream a text-only response (no tool declarations).
+
+        Providers that buffer responses when tools are configured should
+        override this to call generate_content_stream without tools so the
+        user sees tokens arriving in real time.
+
+        Default: delegates to stream_with_tools with an empty tool list.
+        """
+        async for ev in self.stream_with_tools(
+            system=system,
+            messages=messages,
+            tools=[],
+            model=model,
+        ):
+            yield ev

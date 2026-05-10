@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
+import logging
 import io
 import uuid
 import os
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 from deps import get_supabase, get_user_id
 from google import genai
 import PyPDF2
 import docx
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 def get_gemini_client():
@@ -65,7 +67,7 @@ async def upload_knowledge_document(
             file_options={"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
         )
     except Exception as e:
-        print(f"Storage upload warning: {e}")
+        logger.warning("Storage upload failed (non-fatal) — file=%s: %s", file.filename, e)
         storage_path = None  # Non-fatal – continue without storage
 
     # 4. Save Document Record
@@ -114,8 +116,7 @@ async def upload_knowledge_document(
             
         return {"success": True, "document_id": doc_id, "chunks": len(chunk_records)}
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error("Embedding generation failed — file=%s doc_id=%s: %s", file.filename, doc_id, e, exc_info=True)
         # Rollback document if chunks fail
         supabase.table("knowledge_documents").delete().eq("id", doc_id).execute()
         raise HTTPException(status_code=500, detail=f"Embedding generation failed: {str(e)}")
