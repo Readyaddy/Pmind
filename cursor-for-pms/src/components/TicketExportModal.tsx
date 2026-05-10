@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, CheckCircle2, ChevronDown, ChevronRight,
   ExternalLink, X, Send, AlertCircle
@@ -66,7 +66,7 @@ export default function TicketExportModal({ userInput, productContext, documentC
   const authHdr = () => ({ Authorization: `Bearer ${userId}`, "Content-Type": "application/json" });
 
   // Fetch integration status
-  const refreshStatus = async () => {
+  const refreshStatus = useCallback(async () => {
     if (!userId) return;
     try {
       const s = await fetch(`${API}/integrations/status`, { headers: { Authorization: `Bearer ${userId}` } }).then(r => r.json());
@@ -76,7 +76,7 @@ export default function TicketExportModal({ userInput, productContext, documentC
       if (s.jira?.connected && !destination)   setDestination("jira");
       else if (s.linear?.connected && !destination) setDestination("linear");
     } catch { /* ignore */ }
-  };
+  }, [userId, API, destination]);
 
   // On mount: generate tickets + fetch status in parallel
   useEffect(() => {
@@ -92,7 +92,7 @@ export default function TicketExportModal({ userInput, productContext, documentC
       .catch(e => setGenError(e.message || "Failed to generate structured tickets"))
       .finally(() => setGenerating(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, []);
 
   // Load projects / teams when destination changes
   useEffect(() => {
@@ -130,7 +130,7 @@ export default function TicketExportModal({ userInput, productContext, documentC
     }
   };
 
-  const toggleEpic = (i: number) => setExpandedEpics(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  const toggleEpic = (i: number) => setExpandedEpics(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
 
   const canExport = tickets && destination && exportState === "idle" &&
     ((destination === "jira" && selectedProject) || (destination === "linear" && selectedTeam));

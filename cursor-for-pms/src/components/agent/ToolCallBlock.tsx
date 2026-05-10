@@ -73,7 +73,7 @@ export default function ToolCallBlock({ call }: { call: ToolCall }) {
           )}
           {argSummary && !isRunning && (
             <span className="text-[11px] text-black/35 dark:text-white/35 truncate">
-              "{argSummary}"
+              &quot;{argSummary}&quot;
             </span>
           )}
         </span>

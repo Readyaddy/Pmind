@@ -50,11 +50,13 @@ export default function DesignViewer({ content: initial, title: initialTitle, on
 
   const srcDoc = useMemo(() => buildSrcDoc(content, title), [content, title]);
 
-  // Debounced auto-save on content change
+  // Debounced auto-save: onSave omitted — adding it restarts the debounce on every
+  // parent re-render. Stable identity not guaranteed by callers.
   useEffect(() => {
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => onSave(content, title), 2000);
     return () => clearTimeout(saveTimeout.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, title]);
 
   const handleSaveNow = () => {

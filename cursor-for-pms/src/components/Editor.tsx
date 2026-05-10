@@ -71,7 +71,7 @@ interface EditorProps {
   onSave: (content: Record<string, unknown>, title: string) => void;
 }
 
-export default function Editor({ docId: _docId, projectId, initialContent, onSave }: EditorProps) {
+export default function Editor({ projectId, initialContent, onSave }: EditorProps) {
   const [showAIModal, setShowAIModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{ id: string; replacement: string }>>([]);

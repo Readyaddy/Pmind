@@ -59,11 +59,12 @@ export default function ArtifactCard({ args, status, onRefine, projectId, userId
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const router = useRouter();
 
-  // Auto-save once when status becomes "done"
+  // Auto-save once when status becomes "done". savedRef guards against re-runs.
   useEffect(() => {
     if (status !== "done" || savedRef.current || !projectId || !userId || !args.html) return;
     savedRef.current = true;
     saveDesign();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   const saveDesign = async () => {
