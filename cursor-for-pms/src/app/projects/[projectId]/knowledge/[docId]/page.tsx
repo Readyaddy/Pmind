@@ -27,7 +27,6 @@ export default function KnowledgeDocPage() {
 
   const [doc, setDoc] = useState<KnowledgeDoc | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<string>("");
   const [docxHtml, setDocxHtml] = useState<string>("");
   const [txtContent, setTxtContent] = useState<string>("");
   const [chunks, setChunks] = useState<KnowledgeChunk[]>([]);
@@ -49,8 +48,6 @@ export default function KnowledgeDocPage() {
         const res = await fetch(`${API}/knowledge/${docData.id}/url`, { headers: authH });
         if (!res.ok) { setFileLoading(false); return; }
         const { url, file_type } = await res.json();
-        setFileType(file_type || docData.file_type || "");
-
         const ft = (file_type || docData.file_type || "").toLowerCase();
         const fname = docData.filename.toLowerCase();
 
