@@ -380,16 +380,6 @@ async def run_agent(
             canonical_msgs.append({"role": "tool", "content": tool_blocks})
 
     # ── Normal loop ───────────────────────────────────────────────────────────
-    # Strategy: use stream_with_tools for every step so the model can call
-    # tools across as many rounds as needed (list_docs → read_doc → render_ui).
-    # Text from tool-calling steps is buffered and yielded after we confirm
-    # tool calls exist.  When a step returns end_turn (pure text), we redo it
-    # with stream_text (no tools in config) so Gemini streams tokens instead of
-    # delivering the whole response in one chunk.
-    # Exception: if no tools have been used yet we just yield the buffered text
-    # to avoid a redundant API round-trip for simple questions.
-
-    any_tools_executed = False
 
     for step in range(max_steps):
         logger.debug("Agent step %d — user=%s", step + 1, user_id)
@@ -398,14 +388,26 @@ async def run_agent(
         stop_reason = "end_turn"
         error_msg: str | None = None
 
-        llm_gen = llm.stream_with_tools(system=system, messages=canonical_msgs, tools=tools, model=model)
+        # Gemini buffers SSE when tool declarations are present in the config,
+        # even when the model only produces text. After tool results are fed
+        # back (last message role == "tool"), this is a pure synthesis step —
+        # use stream_text (no tool config) so tokens stream incrementally.
+        is_synthesis = bool(canonical_msgs) and canonical_msgs[-1]["role"] == "tool"
+        if is_synthesis and hasattr(llm, "stream_text"):
+            llm_gen = llm.stream_text(
+                system=system, messages=canonical_msgs, model=model
+            )
+        else:
+            llm_gen = llm.stream_with_tools(system=system, messages=canonical_msgs, tools=tools, model=model)
 
         try:
             async for ev in llm_gen:
                 t = ev.get("type")
                 if t == "text":
-                    # Buffer — don't yield until we know whether there are tool calls.
-                    current_text_parts.append(ev.get("delta", ""))
+                    delta = ev.get("delta", "")
+                    current_text_parts.append(delta)
+                    final_text_parts.append(delta)
+                    yield _sse("text", {"delta": delta})
                 elif t == "tool_call":
                     call = {
                         "id": ev["id"],
@@ -420,7 +422,6 @@ async def run_agent(
                         if call["name"] in REQUIRES_PERMISSION
                         else "running"
                     )
-                    # Yield tool_call immediately — we now know tools are in play.
                     yield _sse("tool_call", {
                         "id": call["id"],
                         "name": call["name"],
@@ -438,64 +439,10 @@ async def run_agent(
             yield _sse("done", {"final_text": "".join(final_text_parts)})
             return
 
-        if stop_reason == "error":
-            yield _sse("error", {"message": error_msg or "Provider error"})
-            break
-
-        # ── Pure-text response (no tool calls this step) ──────────────────────
-        if not turn_calls:
-            if any_tools_executed and hasattr(llm, "stream_text"):
-                # Tools were used in a prior step — the buffered text from
-                # stream_with_tools is likely delivered as one chunk (Gemini
-                # buffers when tools are in the config).  Re-run with
-                # stream_text so the final answer streams token-by-token.
-                streaming_parts: list[str] = []
-                try:
-                    async for ev in llm.stream_text(
-                        system=system, messages=canonical_msgs, model=model
-                    ):
-                        t = ev.get("type")
-                        if t == "text":
-                            delta = ev.get("delta", "")
-                            streaming_parts.append(delta)
-                            final_text_parts.append(delta)
-                            yield _sse("text", {"delta": delta})
-                        elif t == "turn_end":
-                            if ev.get("error"):
-                                yield _sse("error", {"message": ev["error"]})
-                            break
-                except Exception as e:
-                    logger.error("stream_text final step error: %s", e, exc_info=True)
-                    yield _sse("error", {"message": f"Agent error: {e}"})
-                if streaming_parts:
-                    canonical_msgs.append({
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": "".join(streaming_parts)}],
-                    })
-            else:
-                # First response with no tools — yield the buffered text directly.
-                for delta in current_text_parts:
-                    final_text_parts.append(delta)
-                    yield _sse("text", {"delta": delta})
-                if current_text_parts:
-                    canonical_msgs.append({
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": "".join(current_text_parts)}],
-                    })
-            break
-
-        # ── Tool calls present — append assistant turn, then execute ──────────
-
-        # Yield the pre-tool commentary text (usually brief or empty).
-        for delta in current_text_parts:
-            final_text_parts.append(delta)
-            yield _sse("text", {"delta": delta})
-
+        # Append the assistant turn to history.
         assistant_blocks: list[dict] = []
         if current_text_parts:
-            assistant_blocks.append({
-                "type": "text", "text": "".join(current_text_parts),
-            })
+            assistant_blocks.append({"type": "text", "text": "".join(current_text_parts)})
         for call in turn_calls:
             block: dict = {
                 "type": "tool_call",
@@ -506,9 +453,14 @@ async def run_agent(
             if call.get("_thought_sig"):
                 block["_thought_sig"] = call["_thought_sig"]
             assistant_blocks.append(block)
-        canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
+        if assistant_blocks:
+            canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
 
-        if stop_reason != "tool_use":
+        if stop_reason == "error":
+            yield _sse("error", {"message": error_msg or "Provider error"})
+            break
+
+        if stop_reason != "tool_use" or not turn_calls:
             break
 
         # If ANY tool requires permission, pause and wait for resume.
@@ -528,7 +480,6 @@ async def run_agent(
             })
             tool_blocks.append(_result_block(call, result))
         canonical_msgs.append({"role": "tool", "content": tool_blocks})
-        any_tools_executed = True
 
     logger.info("Agent run complete — user=%s steps=%d", user_id, step + 1)
     yield _sse("done", {"final_text": "".join(final_text_parts)})

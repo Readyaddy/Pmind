@@ -21,17 +21,17 @@ export default function DocPage({
   const { userId } = useAuth();
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    if (userId) loadDoc();
-  }, [docId, userId]);
-
-  const loadDoc = async () => {
+  const loadDoc = useCallback(async () => {
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/documents/${docId}`,
       { headers: { Authorization: `Bearer ${userId}` } }
     );
     if (res.ok) setDoc(await res.json());
-  };
+  }, [docId, userId]);
+
+  useEffect(() => {
+    if (userId) loadDoc();
+  }, [loadDoc, userId]);
 
   const handleSave = useCallback(
     async (content: Record<string, unknown>, title: string) => {

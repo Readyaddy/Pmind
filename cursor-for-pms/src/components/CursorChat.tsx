@@ -391,6 +391,18 @@ export default function CursorChat() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (file) {
+      setAttachedImage(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleApply = async (content: string, msgId: string) => {
     if (!applyFn) { alert("Open a document to use Apply."); return; }
     setApplyingMsgId(msgId);
@@ -655,6 +667,7 @@ export default function CursorChat() {
         formData.append("image", attachedImage);
         formData.append("prompt", userText);
         formData.append("document_context", getText?.() ?? "");
+        if (selectedModel) formData.append("model_override", selectedModel);
         const response = await fetch(`${API}/ai/review-ui`, {
           method: "POST",
           headers: { Authorization: `Bearer ${userId}` },
@@ -1153,6 +1166,7 @@ export default function CursorChat() {
             ref={textareaRef}
             value={input}
             onChange={handleInputChange}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               // Picker shortcuts (when open)
               if (mentionTrigger && filteredMentions.length > 0) {

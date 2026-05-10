@@ -157,14 +157,25 @@ class GeminiProvider(LLMProvider):
         system: str,
         messages: list[Message],
         model: str | None = None,
+        disable_thinking: bool = False,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream a text response without tool declarations.
 
         Omitting tools from the config enables true token-by-token streaming
         (Gemini buffers responses when tools are present).  Use this for the
         final response turn after all tools have been executed.
+
+        disable_thinking=True sets thinking_budget=0, eliminating the internal
+        reasoning pause so the first token arrives almost immediately.  Safe to
+        use when the model already has all context it needs (e.g. tool results).
         """
-        config = gtypes.GenerateContentConfig(system_instruction=system)
+        cfg_kwargs: dict = {"system_instruction": system}
+        if disable_thinking:
+            try:
+                cfg_kwargs["thinking_config"] = gtypes.ThinkingConfig(thinking_budget=0)
+            except Exception:
+                pass  # older SDK versions may not support this field
+        config = gtypes.GenerateContentConfig(**cfg_kwargs)
         contents = _to_gemini_contents(messages)
 
         try:

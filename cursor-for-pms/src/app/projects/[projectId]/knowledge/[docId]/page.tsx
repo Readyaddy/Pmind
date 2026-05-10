@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, FileText, Trash2, Loader2, Download, ChevronDown, ChevronRight } from "lucide-react";
 
 interface KnowledgeDoc {
@@ -12,8 +12,6 @@ interface KnowledgeDoc {
   created_at: string;
   storage_path?: string;
 }
-
-type ViewMode = "file" | "chunks";
 
 interface KnowledgeChunk {
   id: string;
@@ -35,7 +33,6 @@ export default function KnowledgeDocPage() {
   const [chunks, setChunks] = useState<KnowledgeChunk[]>([]);
   const [loading, setLoading] = useState(true);
   const [fileLoading, setFileLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("file");
   const [chunksOpen, setChunksOpen] = useState(false);
 
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -46,6 +43,38 @@ export default function KnowledgeDocPage() {
 
     const authH = { Authorization: `Bearer ${userId}` };
 
+    const loadFile = async (docData: KnowledgeDoc) => {
+      setFileLoading(true);
+      try {
+        const res = await fetch(`${API}/knowledge/${docData.id}/url`, { headers: authH });
+        if (!res.ok) { setFileLoading(false); return; }
+        const { url, file_type } = await res.json();
+        setFileType(file_type || docData.file_type || "");
+
+        const ft = (file_type || docData.file_type || "").toLowerCase();
+        const fname = docData.filename.toLowerCase();
+
+        if (fname.endsWith(".pdf") || ft.includes("pdf")) {
+          setFileUrl(url);
+        } else if (fname.endsWith(".txt") || ft.includes("text/plain")) {
+          const textRes = await fetch(url);
+          const text = await textRes.text();
+          setTxtContent(text);
+        } else if (fname.endsWith(".docx") || ft.includes("officedocument")) {
+          const arrayBuf = await (await fetch(url)).arrayBuffer();
+          const mammoth = (await import("mammoth")).default;
+          const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuf });
+          setDocxHtml(result.value);
+        } else {
+          setFileUrl(url);
+        }
+      } catch (e) {
+        console.error("File load error:", e);
+      } finally {
+        setFileLoading(false);
+      }
+    };
+
     Promise.all([
       fetch(`${API}/knowledge/${docId}`, { headers: authH }).then(r => r.ok ? r.json() : null),
       fetch(`${API}/knowledge/${docId}/chunks`, { headers: authH }).then(r => r.ok ? r.json() : []),
@@ -53,48 +82,12 @@ export default function KnowledgeDocPage() {
       .then(([docData, chunksData]) => {
         setDoc(docData);
         setChunks(chunksData);
-
-        // Try to load the original file
         if (docData?.storage_path) {
-          loadFile(docData, authH);
+          loadFile(docData);
         }
       })
       .finally(() => setLoading(false));
   }, [userId, docId, API]);
-
-  const loadFile = async (docData: KnowledgeDoc, authH: Record<string, string>) => {
-    setFileLoading(true);
-    try {
-      const res = await fetch(`${API}/knowledge/${docData.id}/url`, { headers: authH });
-      if (!res.ok) { setFileLoading(false); return; }
-      const { url, file_type } = await res.json();
-      setFileType(file_type || docData.file_type || "");
-
-      const ft = (file_type || docData.file_type || "").toLowerCase();
-      const fname = docData.filename.toLowerCase();
-
-      if (fname.endsWith(".pdf") || ft.includes("pdf")) {
-        setFileUrl(url);
-      } else if (fname.endsWith(".txt") || ft.includes("text/plain")) {
-        // Fetch and display as text
-        const textRes = await fetch(url);
-        const text = await textRes.text();
-        setTxtContent(text);
-      } else if (fname.endsWith(".docx") || ft.includes("officedocument")) {
-        // Use mammoth to convert DOCX → HTML in the browser
-        const arrayBuf = await (await fetch(url)).arrayBuffer();
-        const mammoth = (await import("mammoth")).default;
-        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuf });
-        setDocxHtml(result.value);
-      } else {
-        setFileUrl(url); // fallback: iframe
-      }
-    } catch (e) {
-      console.error("File load error:", e);
-    } finally {
-      setFileLoading(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!confirm("Delete this document and all its embeddings?")) return;

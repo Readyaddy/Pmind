@@ -428,6 +428,7 @@ async def review_ui(
     image: UploadFile = File(...),
     prompt: str = Form(...),
     document_context: str = Form(""),
+    model_override: Optional[str] = Form(None),
     user_id: str = Depends(get_user_id),
 ):
     import base64
@@ -437,10 +438,11 @@ async def review_ui(
 
     from google import genai as g
     client = g.Client(api_key=os.getenv("GOOGLE_API_KEY", ""))
+    vision_model = model_override or os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
     async def generate():
         for chunk in client.models.generate_content_stream(
-            model=os.getenv("LLM_MODEL", "gemini-2.5-flash-lite"),
+            model=vision_model,
             contents=[{"role": "user", "parts": [
                 {"inline_data": {"mime_type": image.content_type, "data": image_b64}},
                 {"text": (

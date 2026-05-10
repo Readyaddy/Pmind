@@ -41,12 +41,17 @@ class LLMProvider(ABC):
         system: str,
         messages: list[Message],
         model: str | None = None,
+        disable_thinking: bool = False,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream a text-only response (no tool declarations).
 
         Providers that buffer responses when tools are configured should
         override this to call generate_content_stream without tools so the
         user sees tokens arriving in real time.
+
+        disable_thinking: Gemini-specific — sets thinking_budget=0 so the
+        first token arrives immediately (safe for synthesis steps where the
+        model already has all context from tool results).
 
         Default: delegates to stream_with_tools with an empty tool list.
         """
