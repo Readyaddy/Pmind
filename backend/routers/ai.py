@@ -496,9 +496,30 @@ def _get_plan(user_id: str) -> str:
     if os.getenv("NEXT_PUBLIC_DEV_MODE") == "true":
         return "pro"
     try:
+        from datetime import datetime, timezone
         supabase = get_supabase()
-        res = supabase.table("user_subscriptions").select("plan").eq("user_id", user_id).execute()
-        return res.data[0]["plan"] if res.data else "free"
+        res = supabase.table("user_subscriptions") \
+            .select("plan, status, current_period_end") \
+            .eq("user_id", user_id).execute()
+        if not res.data:
+            return "free"
+        row = res.data[0]
+        plan = row.get("plan", "free")
+        if plan == "free":
+            return "free"
+        # Enforce expiry: if current_period_end is set and in the past, downgrade
+        period_end_str = row.get("current_period_end")
+        if period_end_str:
+            period_end = datetime.fromisoformat(period_end_str.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > period_end:
+                # Subscription expired — downgrade in DB and return free
+                logger.info("Subscription expired — user=%s plan=%s period_end=%s", user_id, plan, period_end_str)
+                supabase.table("user_subscriptions").update({
+                    "plan": "free",
+                    "status": "cancelled",
+                }).eq("user_id", user_id).execute()
+                return "free"
+        return plan
     except Exception:
         return "free"
 
