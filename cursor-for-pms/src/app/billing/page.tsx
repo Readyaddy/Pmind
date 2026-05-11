@@ -21,11 +21,12 @@ const PLANS = [
     cta: "Current Plan",
     disabled: true,
     highlight: false,
+    comingSoon: false,
   },
   {
     id: "pro",
     name: "Pro",
-    price: "₹999",
+    price: "₹1,500",
     period: "/month",
     features: [
       "Unlimited AI requests",
@@ -37,6 +38,7 @@ const PLANS = [
     cta: "Upgrade to Pro",
     disabled: false,
     highlight: true,
+    comingSoon: false,
   },
   {
     id: "team",
@@ -50,9 +52,10 @@ const PLANS = [
       "Team knowledge base",
       "Admin controls",
     ],
-    cta: "Upgrade to Team",
-    disabled: false,
+    cta: "Coming Soon",
+    disabled: true,
     highlight: false,
+    comingSoon: true,
   },
 ];
 
@@ -79,7 +82,7 @@ function loadRazorpayScript(): Promise<boolean> {
 export default function BillingPage() {
   const { userId } = useCustomAuth();
   const router = useRouter();
-  const [subscription, setSubscription] = useState<{ plan: string; status: string } | null>(null);
+  const [subscription, setSubscription] = useState<{ plan: string; status: string; current_period_end?: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -218,31 +221,42 @@ export default function BillingPage() {
           {PLANS.map((plan) => (
             <div
               key={plan.id}
-              className={`rounded-2xl border p-6 flex flex-col gap-5 ${
-                plan.highlight
+              className={`rounded-2xl border p-6 flex flex-col gap-5 relative ${
+                plan.comingSoon
+                  ? "border-black/8 dark:border-white/8 bg-white/40 dark:bg-white/[0.02] opacity-70"
+                  : plan.highlight
                   ? "border-amber-400 dark:border-amber/60 bg-amber-50/50 dark:bg-amber/5 shadow-lg"
                   : "border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5"
               }`}
             >
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <h2 className="font-semibold text-black dark:text-ivory">{plan.name}</h2>
+                  <h2 className={`font-semibold ${plan.comingSoon ? "text-black/40 dark:text-white/30" : "text-black dark:text-ivory"}`}>
+                    {plan.name}
+                  </h2>
                   {plan.highlight && (
                     <span className="text-[10px] bg-amber-200 dark:bg-amber/20 text-amber-800 dark:text-amber px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">
                       Popular
                     </span>
                   )}
+                  {plan.comingSoon && (
+                    <span className="text-[10px] bg-black/6 dark:bg-white/8 text-black/40 dark:text-white/40 px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border border-black/8 dark:border-white/10">
+                      Coming soon
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-baseline gap-1 mt-2">
-                  <span className="text-2xl font-bold text-black dark:text-ivory">{plan.price}</span>
+                  <span className={`text-2xl font-bold ${plan.comingSoon ? "text-black/30 dark:text-white/25" : "text-black dark:text-ivory"}`}>
+                    {plan.price}
+                  </span>
                   <span className="text-xs text-black/40 dark:text-white/40">{plan.period}</span>
                 </div>
               </div>
 
               <ul className="flex flex-col gap-2.5 flex-1">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-[13px] text-black/70 dark:text-white/70">
-                    <CheckCircle2 size={13} className="text-green-500 mt-0.5 flex-shrink-0" />
+                  <li key={f} className={`flex items-start gap-2 text-[13px] ${plan.comingSoon ? "text-black/35 dark:text-white/30" : "text-black/70 dark:text-white/70"}`}>
+                    <CheckCircle2 size={13} className={`mt-0.5 flex-shrink-0 ${plan.comingSoon ? "text-black/20 dark:text-white/20" : "text-green-500"}`} />
                     {f}
                   </li>
                 ))}
@@ -253,6 +267,11 @@ export default function BillingPage() {
                   <span className="text-xs font-semibold text-green-600 dark:text-green-400">
                     ✓ Current Plan
                   </span>
+                  {plan.id !== "free" && subscription?.current_period_end && (
+                    <p className="text-[11px] text-black/35 dark:text-white/30 mt-1.5">
+                      Renews {new Date(subscription.current_period_end).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  )}
                   {plan.id !== "free" && (
                     <button
                       onClick={handleCancel}
@@ -263,6 +282,13 @@ export default function BillingPage() {
                     </button>
                   )}
                 </div>
+              ) : plan.comingSoon ? (
+                <button
+                  disabled
+                  className="py-2.5 rounded-xl text-sm font-medium bg-black/4 dark:bg-white/4 text-black/25 dark:text-white/25 cursor-not-allowed border border-dashed border-black/10 dark:border-white/10"
+                >
+                  Coming soon
+                </button>
               ) : (
                 <button
                   onClick={plan.disabled ? undefined : () => handleUpgrade(plan.id as "pro" | "team")}

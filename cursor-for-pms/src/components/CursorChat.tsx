@@ -972,9 +972,10 @@ export default function CursorChat() {
                         <span className="italic">Thinking…</span>
                       </div>
                     ) : (
-                      /* Render parts in the order they arrived — text before tool blocks,
-                         tool blocks where they appear, final text after tool results */
-                      msg.parts.map((part, i) => {
+                      <>
+                      {/* Render parts in the order they arrived — text before tool blocks,
+                         tool blocks where they appear, final text after tool results */}
+                      {msg.parts.map((part, i) => {
                         if (part.kind === "tool") {
                           if (part.call.name === "render_ui") {
                             const uiStatus: "running" | "done" | "error" =
@@ -1044,7 +1045,30 @@ export default function CursorChat() {
                         }
 
                         return null;
-                      })
+                      })}
+
+                      {/* Streaming phase indicator — shown after parts while stream is in-flight */}
+                      {isStreaming && msg.id === messages[messages.length - 1]?.id && (() => {
+                        const lastPart = msg.parts[msg.parts.length - 1];
+                        let label: string | null = null;
+                        if (lastPart?.kind === "tool" && lastPart.call.status === "running") {
+                          label = `Calling ${lastPart.call.name.replace(/_/g, " ")}…`;
+                        } else if (lastPart?.kind === "tool" && lastPart.call.status === "done") {
+                          label = "Processing…";
+                        }
+                        if (!label) return null;
+                        return (
+                          <div className="flex items-center gap-2 py-1 text-[11.5px] text-black/40 dark:text-white/35">
+                            <span className="flex gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:0ms]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:160ms]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50 animate-bounce [animation-delay:320ms]" />
+                            </span>
+                            <span className="italic">{label}</span>
+                          </div>
+                        );
+                      })()}
+                      </>
                     )}
 
                     {/* Deduplicated sources after all content */}
