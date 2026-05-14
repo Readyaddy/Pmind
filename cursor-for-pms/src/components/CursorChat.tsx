@@ -29,13 +29,15 @@ import PermissionPrompt from "./agent/PermissionPrompt";
 import MentionPicker, { type MentionItem } from "./agent/MentionPicker";
 import ArtifactCard, { type ArtifactArgs } from "./agent/ArtifactCard";
 import CritiqueCard, { type Critique } from "./agent/CritiqueCard";
+import DesignBriefCard, { type DesignBriefArgs } from "./agent/DesignBriefCard";
 
 const PERMISSION_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
 const TREE_REFRESH_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
 
 type MessagePart =
   | { kind: "text"; text: string }
-  | { kind: "tool"; call: ToolCall };
+  | { kind: "tool"; call: ToolCall }
+  | { kind: "agent_label"; name: string };
 
 interface Message {
   id: string;
@@ -177,6 +179,9 @@ function serializeForWire(messages: Message[]): Array<{
     const asstBlocks: Array<Record<string, unknown>> = [];
     const toolBlocks: Array<Record<string, unknown>> = [];
     for (const p of m.parts) {
+      if (p.kind === "agent_label") {
+        continue;
+      }
       if (p.kind === "text" && p.text) {
         asstBlocks.push({ type: "text", text: p.text });
       } else if (p.kind === "tool") {
@@ -617,6 +622,18 @@ export default function CursorChat() {
             }
           }
         }
+
+        // agent_start → insert a label pill into the message
+        if (eventType === "agent_start") {
+          const name = payload.name as string;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== aiId) return m;
+              return { ...m, parts: [...m.parts, { kind: "agent_label" as const, name }] };
+            }),
+          );
+        }
+        // agent_done → no-op (sub-agent's own tool events already show progress)
 
         if (eventType === "done") break;
       }
@@ -1061,7 +1078,28 @@ export default function CursorChat() {
                       {/* Render parts in the order they arrived — text before tool blocks,
                          tool blocks where they appear, final text after tool results */}
                       {msg.parts.map((part, i) => {
+                        if (part.kind === "agent_label") {
+                          return (
+                            <div key={`agent-label-${part.name}-${i}`} className="flex items-center gap-1.5 pt-1 pb-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-amber-700 dark:text-amber bg-amber-100/70 dark:bg-amber/10 ring-1 ring-amber-200/50 dark:ring-amber/20 tracking-wide">
+                                ⬡ {part.name}
+                              </span>
+                            </div>
+                          );
+                        }
+
                         if (part.kind === "tool") {
+                          if (part.call.name === "design_brief") {
+                            return (
+                              <DesignBriefCard
+                                key={`brief-${part.call.id}-${i}`}
+                                args={part.call.args as unknown as DesignBriefArgs}
+                                status={part.call.status === "done" ? "done" : "running"}
+                                onSubmit={(brief) => void handleSubmit(undefined, brief)}
+                              />
+                            );
+                          }
+
                           if (part.call.name === "render_ui") {
                             const uiStatus: "running" | "done" | "error" =
                               part.call.status === "done" ? "done"

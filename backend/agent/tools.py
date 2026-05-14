@@ -323,6 +323,40 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "design_brief",
+        "description": (
+            "Gather the user's design preferences BEFORE building any UI. "
+            "Call this as your FIRST action whenever the user asks for a design, "
+            "mockup, website, landing page, component, or dashboard — unless they "
+            "have ALREADY specified both an aesthetic direction AND a color palette "
+            "in the same message, OR the request is an iteration on something you "
+            "already built ('improve', 'refine', 'add a section', 'dark mode version').\n\n"
+            "The frontend renders an interactive brief: aesthetic style pickers "
+            "(glassmorphism, editorial, neo-tech, brutalist, organic, retro), "
+            "color palette swatches, section checkboxes, and a notes field. "
+            "After the user submits, their next message contains the full design "
+            "spec — use it to call render_ui."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "type": "string",
+                    "description": "1-2 sentence summary of what the user wants to build.",
+                },
+                "suggested_styles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["glassmorphism", "editorial", "neo-tech", "brutalist", "organic", "retro"],
+                    },
+                    "description": "1-2 styles you'd suggest given the context — pre-selected in the form.",
+                },
+            },
+            "required": ["context"],
+        },
+    },
+    {
         "name": "critique_design",
         "description": (
             "Have a senior-designer review-agent critique a UI you just rendered. "
@@ -762,6 +796,24 @@ async def _critique_design(
         # Surface the structured critique on the tool_result so the frontend
         # can render it without re-parsing.
         "critique": critique,
+    }
+
+
+async def _design_brief(
+    ctx: dict,
+    context: str,
+    suggested_styles: list[str] | None = None,
+) -> dict:
+    """No-op server-side. Frontend renders the interactive design brief card."""
+    return {
+        "summary": (
+            "Design brief form shown to user — awaiting their selections. "
+            "Do NOT call render_ui now. STOP and wait. "
+            "The user's next message will contain their chosen aesthetic, "
+            "color palette, sections, and any extra requirements. "
+            "Use that full spec to call render_ui."
+        ),
+        "sources": [],
     }
 
 
@@ -1206,6 +1258,7 @@ async def _create_folder(
 
 
 TOOL_EXECUTORS = {
+    "design_brief": _design_brief,
     "check_calendar": _check_calendar,
     "analyze_data": _analyze_data,
     "search_workspace": _search_workspace,

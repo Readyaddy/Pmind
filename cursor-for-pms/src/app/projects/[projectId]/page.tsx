@@ -41,10 +41,7 @@ export default function ProjectHomePage() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [guideOpen, setGuideOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem("pmind_guide_dismissed") !== "1";
-  });
+  const [guideOpen, setGuideOpen] = useState(true);
   const [integrations, setIntegrations] = useState<IntegrationStatus>({
     jira: { connected: false },
     linear: { connected: false },
@@ -52,6 +49,10 @@ export default function ProjectHomePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
 
   const API = process.env.NEXT_PUBLIC_API_URL;
+
+  useEffect(() => {
+    setGuideOpen(localStorage.getItem("pmind_guide_dismissed") !== "1");
+  }, []);
 
   useEffect(() => {
     if (!userId || !projectId) return;
