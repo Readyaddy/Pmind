@@ -32,7 +32,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-serif font-semibold text-white/80">1. Acceptance of Terms</h2>
             <p className="text-white/60 leading-relaxed">
-              By accessing or using PMind ("the Service"), you agree to be bound by these Terms of Service. 
+              By accessing or using PMind (&ldquo;the Service&rdquo;), you agree to be bound by these Terms of Service.
               If you disagree with any part of the terms, you may not access the Service.
             </p>
           </section>
@@ -56,7 +56,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-serif font-semibold text-white/80">4. User Content and Data</h2>
             <p className="text-white/60 leading-relaxed">
-              You retain all rights to any documents, projects, or knowledge base files you upload ("User Content"). 
+              You retain all rights to any documents, projects, or knowledge base files you upload (&ldquo;User Content&rdquo;).
               By uploading content, you grant PMind a license to use, store, and process this content solely for the 
               purpose of providing the Service, including processing via our LLM partners to generate AI responses.
             </p>
