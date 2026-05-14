@@ -15,13 +15,13 @@ import os
 import re
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from google import genai
 from google.genai import types as genai_types
 
 from deps import get_supabase
 from .markdown import markdown_to_tiptap
+
+logger = logging.getLogger(__name__)
 
 
 # ── Tool schemas (Anthropic format) ──────────────────────────────────────────
@@ -777,8 +777,10 @@ async def _render_ui(
     and renders the iframe preview itself. We return a short summary for the
     agent so it knows the user saw it."""
     parts = [f"html: {len(html)} chars"]
-    if css: parts.append(f"css: {len(css)}")
-    if js: parts.append(f"js: {len(js)}")
+    if css:
+        parts.append(f"css: {len(css)}")
+    if js:
+        parts.append(f"js: {len(js)}")
     parts.append(f"framework: {framework or 'vanilla'}")
     return {
         "summary": f"Rendered '{title}' ({', '.join(parts)}). User is viewing it in the chat.",

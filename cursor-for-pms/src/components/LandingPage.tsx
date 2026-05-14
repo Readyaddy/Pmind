@@ -489,6 +489,10 @@ export default function LandingPage() {
               <span style={{ fontFamily:S.serif, fontWeight:700, fontSize:14, color:S.text, letterSpacing:"-0.02em" }}>PMind</span>
             </div>
             <span style={{ fontSize:12, color:S.text3 }}>© 2025 PMind</span>
+            <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+              <a href="/privacy" style={{ fontSize:12, color:S.text3, textDecoration:"none" }}>Privacy Policy</a>
+              <a href="/terms" style={{ fontSize:12, color:S.text3, textDecoration:"none" }}>Terms of Service</a>
+            </div>
             <span style={{ fontFamily:S.serif, fontStyle:"italic", fontSize:12, color:"rgba(217,119,6,0.36)" }}>The workspace that thinks in product.</span>
           </div>
         </div>
