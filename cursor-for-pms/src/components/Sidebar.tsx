@@ -20,6 +20,7 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { ThemeToggle } from "./ThemeToggle";
 import KnowledgeBaseInline from "./KnowledgeBaseInline";
 import { useActiveProject } from "@/store/activeProject";
+import ConfirmDialog from "./ConfirmDialog";
 import {
   FileTreeItem,
   RootPendingCreateInput,
@@ -78,6 +79,11 @@ export default function Sidebar() {
   const [plan, setPlan] = useState<string>("free");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingTreeIds, setLoadingTreeIds] = useState<Set<string>>(new Set());
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    message?: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const loadedProjectsRef = useRef<Set<string>>(new Set());
   const renamingValueRef = useRef<string>("");
@@ -216,20 +222,28 @@ export default function Sidebar() {
     router.push(`/projects/${project.id}`);
   };
 
-  const deleteProject = async (e: React.MouseEvent, projectId: string) => {
+  const deleteProject = (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
     if (!userId) return;
-    await fetch(`${API}/projects/${projectId}`, { method: "DELETE", headers: authHeader() });
-    setProjects(prev => prev.filter(p => p.id !== projectId));
-    if (selectedProjectId === projectId) {
-      const remaining = projects.filter(p => p.id !== projectId);
-      if (remaining.length > 0) {
-        setActiveProject(remaining[0].id, remaining[0].name);
-        router.push(`/projects/${remaining[0].id}`);
-      } else {
-        router.push("/projects");
-      }
-    }
+    const project = projects.find(p => p.id === projectId);
+    setConfirmState({
+      title: `Delete "${project?.name ?? "this project"}"?`,
+      message: "All documents and folders inside will be permanently deleted.",
+      onConfirm: async () => {
+        setConfirmState(null);
+        await fetch(`${API}/projects/${projectId}`, { method: "DELETE", headers: authHeader() });
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        if (selectedProjectId === projectId) {
+          const remaining = projects.filter(p => p.id !== projectId);
+          if (remaining.length > 0) {
+            setActiveProject(remaining[0].id, remaining[0].name);
+            router.push(`/projects/${remaining[0].id}`);
+          } else {
+            router.push("/projects");
+          }
+        }
+      },
+    });
   };
 
   const commitProjectRename = async (projectId: string, name: string) => {
@@ -383,6 +397,25 @@ export default function Sidebar() {
     [API, authHeader, activeDocId, router, selectedProjectId]
   );
 
+  const onRequestDelete = useCallback(
+    (node: TreeNode) => {
+      if (node.type === "folder") {
+        setConfirmState({
+          title: `Delete folder "${node.name}"?`,
+          message: "All documents inside this folder will be permanently deleted.",
+          onConfirm: () => { setConfirmState(null); onDeleteFolder(node.id); },
+        });
+      } else {
+        setConfirmState({
+          title: `Delete "${node.name}"?`,
+          message: "This document will be permanently deleted.",
+          onConfirm: () => { setConfirmState(null); onDeleteDoc(node.id); },
+        });
+      }
+    },
+    [onDeleteFolder, onDeleteDoc]
+  );
+
   const treeCtx: TreeCtx | null = selectedProjectId
     ? {
         projectId: selectedProjectId,
@@ -400,6 +433,7 @@ export default function Sidebar() {
         onPendingCancel,
         onDeleteFolder,
         onDeleteDoc,
+        onRequestDelete,
       }
     : null;
 
@@ -407,6 +441,15 @@ export default function Sidebar() {
     pendingCreate?.projectId === selectedProjectId && pendingCreate?.parentFolderId === null;
 
   return (
+    <>
+    {confirmState && (
+      <ConfirmDialog
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState(null)}
+      />
+    )}
     <div className="w-60 glass-pane h-full flex flex-col rounded-2xl flex-shrink-0 transition-colors relative z-10 overflow-hidden">
 
       {/* Project picker header */}
@@ -640,6 +683,7 @@ export default function Sidebar() {
         <UserFooter />
       </div>
     </div>
+    </>
   );
 }
 

@@ -402,6 +402,68 @@ export default function LandingPage() {
 
       {divider}
 
+      {divider}
+
+      {/* Quickstart / How it works */}
+      <section style={{ padding:"96px 0", position:"relative", zIndex:1 }}>
+        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
+
+          {/* Header */}
+          <div className="lp-reveal" style={{ textAlign:"center", marginBottom:64 }}>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"4px 14px", marginBottom:24, background:"rgba(217,119,6,0.08)", border:"1px solid rgba(217,119,6,0.18)", borderRadius:100, fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:S.amberHi }}>
+              Quickstart Guide
+            </div>
+            <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.6vw,42px)", fontWeight:700, lineHeight:1.12, letterSpacing:"-0.028em", color:S.text, marginBottom:16 }}>
+              Up and running in 5 minutes
+            </h2>
+            <p style={{ fontSize:15, color:S.text2, maxWidth:420, margin:"0 auto", lineHeight:1.7 }}>
+              A product-grounded AI workspace shouldn&apos;t take a day to learn. Here&apos;s the whole thing.
+            </p>
+          </div>
+
+          {/* Steps grid — 4 columns */}
+          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:16, marginBottom:48 }}>
+            {[
+              { n:"01", icon:"⬡", title:"Create a project", desc:"Group your work by product or initiative. Each project gets its own docs, KB, and AI context." },
+              { n:"02", icon:"🧠", title:"Fill in Product Brain", desc:"Paste your strategy, users, and constraints once. Every AI command reads this automatically — forever." },
+              { n:"03", icon:"⌘", title:"Press ⌘K in any doc", desc:"Open the command palette inside a document. Choose Write PRD, Break into tickets, Stakeholder update, and more." },
+              { n:"04", icon:"💬", title:"Chat with your docs", desc:"The AI chat panel reads your open document. Ask it to find gaps, simplify for execs, or draft an answer." },
+              { n:"05", icon:"📚", title:"Upload to Knowledge Base", desc:"Drop in research PDFs, interview transcripts, or CSVs. AI searches them and cites what it finds." },
+              { n:"06", icon:"@", title:"Tag files with @", desc:"Type @ in chat to mention any doc or KB file by name. The AI reads it directly in context." },
+              { n:"07", icon:"📅", title:"Check your calendar", desc:"See upcoming meetings on your project home. Conflict detection flags back-to-back and overlapping blocks." },
+              { n:"08", icon:"✦", title:"Let AI apply changes", desc:"AI suggests edits highlighted in the document. Accept or reject each one — no blind rewrites." },
+            ].map((step, i) => (
+              <div key={i} style={{
+                padding:"22px 20px", borderRadius:12,
+                background: i===0 ? "rgba(217,119,6,0.07)" : "rgba(255,255,255,0.022)",
+                border:`1px solid ${i===0 ? "rgba(217,119,6,0.25)" : "rgba(255,255,255,0.055)"}`,
+                borderTopColor: i===0 ? "rgba(217,119,6,0.38)" : undefined,
+                transition:"border-color 0.2s",
+              }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+                  <span style={{ fontFamily:S.mono, fontSize:9, color:i===0?S.amber:S.text3, letterSpacing:"0.06em", opacity:0.7 }}>{step.n}</span>
+                  <span style={{ fontSize:16 }}>{step.icon}</span>
+                </div>
+                <p style={{ fontSize:13, fontWeight:700, color:S.text, marginBottom:7, letterSpacing:"-0.01em" }}>{step.title}</p>
+                <p style={{ fontSize:12, color:S.text2, lineHeight:1.65, margin:0 }}>{step.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Link to full guide */}
+          <div style={{ textAlign:"center" }}>
+            <Link
+              href="/quickstart"
+              style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color:S.amberHi, textDecoration:"none", padding:"8px 20px", background:"rgba(217,119,6,0.08)", border:"1px solid rgba(217,119,6,0.22)", borderRadius:8 }}
+            >
+              View full guide with tips →
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {divider}
+
       {/* CTA */}
       <section style={{ padding:"96px 0", textAlign:"center", position:"relative", zIndex:1 }}>
         <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>

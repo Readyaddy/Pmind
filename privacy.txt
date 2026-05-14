@@ -1,0 +1,30 @@
+Privacy Policy
+Last updated: May 14, 2026
+
+1. Introduction
+Welcome to PMind. We respect your privacy and are committed to protecting your personal data. This privacy policy will inform you as to how we look after your personal data when you visit our website and use our application, and tell you about your privacy rights and how the law protects you.
+
+2. Data We Collect
+To provide you with our AI-native product management workspace, we collect the following types of information:
+- Identity & Contact Data: Email address and profile information provided via our authentication provider (Clerk).
+- Workspace Data: Documents, project structures, and knowledge base files you upload to the platform (stored securely via Supabase).
+- AI Interaction Data: Prompts, queries, and interactions you have with the AI assistant.
+- Integration Data: Access tokens and metadata for connected services like Jira and Linear, stored securely and used only to perform actions on your behalf.
+
+3. How We Use Your Data
+We use your data exclusively to provide, maintain, and improve the PMind service. Your workspace data and documents are processed by our Large Language Model (LLM) partners (such as Google or OpenAI) solely for the purpose of generating responses, drafting documents, and providing AI assistance.
+
+Important: We do not train our proprietary models on your private documents, nor do we sell your data to third parties.
+
+4. Third-Party Services
+We employ third-party companies to facilitate our service. These third parties have access to your Personal Data only to perform these tasks on our behalf and are obligated not to disclose or use it for any other purpose:
+- Clerk: User authentication and identity management.
+- Supabase: Database and secure file storage infrastructure.
+- LLM Providers: Processing text for AI generation capabilities.
+- Render / Vercel: Cloud hosting infrastructure.
+
+5. Data Security
+We have put in place appropriate security measures to prevent your personal data from being accidentally lost, used, or accessed in an unauthorized way, altered, or disclosed. All communication with our servers is encrypted using standard TLS/SSL protocols.
+
+6. Contact Us
+If you have any questions about this privacy policy or our privacy practices, please contact us at support@pmind.app.

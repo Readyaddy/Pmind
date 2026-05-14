@@ -16,11 +16,21 @@ from agent.tools import _tiptap_to_text
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-FREE_LIMIT = 20  # AI requests per day on free tier
+# Per-model daily limits for free-tier users.
+# None = unlimited, 0 = Pro only, int = daily cap
+MODEL_FREE_LIMITS: dict[str, int | None] = {
+    "gemini-2.5-flash-lite":  None,  # unlimited for everyone
+    "gemini-2.5-flash":       20,    # 20 requests/day
+    "gemini-2.5-pro":         5,     # 5 requests/day
+    "gemini-3-flash-preview":  0,    # Pro only
+    "gemini-3.1-pro-preview":  0,    # Pro only
+}
+# Shared cap for endpoints that don't expose model selection (/complete, /chat)
+SHARED_FREE_LIMIT = 20
 
 
-def _check_usage(user_id: str, endpoint: str = "ai"):
-    """Raise 429 if free-tier daily limit exceeded. No-op in dev mode or for paid users."""
+def _check_usage(user_id: str, endpoint: str = "ai", model: str | None = None):
+    """Enforce free-tier limits. model-aware for /agent; shared cap for other endpoints."""
     if os.getenv("NEXT_PUBLIC_DEV_MODE") == "true":
         return
     supabase = get_supabase()
@@ -29,17 +39,43 @@ def _check_usage(user_id: str, endpoint: str = "ai"):
         plan = plan_res.data[0]["plan"] if plan_res.data else "free"
         if plan != "free":
             return
+
         today = datetime.now(timezone.utc).date().isoformat()
-        count_res = (
-            supabase.table("usage_logs")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .gte("created_at", today)
-            .execute()
-        )
-        if (count_res.count or 0) >= FREE_LIMIT:
-            raise HTTPException(status_code=429, detail="Daily limit reached. Upgrade to Pro.")
-        supabase.table("usage_logs").insert({"user_id": user_id, "endpoint": endpoint}).execute()
+
+        if model and model in MODEL_FREE_LIMITS:
+            limit = MODEL_FREE_LIMITS[model]
+            if limit is None:
+                return  # Unlimited model — no tracking needed
+            if limit == 0:
+                raise HTTPException(status_code=403, detail="This model requires a Pro subscription. Upgrade to unlock it.")
+            # Per-model daily count (stored as endpoint=model id)
+            count_res = (
+                supabase.table("usage_logs")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("endpoint", model)
+                .gte("created_at", today)
+                .execute()
+            )
+            if (count_res.count or 0) >= limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Daily limit of {limit} reached for {model}. Upgrade to Pro for unlimited access.",
+                )
+            supabase.table("usage_logs").insert({"user_id": user_id, "endpoint": model}).execute()
+        else:
+            # Shared limit for non-model-aware endpoints
+            count_res = (
+                supabase.table("usage_logs")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("endpoint", endpoint)
+                .gte("created_at", today)
+                .execute()
+            )
+            if (count_res.count or 0) >= SHARED_FREE_LIMIT:
+                raise HTTPException(status_code=429, detail="Daily limit reached. Upgrade to Pro for unlimited access.")
+            supabase.table("usage_logs").insert({"user_id": user_id, "endpoint": endpoint}).execute()
     except HTTPException:
         raise
     except Exception:
@@ -462,7 +498,7 @@ async def review_ui(
 # ── Agent ──────────────────────────────────────────────────────────────────────
 
 FREE_PROVIDER = "gemini"
-FREE_MODEL = "gemini-2.5-flash"
+FREE_DEFAULT_MODEL = "gemini-2.5-flash-lite"  # unlimited for free users
 
 
 class PendingDecision(BaseModel):
@@ -471,12 +507,13 @@ class PendingDecision(BaseModel):
     reason: Optional[str] = None
 
 
-PRO_MODELS = [
-    {"id": "gemini-2.5-flash-lite",    "label": "2.5 Flash Lite",    "description": "Fastest & most affordable"},
-    {"id": "gemini-2.5-flash",         "label": "2.5 Flash",          "description": "Fast & balanced (default)"},
-    {"id": "gemini-2.5-pro",           "label": "2.5 Pro",            "description": "Most capable, best reasoning"},
-    {"id": "gemini-3-flash-preview",   "label": "3 Flash Preview",    "description": "Gemini 3 Flash (preview)"},
-    {"id": "gemini-3.1-pro-preview",   "label": "3.1 Pro Preview",    "description": "Most powerful — Gemini 3.1 Pro (preview)"},
+# Full model catalogue — free_limit mirrors MODEL_FREE_LIMITS above
+ALL_MODELS = [
+    {"id": "gemini-2.5-flash-lite",  "label": "2.5 Flash Lite",  "description": "Fastest — unlimited for everyone", "free_limit": None},
+    {"id": "gemini-2.5-flash",       "label": "2.5 Flash",        "description": "Fast & balanced",                 "free_limit": 20},
+    {"id": "gemini-2.5-pro",         "label": "2.5 Pro",          "description": "Most capable reasoning",          "free_limit": 5},
+    {"id": "gemini-3-flash-preview",  "label": "3 Flash ✦",        "description": "Gemini 3 Flash (preview)",        "free_limit": 0},
+    {"id": "gemini-3.1-pro-preview",  "label": "3.1 Pro ✦",        "description": "Most powerful — Gemini 3.1 Pro",  "free_limit": 0},
 ]
 
 
@@ -525,20 +562,53 @@ def _get_plan(user_id: str) -> str:
 
 
 def _resolve_llm(user_id: str, model_override: Optional[str] = None) -> tuple:
-    """Return (provider, model). Free users are locked to Gemini Flash.
-    Pro users may pick any model from PRO_MODELS via model_override."""
+    """Return (provider, model).
+    Free users default to flash-lite (unlimited) but may pick any model
+    with a non-zero free_limit. Pro users can pick any model."""
     plan = _get_plan(user_id)
-    if plan == "free":
-        logger.debug("LLM resolve — user=%s plan=free model=%s", user_id, FREE_MODEL)
-        return FREE_PROVIDER, FREE_MODEL
     provider = os.getenv("LLM_PROVIDER", FREE_PROVIDER)
-    valid_ids = {m["id"] for m in PRO_MODELS}
+    valid_ids = {m["id"] for m in ALL_MODELS}
+
+    if plan == "free":
+        if model_override and model_override in valid_ids:
+            if MODEL_FREE_LIMITS.get(model_override, 0) != 0:
+                logger.debug("LLM resolve — user=%s plan=free model=%s (override)", user_id, model_override)
+                return provider, model_override
+        logger.debug("LLM resolve — user=%s plan=free model=%s (default)", user_id, FREE_DEFAULT_MODEL)
+        return provider, FREE_DEFAULT_MODEL
+
+    # Pro / team
     if model_override and model_override in valid_ids:
         logger.info("LLM resolve — user=%s plan=%s model=%s (override)", user_id, plan, model_override)
         return provider, model_override
-    model = os.getenv("LLM_MODEL", FREE_MODEL)
+    model = os.getenv("LLM_MODEL", FREE_DEFAULT_MODEL)
     logger.debug("LLM resolve — user=%s plan=%s model=%s (default)", user_id, plan, model)
     return provider, model
+
+
+@router.get("/usage")
+async def get_usage_today(user_id: str = Depends(get_user_id)):
+    """Returns today's per-model request counts for the current user."""
+    if os.getenv("NEXT_PUBLIC_DEV_MODE") == "true":
+        return {"plan": "pro", "counts": {}}
+    supabase = get_supabase()
+    try:
+        plan = _get_plan(user_id)
+        today = datetime.now(timezone.utc).date().isoformat()
+        res = (
+            supabase.table("usage_logs")
+            .select("endpoint")
+            .eq("user_id", user_id)
+            .gte("created_at", today)
+            .execute()
+        )
+        counts: dict[str, int] = {}
+        for row in res.data or []:
+            ep = row["endpoint"]
+            counts[ep] = counts.get(ep, 0) + 1
+        return {"plan": plan, "counts": counts}
+    except Exception:
+        return {"plan": "free", "counts": {}}
 
 
 @router.get("/agent/info")
@@ -549,8 +619,8 @@ async def agent_info(user_id: str = Depends(get_user_id)):
         "plan": plan,
         "provider": provider,
         "model": model,
-        "locked": plan == "free",
-        "pro_models": PRO_MODELS,
+        "locked": False,  # free users can now pick models within their limits
+        "pro_models": ALL_MODELS,
     }
 
 
@@ -561,6 +631,7 @@ async def ai_agent(
 ):
     supabase = get_supabase()
     provider, model = _resolve_llm(user_id, request.model_override)
+    _check_usage(user_id, endpoint="agent", model=model)
     is_resume = bool(request.pending_decisions)
 
     # Thread + message persistence
@@ -602,24 +673,63 @@ async def ai_agent(
             except Exception:
                 pass
 
-    # Pre-load @-mentioned files into document_context
+    # Pre-load @-mentioned files — content + explicit UUIDs so agent can act without searching
     doc_ctx = request.document_context or ""
+    mention_blocks: list[str] = []
     try:
         if request.mentioned_doc_ids:
             for doc_id in request.mentioned_doc_ids:
-                res = supabase.table("documents").select("title, content").eq("id", doc_id).eq("user_id", user_id).execute()
+                res = (
+                    supabase.table("documents")
+                    .select("title, content")
+                    .eq("id", doc_id)
+                    .eq("user_id", user_id)
+                    .execute()
+                )
                 if res.data:
                     row = res.data[0]
                     text = _tiptap_to_text(row.get("content") or {})
-                    doc_ctx += f"\n\n--- @{row.get('title', 'doc')} ---\n{text[:3000]}"
+                    mention_blocks.append(
+                        f"📄 PM Document: \"{row.get('title', 'Untitled')}\"\n"
+                        f"   doc_id: {doc_id}  ← pass this directly to read_doc / edit_doc\n"
+                        f"   Full content:\n{text[:5000]}"
+                    )
         if request.mentioned_kb_ids:
             for kb_id in request.mentioned_kb_ids:
-                res = supabase.table("knowledge_chunks").select("content").eq("knowledge_document_id", kb_id).eq("user_id", user_id).limit(5).execute()
-                if res.data:
-                    combined = "\n".join(r["content"] for r in res.data)
-                    doc_ctx += f"\n\n--- @KB:{kb_id} ---\n{combined[:3000]}"
+                doc_res = (
+                    supabase.table("knowledge_documents")
+                    .select("filename")
+                    .eq("id", kb_id)
+                    .eq("user_id", user_id)
+                    .execute()
+                )
+                filename = doc_res.data[0]["filename"] if doc_res.data else "file"
+                chunks_res = (
+                    supabase.table("knowledge_chunks")
+                    .select("content")
+                    .eq("knowledge_document_id", kb_id)
+                    .eq("user_id", user_id)
+                    .limit(10)
+                    .execute()
+                )
+                combined = "\n".join(r["content"] for r in (chunks_res.data or []))
+                mention_blocks.append(
+                    f"📎 Knowledge Base File: \"{filename}\"\n"
+                    f"   knowledge_document_id: {kb_id}  ← pass this to read_kb_document / analyze_data\n"
+                    f"   Content (top chunks):\n{combined[:5000]}"
+                )
     except Exception:
         pass
+
+    mentions_ctx = ""
+    if mention_blocks:
+        mentions_ctx = (
+            "╔══════════════════════════════════════════════════════╗\n"
+            "  TAGGED FILES — IDs are confirmed. Use them directly.\n"
+            "  Do NOT call search_workspace or list_docs for these.\n"
+            "╚══════════════════════════════════════════════════════╝\n\n"
+            + "\n\n".join(mention_blocks)
+        )
 
     pending = [d.model_dump() for d in (request.pending_decisions or [])]
 
@@ -632,6 +742,7 @@ async def ai_agent(
                 project_id=request.project_id,
                 product_context=request.product_context,
                 document_context=doc_ctx,
+                mentions_context=mentions_ctx,
                 pending_decisions=pending or None,
                 model=model,
                 provider=provider,

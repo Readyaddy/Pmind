@@ -10,9 +10,12 @@ Citations: every result includes a `sources` list of {id, kind, title, snippet?}
 that the frontend renders as clickable [n] chips.
 """
 import json
+import logging
 import os
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from google import genai
 from google.genai import types as genai_types
@@ -214,6 +217,112 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "check_calendar",
+        "description": (
+            "Check the user's meeting schedule for today (or tomorrow / this_week) "
+            "to help with time-blocking and planning. Returns a list of meetings with "
+            "start/end times, durations, and any detected conflicts (overlaps, "
+            "back-to-back blocks, marathon stretches). Use this when the user asks "
+            "things like: 'Do I have time to finish this today?', 'When is my next "
+            "free block?', 'Am I too busy this week?', or 'Prep me for my next meeting'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "timeframe": {
+                    "type": "string",
+                    "enum": ["today", "tomorrow"],
+                    "description": "Which day to fetch. Default: 'today'.",
+                    "default": "today",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "search_workspace",
+        "description": (
+            "PRIMARY search tool — unified semantic search across BOTH the knowledge "
+            "base (uploaded PDFs, interviews, research) AND all PM documents in the "
+            "project simultaneously. Always call this BEFORE drafting any artifact. "
+            "Returns top-k ranked snippets from both sources. Each snippet includes "
+            "a doc_id — call read_doc(doc_id) if you need the full document, or "
+            "read_kb_document(knowledge_document_id) for a full KB file. "
+            "For vague questions, issue 2-3 calls with different query angles "
+            "(e.g. 'checkout blockers', 'Q3 roadmap risks', 'user complaints') "
+            "then synthesise the combined results."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language query, e.g. 'checkout flow pain points'.",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Number of results to return (default 5, max 10).",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "read_kb_document",
+        "description": (
+            "Read the FULL text of an uploaded knowledge base document by its id. "
+            "Use this when search_workspace returns a relevant snippet but you need "
+            "deeper context from the same KB file. Pass the knowledge_document_id "
+            "from any search_workspace or search_kb result."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "knowledge_document_id": {
+                    "type": "string",
+                    "description": "The knowledge_document_id from a search result.",
+                },
+            },
+            "required": ["knowledge_document_id"],
+        },
+    },
+    {
+        "name": "analyze_data",
+        "description": (
+            "Run pandas analysis on an uploaded CSV or Excel file from the knowledge base. "
+            "Use this when the user asks to calculate, aggregate, summarise, or explore "
+            "data from a spreadsheet (e.g. 'What's the average churn rate?', 'Show me "
+            "monthly revenue totals', 'Which product has the highest NPS?').\n\n"
+            "Workflow:\n"
+            "1. First call with expression='df.head()' to inspect columns and sample data.\n"
+            "2. Then call again with the real computation expression.\n\n"
+            "Expression examples:\n"
+            "  df.describe()\n"
+            "  df.groupby('Month')['Revenue'].sum()\n"
+            "  df[df['Churn Rate'] > 0.05][['Product', 'Churn Rate']]\n"
+            "  df['NPS'].mean()\n"
+            "  df.sort_values('Revenue', ascending=False).head(10)\n\n"
+            "The expression is evaluated against a pandas DataFrame `df`. "
+            "Available: pd (pandas), np (numpy), standard math builtins."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "knowledge_document_id": {
+                    "type": "string",
+                    "description": "The knowledge_document_id of the CSV or Excel file (from search_workspace or search_kb results).",
+                },
+                "expression": {
+                    "type": "string",
+                    "description": "Pandas expression to evaluate against df. Start with df.head() to explore schema.",
+                    "default": "df.head()",
+                },
+            },
+            "required": ["knowledge_document_id"],
+        },
+    },
+    {
         "name": "critique_design",
         "description": (
             "Have a senior-designer review-agent critique a UI you just rendered. "
@@ -412,15 +521,21 @@ async def _read_doc(ctx: dict, doc_id: str) -> dict:
             .select("id, title, content")
             .eq("id", doc_id)
             .eq("user_id", user_id)
-            .single()
             .execute()
         )
     except Exception as e:
-        return {"summary": f"Doc not found or access denied ({e}).", "sources": []}
+        return {"summary": f"Doc lookup failed: {e}.", "sources": []}
 
-    doc = res.data
-    if not doc:
-        return {"summary": "Document not found.", "sources": []}
+    if not res.data:
+        return {
+            "summary": (
+                f"Document '{doc_id}' not found. "
+                "Use list_docs or search_workspace to find the correct UUID, "
+                "or use read_kb_document if this is a knowledge base file."
+            ),
+            "sources": [],
+        }
+    doc = res.data[0]
 
     text = _tiptap_to_text(doc.get("content")).strip() or "(empty document)"
     return {
@@ -671,6 +786,391 @@ async def _render_ui(
     }
 
 
+async def _check_calendar(ctx: dict, timeframe: str = "today") -> dict:
+    """Fetch the user's Google/Microsoft calendar events and highlight conflicts."""
+    user_id = ctx.get("user_id")
+    provider = ctx.get("calendar_provider", "google")
+
+    from datetime import datetime, timezone, timedelta
+
+    today = datetime.now(timezone.utc)
+    target = today + timedelta(days=1) if timeframe == "tomorrow" else today
+
+    try:
+        from routers.integrations import (
+            _get_clerk_oauth_token,
+            _fetch_google_events, _fetch_microsoft_events, _detect_conflicts,
+        )
+        clerk_provider = f"oauth_{provider}"
+        token = await _get_clerk_oauth_token(user_id or "", clerk_provider)
+
+        if not token:
+            return {
+                "summary": (
+                    "Google Calendar is not connected. "
+                    "To fix this, go to your account settings and enable Google Calendar access "
+                    "(calendar.readonly scope must be added to the Google social connection in Clerk Dashboard)."
+                ),
+                "sources": [],
+            }
+
+        if provider == "microsoft":
+            events = await _fetch_microsoft_events(token, target)
+        else:
+            events = await _fetch_google_events(token, target)
+    except Exception as e:
+        return {"summary": f"Calendar fetch failed: {e}", "sources": []}
+
+    conflicts = _detect_conflicts(events)
+    clean = [{k: v for k, v in ev.items() if not k.startswith("_")} for ev in events]
+
+    if not clean:
+        day_label = "tomorrow" if timeframe == "tomorrow" else "today"
+        return {
+            "summary": f"No meetings scheduled {day_label}. The calendar is clear.",
+            "data": f"No meetings {day_label}.",
+            "sources": [],
+        }
+
+    total_min = sum(ev["duration_minutes"] for ev in clean if not ev["is_all_day"])
+    lines = [f"Schedule for {timeframe} — {total_min // 60}h {total_min % 60}m total:"]
+    for ev in clean:
+        if ev["is_all_day"]:
+            lines.append(f"  • All day — {ev['title']}")
+        else:
+            lines.append(f"  • {ev['start_formatted']}–{ev['end_formatted']} ({ev['duration_minutes']}min) — {ev['title']}")
+
+    if conflicts:
+        lines.append("\nScheduling issues:")
+        for c in conflicts:
+            lines.append(f"  ⚠ [{c['type'].upper()}] {c['message']}")
+
+    return {
+        "summary": f"{len(clean)} meeting(s) {timeframe}, {total_min // 60}h {total_min % 60}m total. {len(conflicts)} conflict(s).",
+        "data": "\n".join(lines),
+        "sources": [],
+    }
+
+
+async def _search_workspace(ctx: dict, query: str, top_k: int = 5) -> dict:
+    """Unified semantic search across KB chunks AND PM document chunks."""
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — workspace search unavailable.", "sources": []}
+
+    top_k = max(1, min(int(top_k or 5), 10))
+
+    try:
+        vector = _embed(query)
+    except Exception as e:
+        return {"summary": f"Embedding failed: {e}", "sources": []}
+
+    supabase = get_supabase()
+    kb_rows: list[dict] = []
+    doc_rows: list[dict] = []
+
+    # ── KB chunks ─────────────────────────────────────────────────────────────
+    try:
+        kb_res = supabase.rpc(
+            "match_knowledge_chunks",
+            {
+                "query_embedding": vector,
+                "match_threshold": 0.35,
+                "match_count": top_k,
+                "p_project_id": project_id,
+            },
+        ).execute()
+        kb_rows = kb_res.data or []
+    except Exception as e:
+        logger.warning("KB chunk search failed: %s", e)
+
+    # ── Document chunks ────────────────────────────────────────────────────────
+    try:
+        doc_res = supabase.rpc(
+            "match_document_chunks",
+            {
+                "query_embedding": vector,
+                "match_threshold": 0.35,
+                "match_count": top_k,
+                "p_project_id": project_id,
+            },
+        ).execute()
+        doc_rows = doc_res.data or []
+    except Exception as e:
+        # Table may not exist yet if migration hasn't run — degrade gracefully
+        logger.warning("Document chunk search unavailable (migration not run?): %s", e)
+
+    if not kb_rows and not doc_rows:
+        return {
+            "summary": (
+                "No relevant results found in the workspace. "
+                "Try a different query, or use list_docs to browse document titles."
+            ),
+            "sources": [],
+        }
+
+    # ── Enrich KB rows with filenames ─────────────────────────────────────────
+    kb_doc_ids = list({r["knowledge_document_id"] for r in kb_rows if r.get("knowledge_document_id")})
+    kb_filenames: dict[str, str] = {}
+    if kb_doc_ids:
+        try:
+            docs_res = (
+                supabase.table("knowledge_documents")
+                .select("id, filename")
+                .in_("id", kb_doc_ids)
+                .execute()
+            )
+            kb_filenames = {d["id"]: d["filename"] for d in (docs_res.data or [])}
+        except Exception:
+            pass
+
+    # ── Enrich document rows with titles ─────────────────────────────────────
+    pm_doc_ids = list({r["document_id"] for r in doc_rows if r.get("document_id")})
+    pm_titles: dict[str, str] = {}
+    if pm_doc_ids:
+        try:
+            titles_res = (
+                supabase.table("documents")
+                .select("id, title")
+                .eq("user_id", user_id)
+                .in_("id", pm_doc_ids)
+                .execute()
+            )
+            pm_titles = {d["id"]: (d["title"] or "Untitled") for d in (titles_res.data or [])}
+        except Exception:
+            pass
+
+    # ── Merge and rank by similarity ──────────────────────────────────────────
+    merged: list[dict] = []
+
+    for r in kb_rows:
+        kb_doc_id = r.get("knowledge_document_id", "")
+        merged.append({
+            "_similarity": r.get("similarity", 0.0),
+            "source_type": "knowledge_base",
+            "knowledge_document_id": kb_doc_id,
+            "doc_id": None,
+            "title": kb_filenames.get(kb_doc_id, "Untitled file"),
+            "content": r.get("content", ""),
+            "similarity": r.get("similarity", 0.0),
+        })
+
+    for r in doc_rows:
+        pm_doc_id = r.get("document_id", "")
+        merged.append({
+            "_similarity": r.get("similarity", 0.0),
+            "source_type": "document",
+            "knowledge_document_id": None,
+            "doc_id": pm_doc_id,
+            "title": pm_titles.get(pm_doc_id, "Untitled document"),
+            "content": r.get("content", ""),
+            "similarity": r.get("similarity", 0.0),
+        })
+
+    merged.sort(key=lambda x: x["_similarity"], reverse=True)
+    top = merged[:top_k]
+
+    sources = []
+    excerpts = []
+    for i, item in enumerate(top):
+        if item["source_type"] == "knowledge_base":
+            src_id = f"kb:{item['knowledge_document_id']}:{i}"
+            src_kind = "kb"
+        else:
+            src_id = f"doc:{item['doc_id']}:{i}"
+            src_kind = "doc"
+
+        snippet = item["content"][:240]
+        sources.append({
+            "id": src_id,
+            "kind": src_kind,
+            "title": item["title"],
+            "snippet": snippet,
+            "doc_id": item["doc_id"],
+            "knowledge_document_id": item["knowledge_document_id"],
+        })
+        ref = item["title"]
+        tag = "(KB)" if item["source_type"] == "knowledge_base" else "(Doc)"
+        excerpts.append(f"[{i + 1}] {ref} {tag}\n{item['content']}")
+
+    total = len(kb_rows) + len(doc_rows)
+    summary = (
+        f"Found {total} result(s) — {len(kb_rows)} from knowledge base, "
+        f"{len(doc_rows)} from PM documents."
+    )
+    return {
+        "summary": summary,
+        "data": "\n\n---\n\n".join(excerpts),
+        "sources": sources,
+    }
+
+
+async def _read_kb_document(ctx: dict, knowledge_document_id: str) -> dict:
+    """Return the full concatenated text of all chunks for a KB document."""
+    user_id = ctx["user_id"]
+    supabase = get_supabase()
+
+    # Verify ownership
+    try:
+        doc_res = (
+            supabase.table("knowledge_documents")
+            .select("id, filename")
+            .eq("id", knowledge_document_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"KB document lookup failed: {e}", "sources": []}
+
+    if not doc_res.data:
+        return {"summary": "KB document not found or access denied.", "sources": []}
+
+    filename = doc_res.data[0].get("filename", "Untitled")
+
+    # Fetch all chunks ordered by index
+    try:
+        chunks_res = (
+            supabase.table("knowledge_chunks")
+            .select("content, created_at")
+            .eq("knowledge_document_id", knowledge_document_id)
+            .eq("user_id", user_id)
+            .order("created_at")
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"Chunk fetch failed: {e}", "sources": []}
+
+    rows = chunks_res.data or []
+    if not rows:
+        return {"summary": f"No content found for '{filename}'.", "sources": []}
+
+    # Chunks overlap by 150–200 chars; deduplicate via simple join
+    full_text = "\n".join(r["content"] for r in rows)
+
+    return {
+        "summary": f"Full text of '{filename}' ({len(full_text)} chars, {len(rows)} chunks).",
+        "data": full_text,
+        "sources": [{
+            "id": f"kb:{knowledge_document_id}",
+            "kind": "kb",
+            "title": filename,
+        }],
+    }
+
+
+async def _analyze_data(
+    ctx: dict,
+    knowledge_document_id: str,
+    expression: str = "df.head()",
+) -> dict:
+    """Download a CSV/Excel KB file and evaluate a pandas expression against it."""
+    import io
+    import pandas as pd
+    import numpy as np
+
+    user_id = ctx["user_id"]
+    supabase = get_supabase()
+
+    # 1. Verify ownership and get storage path
+    try:
+        doc_res = (
+            supabase.table("knowledge_documents")
+            .select("filename, storage_path, file_type")
+            .eq("id", knowledge_document_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"Document lookup failed: {e}", "sources": []}
+
+    if not doc_res.data:
+        return {"summary": "Data file not found or access denied.", "sources": []}
+
+    doc = doc_res.data[0]
+    filename = doc.get("filename", "file")
+    storage_path = doc.get("storage_path")
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".csv", ".xlsx", ".xls"):
+        return {
+            "summary": f"'{filename}' is not a CSV or Excel file. analyze_data only works on tabular data.",
+            "sources": [],
+        }
+
+    if not storage_path:
+        return {"summary": "Original file was not stored — cannot analyze.", "sources": []}
+
+    # 2. Download from Supabase Storage
+    try:
+        file_bytes = supabase.storage.from_("knowledge-files").download(storage_path)
+    except Exception as e:
+        return {"summary": f"Could not download '{filename}': {e}", "sources": []}
+
+    # 3. Load into DataFrame
+    try:
+        if ext == ".csv":
+            df = pd.read_csv(io.BytesIO(file_bytes))
+        else:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+    except Exception as e:
+        return {"summary": f"Could not parse '{filename}': {e}", "sources": []}
+
+    # 4. Safe eval — whitelist builtins, expose pd + np + df only
+    safe_globals = {
+        "pd": pd,
+        "np": np,
+        "__builtins__": {
+            k: v for k, v in vars(__builtins__ if isinstance(__builtins__, dict) else __builtins__).items()  # type: ignore[arg-type]
+            if k in (
+                "len", "sum", "min", "max", "round", "abs", "sorted",
+                "list", "dict", "str", "int", "float", "bool", "range",
+                "enumerate", "zip", "print", "repr", "isinstance", "type",
+            )
+        } if not isinstance(__builtins__, dict) else {
+            k: __builtins__[k] for k in (  # type: ignore[index]
+                "len", "sum", "min", "max", "round", "abs", "sorted",
+                "list", "dict", "str", "int", "float", "bool", "range",
+                "enumerate", "zip", "print", "repr",
+            ) if k in __builtins__  # type: ignore[operator]
+        },
+    }
+
+    schema_info = (
+        f"File: {filename} | {df.shape[0]} rows × {df.shape[1]} cols\n"
+        f"Columns: {list(df.columns)}\n"
+        f"Dtypes:\n{df.dtypes.to_string()}"
+    )
+
+    try:
+        result = eval(expression, safe_globals, {"df": df})  # noqa: S307
+        if hasattr(result, "to_string"):
+            result_str = result.to_string()
+        elif hasattr(result, "to_markdown"):
+            result_str = str(result)
+        else:
+            result_str = str(result)
+
+        summary = (
+            f"Ran `{expression}` on '{filename}' "
+            f"({df.shape[0]} rows × {df.shape[1]} cols):\n\n{result_str[:4000]}"
+        )
+        return {
+            "summary": summary,
+            "data": result_str[:4000],
+            "sources": [{"id": f"kb:{knowledge_document_id}", "kind": "kb", "title": filename}],
+        }
+    except Exception as e:
+        return {
+            "summary": (
+                f"Expression error: {e}\n\n"
+                f"Schema for reference:\n{schema_info}\n\n"
+                f"Sample data:\n{df.head(3).to_string()}"
+            ),
+            "sources": [{"id": f"kb:{knowledge_document_id}", "kind": "kb", "title": filename}],
+        }
+
+
 async def _create_folder(
     ctx: dict, name: str, parent_folder_id: str | None = None
 ) -> dict:
@@ -704,7 +1204,11 @@ async def _create_folder(
 
 
 TOOL_EXECUTORS = {
+    "check_calendar": _check_calendar,
+    "analyze_data": _analyze_data,
+    "search_workspace": _search_workspace,
     "search_kb": _search_kb,
+    "read_kb_document": _read_kb_document,
     "list_docs": _list_docs,
     "read_doc": _read_doc,
     "search_docs": _search_docs,

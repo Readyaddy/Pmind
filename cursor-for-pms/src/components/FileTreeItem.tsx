@@ -94,6 +94,7 @@ export interface TreeCtx {
   onPendingCancel: () => void;
   onDeleteFolder: (folderId: string) => void;
   onDeleteDoc: (docId: string) => void;
+  onRequestDelete: (node: TreeNode) => void;
 }
 
 export const TreeContext = createContext<TreeCtx | null>(null);
@@ -294,8 +295,7 @@ export function FileTreeItem({
               className="p-0.5 rounded hover:bg-red-500/10 text-black/30 dark:text-white/30 hover:text-red-500 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
-                if (isFolder) ctx.onDeleteFolder(node.id);
-                else ctx.onDeleteDoc(node.id);
+                ctx.onRequestDelete(node);
               }}
             >
               <Trash2 size={10} />

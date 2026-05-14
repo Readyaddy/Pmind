@@ -71,7 +71,7 @@ interface EditorProps {
   onSave: (content: Record<string, unknown>, title: string) => void;
 }
 
-export default function Editor({ projectId, initialContent, onSave }: EditorProps) {
+export default function Editor({ docId, projectId, initialContent, onSave }: EditorProps) {
   const [showAIModal, setShowAIModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{ id: string; replacement: string }>>([]);
@@ -335,13 +335,23 @@ export default function Editor({ projectId, initialContent, onSave }: EditorProp
     setFloatTool({ id, x: rect.left + rect.width / 2, y: rect.top });
   }, []);
 
-  // Register/unregister with EditorStore so CursorChat can call applyChanges
+  // Push new Tiptap JSON content into the editor without triggering auto-save
+  const setContentFn = useCallback(
+    (content: Record<string, unknown>) => {
+      if (!editor) return;
+      editor.commands.setContent(content, false);
+      toast.success("Document updated by agent", { duration: 2500 });
+    },
+    [editor],
+  );
+
+  // Register/unregister with EditorStore so CursorChat can call applyChanges + setContent
   useEffect(() => {
     if (!editor) return;
     const initialTitle = editor.getText().split("\n")[0]?.trim() || "Untitled";
-    registerEditor(applyChanges, () => editor.getText(), initialTitle);
+    registerEditor(applyChanges, () => editor.getText(), initialTitle, setContentFn, docId);
     return () => unregisterEditor();
-  }, [editor, applyChanges, registerEditor, unregisterEditor]);
+  }, [editor, applyChanges, registerEditor, unregisterEditor, setContentFn, docId]);
 
   const handleAIOutput = useCallback(
     (text: string) => {

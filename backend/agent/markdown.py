@@ -8,6 +8,7 @@ editor can render. Supported:
   - blank-line paragraph splits
   - "- " bullet lists, "1. " ordered lists
   - inline **bold**, *italic*, `code`
+  - GFM tables: | Col | Col | / |---|---| / | val | val |
 
 Anything else lands as a plain paragraph. Good enough for PRDs / briefs;
 the user can hand-format inside the editor afterward.
@@ -52,6 +53,63 @@ def _list_item(text: str) -> dict[str, Any]:
         "type": "listItem",
         "content": [{"type": "paragraph", "content": _inline(text)}],
     }
+
+
+_TABLE_ROW = re.compile(r"^\|(.+)\|$")
+_TABLE_SEP = re.compile(r"^\|[\s|:-]+\|$")
+
+
+def _table_cell(text: str, header: bool) -> dict[str, Any]:
+    return {
+        "type": "tableHeader" if header else "tableCell",
+        "attrs": {"colspan": 1, "rowspan": 1, "colwidth": None},
+        "content": [{"type": "paragraph", "content": _inline(text.strip())}],
+    }
+
+
+def _parse_table(lines: list[str], start: int) -> tuple[dict[str, Any] | None, int]:
+    """Try to parse a GFM table starting at `start`. Returns (node, next_i) or (None, start)."""
+    if start >= len(lines):
+        return None, start
+
+    header_line = lines[start].strip()
+    if not _TABLE_ROW.match(header_line):
+        return None, start
+
+    # Next line must be the separator row
+    sep_i = start + 1
+    if sep_i >= len(lines) or not _TABLE_SEP.match(lines[sep_i].strip()):
+        return None, start
+
+    # Collect body rows
+    row_i = sep_i + 1
+    body_rows: list[str] = []
+    while row_i < len(lines) and _TABLE_ROW.match(lines[row_i].strip()):
+        body_rows.append(lines[row_i].strip())
+        row_i += 1
+
+    def split_row(raw: str) -> list[str]:
+        return [c for c in raw.strip("|").split("|")]
+
+    headers = split_row(header_line)
+    table_rows: list[dict] = []
+
+    table_rows.append({
+        "type": "tableRow",
+        "content": [_table_cell(h, header=True) for h in headers],
+    })
+    for raw in body_rows:
+        cells = split_row(raw)
+        # Pad or trim to match header count
+        while len(cells) < len(headers):
+            cells.append("")
+        cells = cells[: len(headers)]
+        table_rows.append({
+            "type": "tableRow",
+            "content": [_table_cell(c, header=False) for c in cells],
+        })
+
+    return {"type": "table", "content": table_rows}, row_i
 
 
 def markdown_to_tiptap(md: str) -> dict[str, Any]:
@@ -101,13 +159,25 @@ def markdown_to_tiptap(md: str) -> dict[str, Any]:
             nodes.append({"type": "orderedList", "content": items})
             continue
 
+        # GFM table
+        table_node, next_i = _parse_table(lines, i)
+        if table_node:
+            nodes.append(table_node)
+            i = next_i
+            continue
+
         # Paragraph: collect consecutive non-empty, non-special lines
         para_lines: list[str] = []
         while i < len(lines):
             cur = lines[i].strip()
             if not cur:
                 break
-            if re.match(r"^(#{1,3})\s+", cur) or re.match(r"^[-*]\s+", cur) or re.match(r"^\d+\.\s+", cur):
+            if (
+                re.match(r"^(#{1,3})\s+", cur)
+                or re.match(r"^[-*]\s+", cur)
+                or re.match(r"^\d+\.\s+", cur)
+                or _TABLE_ROW.match(cur)
+            ):
                 break
             para_lines.append(cur)
             i += 1

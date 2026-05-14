@@ -1,9 +1,8 @@
 import logging
 import io
-import uuid
 import os
+import re
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
 from deps import get_supabase, get_user_id
 from google import genai
 import PyPDF2
@@ -12,12 +11,22 @@ import docx
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+TABULAR_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+TEXT_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml", ".xml", ".rtf"}
+HTML_EXTENSIONS = {".html", ".htm"}
+
+ROWS_PER_CHUNK = 10       # rows bundled into one semantic chunk
+MAX_CHUNKS = 500          # guard against enormous files
+
+
 def get_gemini_client():
     api_key = os.getenv("GOOGLE_API_KEY", "")
     return genai.Client(api_key=api_key)
 
+
+# ── Text chunking (non-tabular) ───────────────────────────────────────────────
+
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    # Simple character-based chunking
     chunks = []
     start = 0
     while start < len(text):
@@ -26,100 +35,214 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
         start += chunk_size - overlap
     return chunks
 
+
+# ── Tabular chunking (CSV / Excel) ────────────────────────────────────────────
+
+def _tabular_chunks(filename: str, content_bytes: bytes, ext: str) -> list[str]:
+    """
+    Convert a CSV/Excel file into semantic, row-based text chunks.
+
+    Every chunk embeds the column headers so the embedding model knows what
+    each number means — e.g.
+      "Document: metrics.xlsx | Sheet: Q3 | Month: Jan | Revenue: $45,000 | Churn: 2.1%"
+    This dramatically improves RAG recall for structured data.
+    """
+    import pandas as pd
+
+    doc_name = os.path.basename(filename)
+
+    if ext == ".csv":
+        try:
+            df = pd.read_csv(io.BytesIO(content_bytes))
+            sheets: dict[str, "pd.DataFrame"] = {"": df}
+        except Exception as e:
+            raise ValueError(f"Could not parse CSV: {e}")
+    else:
+        try:
+            xls = pd.ExcelFile(io.BytesIO(content_bytes))
+            sheets = {name: xls.parse(name) for name in xls.sheet_names}
+        except Exception as e:
+            raise ValueError(f"Could not parse Excel: {e}")
+
+    all_chunks: list[str] = []
+
+    for sheet_name, df in sheets.items():
+        # Drop fully-empty rows/cols (formatting artifacts)
+        df = df.dropna(how="all", axis=0).dropna(how="all", axis=1).reset_index(drop=True)
+        if df.empty:
+            continue
+
+        df = df.fillna("").astype(str)
+        cols = list(df.columns)
+        prefix = f"Document: {doc_name}"
+        if sheet_name:
+            prefix += f" | Sheet: {sheet_name}"
+
+        for batch_start in range(0, min(len(df), MAX_CHUNKS * ROWS_PER_CHUNK), ROWS_PER_CHUNK):
+            batch = df.iloc[batch_start : batch_start + ROWS_PER_CHUNK]
+            row_lines: list[str] = []
+            for _, row in batch.iterrows():
+                parts = [prefix]
+                for col in cols:
+                    val = str(row[col]).strip()
+                    if val and val.lower() not in ("nan", "none", ""):
+                        parts.append(f"{col}: {val}")
+                row_lines.append(" | ".join(parts))
+            chunk = "\n".join(row_lines)
+            if chunk.strip():
+                all_chunks.append(chunk[:2000])  # cap individual chunk length
+
+        if len(all_chunks) >= MAX_CHUNKS:
+            logger.warning("Tabular file '%s' truncated at %d chunks", filename, MAX_CHUNKS)
+            break
+
+    return all_chunks
+
+
+# ── Generic text extraction (non-tabular) ─────────────────────────────────────
+
 async def extract_text_from_file(file: UploadFile) -> str:
     content = await file.read()
     filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
 
-    if filename.endswith(".pdf"):
+    if ext == ".pdf":
         reader = PyPDF2.PdfReader(io.BytesIO(content))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
-    elif filename.endswith(".docx"):
+
+    if ext == ".docx":
         doc = docx.Document(io.BytesIO(content))
         return "\n".join(para.text for para in doc.paragraphs)
-    elif filename.endswith(".txt"):
+
+    if ext in TEXT_EXTENSIONS:
         return content.decode("utf-8", errors="ignore")
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
+
+    if ext in HTML_EXTENSIONS:
+        raw = content.decode("utf-8", errors="ignore")
+        text = re.sub(r"<[^>]+>", " ", raw)
+        return re.sub(r"\s+", " ", text).strip()
+
+    try:
+        return content.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot read '{ext}' as text. "
+                "Supported formats: PDF, DOCX, MD, TXT, CSV, XLSX, XLS, JSON, YAML, HTML, XML."
+            ),
+        )
+
+
+# ── Embedding helper ──────────────────────────────────────────────────────────
+
+def _embed_chunks(chunks: list[str]) -> list[list[float]]:
+    """Embed a list of chunks, batching into groups of 100 to avoid API limits."""
+    from google.genai import types as genai_types
+    client = get_gemini_client()
+    vectors: list[list[float]] = []
+    BATCH = 100
+    for i in range(0, len(chunks), BATCH):
+        batch = chunks[i : i + BATCH]
+        resp = client.models.embed_content(
+            model="gemini-embedding-2",
+            contents=batch,
+            config=genai_types.EmbedContentConfig(output_dimensionality=768),
+        )
+        emb_list = resp.embeddings if hasattr(resp, "embeddings") else resp
+        for emb_obj in emb_list:
+            vectors.append(emb_obj.values if hasattr(emb_obj, "values") else emb_obj)
+    return vectors
+
+
+# ── Upload endpoint ───────────────────────────────────────────────────────────
 
 @router.post("/")
 async def upload_knowledge_document(
     project_id: str = Form(...),
     file: UploadFile = File(...),
-    user_id: str = Depends(get_user_id)
+    user_id: str = Depends(get_user_id),
 ):
     supabase = get_supabase()
+    filename = file.filename or "upload"
+    ext = os.path.splitext(filename)[1].lower()
 
-    # 1. Read raw bytes first (we need them for both storage upload and text extraction)
+    # 1. Read raw bytes
     raw_bytes = await file.read()
-    await file.seek(0)  # reset so extract_text_from_file can read again
+    await file.seek(0)
 
-    # 2. Extract Text
-    text = await extract_text_from_file(file)
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract text from file.")
+    # 2. Build semantic chunks
+    is_tabular = ext in TABULAR_EXTENSIONS
+    if is_tabular:
+        try:
+            chunks = _tabular_chunks(filename, raw_bytes, ext)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if not chunks:
+            raise HTTPException(status_code=400, detail="File appears empty after cleaning.")
+    else:
+        text = await extract_text_from_file(file)
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from file.")
+        chunks = chunk_text(text)
 
     # 3. Upload original file to Supabase Storage
-    storage_path = f"{user_id}/{project_id}/{file.filename}"
+    storage_path = f"{user_id}/{project_id}/{filename}"
     try:
         supabase.storage.from_("knowledge-files").upload(
             path=storage_path,
             file=raw_bytes,
-            file_options={"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
+            file_options={
+                "content-type": file.content_type or "application/octet-stream",
+                "upsert": "true",
+            },
         )
     except Exception as e:
-        logger.warning("Storage upload failed (non-fatal) — file=%s: %s", file.filename, e)
-        storage_path = None  # Non-fatal – continue without storage
+        logger.warning("Storage upload failed (non-fatal) — file=%s: %s", filename, e)
+        storage_path = None
 
-    # 4. Save Document Record
+    # 4. Save document record
     doc_result = (
         supabase.table("knowledge_documents")
         .insert({
             "project_id": project_id,
             "user_id": user_id,
-            "filename": file.filename,
+            "filename": filename,
             "file_type": file.content_type or "text/plain",
             "storage_path": storage_path,
         })
         .execute()
     )
     doc_id = doc_result.data[0]["id"]
-    
-    # 3. Chunk Text
-    chunks = chunk_text(text)
-    
-    # 4. Generate Embeddings & Save Chunks
-    client = get_gemini_client()
+
+    # 5. Embed and store chunks
     try:
-        from google.genai import types
-        embeddings = client.models.embed_content(
-            model='gemini-embedding-2',
-            contents=chunks,
-            config=types.EmbedContentConfig(output_dimensionality=768)
-        )
-        
-        chunk_records = []
-        # Handle cases where embeddings might be returned differently based on API version
-        emb_list = embeddings.embeddings if hasattr(embeddings, 'embeddings') else embeddings
-        
-        for i, emb_obj in enumerate(emb_list):
-            # Extract vector values
-            vector = emb_obj.values if hasattr(emb_obj, 'values') else emb_obj
-            chunk_records.append({
+        vectors = _embed_chunks(chunks)
+        chunk_records = [
+            {
                 "knowledge_document_id": doc_id,
                 "user_id": user_id,
                 "content": chunks[i],
-                "embedding": vector
-            })
-            
+                "embedding": vectors[i],
+            }
+            for i in range(len(chunks))
+        ]
         if chunk_records:
             supabase.table("knowledge_chunks").insert(chunk_records).execute()
-            
-        return {"success": True, "document_id": doc_id, "chunks": len(chunk_records)}
+
+        logger.info(
+            "KB upload complete — file=%s doc_id=%s chunks=%d tabular=%s",
+            filename, doc_id, len(chunk_records), is_tabular,
+        )
+        return {"success": True, "document_id": doc_id, "chunks": len(chunk_records), "tabular": is_tabular}
+
     except Exception as e:
-        logger.error("Embedding generation failed — file=%s doc_id=%s: %s", file.filename, doc_id, e, exc_info=True)
-        # Rollback document if chunks fail
+        logger.error("Embedding failed — file=%s doc_id=%s: %s", filename, doc_id, e, exc_info=True)
         supabase.table("knowledge_documents").delete().eq("id", doc_id).execute()
-        raise HTTPException(status_code=500, detail=f"Embedding generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Embedding generation failed: {e}")
+
+
+# ── Read endpoints ────────────────────────────────────────────────────────────
 
 @router.get("/")
 async def list_knowledge_documents(project_id: str, user_id: str = Depends(get_user_id)):
@@ -133,6 +256,7 @@ async def list_knowledge_documents(project_id: str, user_id: str = Depends(get_u
         .execute()
     )
     return result.data
+
 
 @router.get("/{doc_id}")
 async def get_knowledge_document(doc_id: str, user_id: str = Depends(get_user_id)):
@@ -148,9 +272,9 @@ async def get_knowledge_document(doc_id: str, user_id: str = Depends(get_user_id
         raise HTTPException(status_code=404, detail="Document not found")
     return result.data[0]
 
+
 @router.get("/{doc_id}/url")
 async def get_knowledge_document_url(doc_id: str, user_id: str = Depends(get_user_id)):
-    """Returns a short-lived signed URL for the original uploaded file."""
     supabase = get_supabase()
     result = (
         supabase.table("knowledge_documents")
@@ -161,7 +285,7 @@ async def get_knowledge_document_url(doc_id: str, user_id: str = Depends(get_use
     )
     if not result.data or not result.data[0].get("storage_path"):
         raise HTTPException(status_code=404, detail="Original file not found in storage")
-    
+
     storage_path = result.data[0]["storage_path"]
     try:
         signed = supabase.storage.from_("knowledge-files").create_signed_url(storage_path, 3600)
@@ -171,14 +295,15 @@ async def get_knowledge_document_url(doc_id: str, user_id: str = Depends(get_use
             "file_type": result.data[0]["file_type"],
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not generate signed URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not generate signed URL: {e}")
+
 
 @router.get("/{doc_id}/chunks")
 async def get_knowledge_chunks(doc_id: str, user_id: str = Depends(get_user_id)):
     supabase = get_supabase()
     result = (
         supabase.table("knowledge_chunks")
-        .select("id, content, created_at")  # exclude embedding vector - too large
+        .select("id, content, created_at")
         .eq("knowledge_document_id", doc_id)
         .eq("user_id", user_id)
         .order("created_at")
@@ -186,9 +311,9 @@ async def get_knowledge_chunks(doc_id: str, user_id: str = Depends(get_user_id))
     )
     return result.data
 
+
 @router.delete("/{doc_id}")
 async def delete_knowledge_document(doc_id: str, user_id: str = Depends(get_user_id)):
     supabase = get_supabase()
     supabase.table("knowledge_documents").delete().eq("id", doc_id).eq("user_id", user_id).execute()
     return {"success": True}
-

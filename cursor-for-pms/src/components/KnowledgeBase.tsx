@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, X, FileText, Loader2, Trash2, ChevronRight } from "lucide-react";
+import { Upload, X, FileText, Loader2, Trash2, ChevronRight, Eye } from "lucide-react";
 import { useCustomAuth as useAuth } from "@/hooks/useCustomAuth";
+import { useRouter } from "next/navigation";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface KnowledgeDocument {
   id: string;
@@ -32,9 +34,11 @@ export default function KnowledgeBase({
   const [projects, setProjects] = useState<Project[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<KnowledgeDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { userId } = useAuth();
   const API = process.env.NEXT_PUBLIC_API_URL;
+  const router = useRouter();
 
   // Reset to correct initial step each time modal opens
   const openModal = () => {
@@ -89,7 +93,8 @@ export default function KnowledgeBase({
         });
         if (updated.ok) setDocuments(await updated.json());
       } else {
-        alert("Upload failed. Ensure it's a PDF, DOCX, or TXT.");
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || "Upload failed. Make sure the file is readable text (PDF, DOCX, MD, TXT, CSV, JSON, HTML…).");
       }
     } catch {
       alert("Upload failed.");
@@ -113,6 +118,14 @@ export default function KnowledgeBase({
 
   return (
     <>
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete "${confirmDelete.filename}"?`}
+          message="This file and all its embedded content will be permanently deleted."
+          onConfirm={() => { handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
       {compact ? (
         <button
           onClick={openModal}
@@ -212,12 +225,22 @@ export default function KnowledgeBase({
                   <div
                     className="border-2 border-dashed border-black/10 dark:border-white/10 rounded-xl p-8 text-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files?.[0];
+                      if (!f || !fileInputRef.current) return;
+                      const dt = new DataTransfer();
+                      dt.items.add(f);
+                      fileInputRef.current.files = dt.files;
+                      fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                    }}
                   >
                     <input
                       type="file"
                       ref={fileInputRef}
                       className="hidden"
-                      accept=".pdf,.txt,.docx"
+                      accept="*"
                       onChange={handleFileChange}
                     />
                     {isUploading ? (
@@ -226,9 +249,12 @@ export default function KnowledgeBase({
                         <span className="text-sm font-semibold">Processing & Embedding…</span>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 text-black/40 dark:text-white/40">
+                      <div className="flex flex-col items-center gap-3 text-black/40 dark:text-white/40">
                         <Upload size={24} />
-                        <span className="text-sm font-semibold">Click to upload (PDF, DOCX, TXT)</span>
+                        <div>
+                          <p className="text-sm font-semibold">Click or drag & drop to upload</p>
+                          <p className="text-xs mt-1 text-black/30 dark:text-white/30">PDF · DOCX · MD · TXT · CSV · JSON · HTML · YAML and more</p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -247,12 +273,25 @@ export default function KnowledgeBase({
                             <FileText size={16} className="text-amber-600 flex-shrink-0" />
                             <span className="text-sm font-medium text-black/80 dark:text-white/80 truncate">{doc.filename}</span>
                           </div>
-                          <button
-                            onClick={() => handleDelete(doc.id)}
-                            className="text-black/30 hover:text-red-500 transition-colors p-1"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setIsOpen(false);
+                                router.push(`/projects/${selectedProjectId}/knowledge/${doc.id}`);
+                              }}
+                              className="text-black/30 hover:text-amber-600 dark:hover:text-amber transition-colors p-1"
+                              title="View file"
+                            >
+                              <Eye size={14} />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(doc)}
+                              className="text-black/30 hover:text-red-500 transition-colors p-1"
+                              title="Delete file"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

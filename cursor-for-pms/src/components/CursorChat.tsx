@@ -16,6 +16,7 @@ import {
   Sparkles,
   Shield,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
@@ -237,11 +238,12 @@ export default function CursorChat() {
   const [applyingMsgId, setApplyingMsgId] = useState<string | null>(null);
   const [providerLabel, setProviderLabel] = useState<string>("");
   const [agentPlan, setAgentPlan] = useState<"free" | "pro" | "team">("free");
-  const [proModels, setProModels] = useState<{ id: string; label: string; description: string }[]>([]);
+  const [proModels, setProModels] = useState<{ id: string; label: string; description: string; free_limit: number | null }[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     typeof window !== "undefined" ? (localStorage.getItem("pm_cursor_agent_model") ?? "") : ""
   );
   const [trustWrites, setTrustWrites] = useState(false);
+  const [usageToday, setUsageToday] = useState<Record<string, number>>({});
 
   // @-mention state
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
@@ -256,6 +258,16 @@ export default function CursorChat() {
   const [lastDesignDocId, setLastDesignDocId] = useState<string | null>(null);
   const lastDesignDocIdRef = useRef<string | null>(null);
   const isRefiningRef = useRef(false);
+
+  // Listen for TodaySchedule pre-fill requests
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (text) setInput(text);
+    };
+    window.addEventListener("pmind:prefill-chat", handler);
+    return () => window.removeEventListener("pmind:prefill-chat", handler);
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -303,6 +315,16 @@ export default function CursorChat() {
       })
       .catch(() => {});
   }, [API, userId]);
+
+  const fetchUsage = useCallback(() => {
+    if (!userId) return;
+    fetch(`${API}/ai/usage`, { headers: { Authorization: `Bearer ${userId}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.counts) setUsageToday(d.counts); })
+      .catch(() => {});
+  }, [API, userId]);
+
+  useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
   // Load taggable files (project docs + KB) when project changes
   useEffect(() => {
@@ -571,6 +593,31 @@ export default function CursorChat() {
           }),
         );
 
+        // Live-update the open editor when edit_doc completes on the current doc
+        if (eventType === "tool_result") {
+          const resultCallId = payload.id as string;
+          for (const msg of messagesRef.current) {
+            const part = msg.parts.find(
+              (p) => p.kind === "tool" && p.call.id === resultCallId,
+            );
+            if (part?.kind === "tool" && part.call.name === "edit_doc") {
+              const editedDocId = part.call.args?.doc_id as string | undefined;
+              const { activeDocId, setContent } = useEditorStore.getState();
+              if (editedDocId && editedDocId === activeDocId && setContent) {
+                fetch(`${API}/documents/${editedDocId}`, {
+                  headers: { Authorization: `Bearer ${userId}` },
+                })
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((doc: { content: Record<string, unknown> } | null) => {
+                    if (doc?.content) setContent(doc.content);
+                  })
+                  .catch(() => {});
+              }
+              break;
+            }
+          }
+        }
+
         if (eventType === "done") break;
       }
     }
@@ -637,8 +684,9 @@ export default function CursorChat() {
       );
     } finally {
       setIsStreaming(false);
+      fetchUsage();
     }
-  }, [activeThreadId, productContext, projectId, getText, streamAgentInto, selectedModel]);
+  }, [activeThreadId, productContext, projectId, getText, streamAgentInto, selectedModel, fetchUsage]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e?: React.FormEvent, overrideText?: string) => {
@@ -723,8 +771,8 @@ export default function CursorChat() {
         project_id: projectId,
         thread_id: activeThreadId,
         mentioned_doc_ids: mentionedDocIds,
-        ...(selectedModel ? { model_override: selectedModel } : {}),
         mentioned_kb_ids: mentionedKbIds,
+        ...(selectedModel ? { model_override: selectedModel } : {}),
       });
 
       if (wasNewThread) {
@@ -760,6 +808,7 @@ export default function CursorChat() {
       );
     } finally {
       setIsStreaming(false);
+      fetchUsage();
     }
   };
 
@@ -799,29 +848,65 @@ export default function CursorChat() {
               {providerLabel}
             </span>
           )}
-          {proModels.length > 0 && (
-            <select
-              value={agentPlan === "free" ? "" : selectedModel}
-              onChange={(e) => {
-                if (agentPlan === "free") return;
-                setSelectedModel(e.target.value);
-                localStorage.setItem("pm_cursor_agent_model", e.target.value);
-              }}
-              title={agentPlan === "free" ? "Upgrade to Pro to choose model" : "Choose model"}
-              className={`text-[10px] font-semibold bg-white dark:bg-zinc-800 border border-black/15 dark:border-white/15 rounded-md px-1.5 py-0.5 outline-none transition-colors ${
-                agentPlan === "free"
-                  ? "text-black/30 dark:text-white/30 cursor-not-allowed opacity-60"
-                  : "text-black/70 dark:text-white/80 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700"
-              }`}
-            >
-              <option value="">Auto</option>
-              {proModels.map((m) => (
-                <option key={m.id} value={m.id} title={m.description} disabled={agentPlan === "free"}>
-                  {m.label}{m.id.includes("preview") ? " ✦" : ""}
-                </option>
-              ))}
-            </select>
-          )}
+          {proModels.length > 0 && (() => {
+            const effectiveModelId = selectedModel || "gemini-2.5-flash-lite";
+            const activeModel = proModels.find((m) => m.id === effectiveModelId);
+            const usedToday = usageToday[effectiveModelId] ?? 0;
+            const dailyLimit = activeModel?.free_limit;
+
+            return (
+              <>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => {
+                    const picked = proModels.find((m) => m.id === e.target.value);
+                    if (picked && agentPlan === "free" && picked.free_limit === 0) return;
+                    setSelectedModel(e.target.value);
+                    localStorage.setItem("pm_cursor_agent_model", e.target.value);
+                  }}
+                  title="Choose model"
+                  className="text-[10px] font-semibold bg-white dark:bg-zinc-800 border border-black/15 dark:border-white/15 rounded-md px-1.5 py-0.5 outline-none transition-colors text-black/70 dark:text-white/80 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  <option value="">Auto (Flash Lite)</option>
+                  {proModels.map((m) => {
+                    const isProOnly = agentPlan === "free" && m.free_limit === 0;
+                    const limitTag = agentPlan === "free"
+                      ? m.free_limit === null ? " · Free"
+                      : m.free_limit === 0 ? " · Pro only"
+                      : ` · ${m.free_limit}/day`
+                      : "";
+                    return (
+                      <option key={m.id} value={m.id} disabled={isProOnly} title={m.description}>
+                        {m.label}{limitTag}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Per-model usage counter — only for free users */}
+                {agentPlan === "free" && activeModel && (
+                  dailyLimit === null ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                      Free
+                    </span>
+                  ) : dailyLimit != null ? (
+                    <span
+                      title={`${usedToday} of ${dailyLimit} daily requests used`}
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                        usedToday >= dailyLimit
+                          ? "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400"
+                          : usedToday >= dailyLimit * 0.75
+                          ? "bg-amber-100 dark:bg-amber/10 text-amber-700 dark:text-amber"
+                          : "bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/35"
+                      }`}
+                    >
+                      {usedToday}/{dailyLimit}
+                    </span>
+                  ) : null
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <button
@@ -1055,6 +1140,8 @@ export default function CursorChat() {
                           label = `Calling ${lastPart.call.name.replace(/_/g, " ")}…`;
                         } else if (lastPart?.kind === "tool" && lastPart.call.status === "done") {
                           label = "Processing…";
+                        } else if (lastPart?.kind === "text") {
+                          label = "Writing…";
                         }
                         if (!label) return null;
                         return (
@@ -1167,7 +1254,11 @@ export default function CursorChat() {
           </div>
         )}
 
-        <div className="relative flex items-end gap-1.5 rounded-2xl glass-inset p-1.5 transition-all focus-within:ring-2 focus-within:ring-amber-400/40 dark:focus-within:ring-amber/30 focus-within:bg-white/80 dark:focus-within:bg-white/[0.04]">
+        <div className={`relative flex items-end gap-1.5 rounded-2xl glass-inset p-1.5 transition-all ${
+          isStreaming
+            ? "ring-2 ring-amber-400/30 dark:ring-amber/25 bg-amber-50/30 dark:bg-amber/[0.03]"
+            : "focus-within:ring-2 focus-within:ring-amber-400/40 dark:focus-within:ring-amber/30 focus-within:bg-white/80 dark:focus-within:bg-white/[0.04]"
+        }`}>
           <input
             ref={fileInputRef}
             type="file"
@@ -1177,10 +1268,13 @@ export default function CursorChat() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
             title="Attach screenshot for UI review"
             className={`p-2 rounded-xl transition-all flex-shrink-0 ${
               attachedImage
                 ? "text-amber-700 dark:text-amber bg-amber-100/70 dark:bg-amber/15"
+                : isStreaming
+                ? "text-black/20 dark:text-white/20"
                 : "text-black/35 dark:text-white/35 hover:text-amber-700 dark:hover:text-amber hover:bg-amber-50/60 dark:hover:bg-amber/10"
             }`}
           >
@@ -1224,21 +1318,47 @@ export default function CursorChat() {
               const ta = e.currentTarget;
               updateMentionTrigger(ta.value, ta.selectionStart ?? ta.value.length);
             }}
-            placeholder={attachedImage ? "Describe what to analyse…" : "Ask the agent…  type @ to tag a file"}
+            placeholder={
+              isStreaming
+                ? "Agent is responding…"
+                : attachedImage
+                ? "Describe what to analyse…"
+                : "Ask the agent…  type @ to tag a file"
+            }
             rows={1}
-            className="flex-1 text-[13px] leading-relaxed bg-transparent py-2 pr-1 resize-none text-black dark:text-ivory placeholder:text-black/30 dark:placeholder:text-white/30 focus:outline-none"
+            className={`flex-1 text-[13px] leading-relaxed bg-transparent py-2 pr-1 resize-none focus:outline-none ${
+              isStreaming
+                ? "text-black/30 dark:text-white/25 placeholder:text-amber-600/40 dark:placeholder:text-amber/35"
+                : "text-black dark:text-ivory placeholder:text-black/30 dark:placeholder:text-white/30"
+            }`}
             style={{ maxHeight: 120 }}
           />
           <button
             onClick={() => handleSubmit()}
             disabled={(!input.trim() && !attachedImage) || isStreaming}
-            className="amber-grad p-2 rounded-xl text-white disabled:opacity-30 disabled:hover:shadow-none transition-all flex-shrink-0 hover-lift disabled:hover:translate-y-0"
+            className={`p-2 rounded-xl text-white transition-all flex-shrink-0 ${
+              isStreaming
+                ? "amber-grad opacity-80 cursor-not-allowed"
+                : "amber-grad hover-lift disabled:opacity-30 disabled:hover:shadow-none disabled:hover:translate-y-0"
+            }`}
           >
-            <Send size={13} strokeWidth={2.2} />
+            {isStreaming
+              ? <Loader2 size={13} strokeWidth={2.2} className="animate-spin" />
+              : <Send size={13} strokeWidth={2.2} />
+            }
           </button>
         </div>
-        <p className="text-[10px] text-center text-black/35 dark:text-white/30 mt-2 font-medium tracking-wide">
-          {trustWrites ? (
+        <p className="text-[10px] text-center text-black/35 dark:text-white/30 mt-2 font-medium tracking-wide min-h-[14px]">
+          {isStreaming ? (
+            <span className="inline-flex items-center gap-1.5 text-amber-600/70 dark:text-amber/60">
+              <span className="flex gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-amber-500/60 animate-bounce [animation-delay:0ms]" />
+                <span className="w-1 h-1 rounded-full bg-amber-500/60 animate-bounce [animation-delay:120ms]" />
+                <span className="w-1 h-1 rounded-full bg-amber-500/60 animate-bounce [animation-delay:240ms]" />
+              </span>
+              Agent is working…
+            </span>
+          ) : trustWrites ? (
             <span className="inline-flex items-center gap-1 text-emerald-700/80 dark:text-emerald-400/80">
               <ShieldCheck size={9} /> Auto-approving writes
               <span className="text-black/25 dark:text-white/20 mx-1">·</span>

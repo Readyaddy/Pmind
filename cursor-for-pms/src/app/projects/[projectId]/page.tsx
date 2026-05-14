@@ -2,9 +2,15 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
-import { useEffect, useState } from "react";
-import { FileText, FolderPlus, BookOpen, ArrowRight, Upload, Settings2, CheckCircle2, Plug, BookMarked } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  FileText, FolderPlus, BookOpen, ArrowRight, Upload,
+  Settings2, CheckCircle2, Plug, BookMarked, ChevronRight,
+  Pencil, Check, X, Sparkles, ChevronDown,
+} from "lucide-react";
 import KnowledgeBase from "@/components/KnowledgeBase";
+import TodaySchedule from "@/components/TodaySchedule";
+import Link from "next/link";
 
 interface KnowledgeDocument {
   id: string;
@@ -32,6 +38,13 @@ export default function ProjectHomePage() {
   const { userId } = useCustomAuth();
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDocument[]>([]);
   const [projectName, setProjectName] = useState<string>("Project");
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [guideOpen, setGuideOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("pmind_guide_dismissed") !== "1";
+  });
   const [integrations, setIntegrations] = useState<IntegrationStatus>({
     jira: { connected: false },
     linear: { connected: false },
@@ -42,7 +55,6 @@ export default function ProjectHomePage() {
 
   useEffect(() => {
     if (!userId || !projectId) return;
-    // Load project name
     fetch(`${API}/projects/`, { headers: { Authorization: `Bearer ${userId}` } })
       .then(r => r.json())
       .then((projects: { id: string; name: string }[]) => {
@@ -51,7 +63,6 @@ export default function ProjectHomePage() {
       })
       .catch(() => {});
 
-    // Load knowledge docs
     fetch(`${API}/knowledge/?project_id=${projectId}`, {
       headers: { Authorization: `Bearer ${userId}` },
     })
@@ -59,13 +70,11 @@ export default function ProjectHomePage() {
       .then(setKnowledgeDocs)
       .catch(() => {});
 
-    // Load integration status
     fetch(`${API}/integrations/status`, { headers: { Authorization: `Bearer ${userId}` } })
       .then(r => r.ok ? r.json() : null)
       .then(s => { if (s) setIntegrations(s); })
       .catch(() => {});
 
-    // Load templates (public, no auth needed)
     fetch(`${API}/templates/`)
       .then(r => r.ok ? r.json() : [])
       .then(setTemplates)
@@ -85,6 +94,24 @@ export default function ProjectHomePage() {
     }
   };
 
+  const startEditName = () => {
+    setNameInput(projectName);
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 0);
+  };
+
+  const commitName = async () => {
+    setEditingName(false);
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === projectName) return;
+    setProjectName(trimmed);
+    await fetch(`${API}/projects/${projectId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${userId}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    }).catch(() => {});
+  };
+
   const createDoc = async () => {
     if (!userId || !projectId) return;
     const res = await fetch(`${API}/projects/${projectId}/documents/`, {
@@ -99,189 +126,355 @@ export default function ProjectHomePage() {
     }
   };
 
+  const bothConnected = integrations.jira.connected && integrations.linear.connected;
+
   return (
-    <div className="h-full overflow-y-auto px-10 py-12 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="mb-10">
-        <p className="text-xs font-mono uppercase tracking-widest text-black/30 dark:text-white/30 mb-2">Project</p>
-        <h1 className="text-3xl font-serif font-bold text-black/80 dark:text-white/80">{projectName}</h1>
-      </div>
+    <div className="relative h-full overflow-y-auto thin-scroll">
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
-        <button
-          onClick={createDoc}
-          className="group flex flex-col items-start gap-2 p-4 rounded-xl border border-black/10 dark:border-white/10 hover:border-amber-400 dark:hover:border-amber/60 bg-white/60 dark:bg-white/5 hover:bg-amber-50/50 dark:hover:bg-amber/5 transition-all text-left"
-        >
-          <FileText size={18} className="text-amber-600 dark:text-amber" />
-          <span className="text-sm font-semibold text-black/70 dark:text-white/70">New Document</span>
-          <span className="text-xs text-black/40 dark:text-white/40">PRD, roadmap, brief</span>
-        </button>
+      {/* ── Ambient light orb ─────────────────────────────────── */}
+      <div
+        className="pointer-events-none absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full opacity-60 dark:opacity-40"
+        style={{ background: "radial-gradient(circle, rgba(217,119,6,0.13) 0%, transparent 70%)", filter: "blur(80px)" }}
+      />
 
-        <button
-          className="group flex flex-col items-start gap-2 p-4 rounded-xl border border-black/10 dark:border-white/10 hover:border-amber-400 dark:hover:border-amber/60 bg-white/60 dark:bg-white/5 hover:bg-amber-50/50 dark:hover:bg-amber/5 transition-all text-left"
-          onClick={() => {
-            // Trigger folder create — navigate back to sidebar
-            router.push(`/projects/${projectId}`);
-          }}
-        >
-          <FolderPlus size={18} className="text-amber-600 dark:text-amber" />
-          <span className="text-sm font-semibold text-black/70 dark:text-white/70">New Folder</span>
-          <span className="text-xs text-black/40 dark:text-white/40">Organise your work</span>
-        </button>
+      <div className="relative px-8 py-10 max-w-5xl mx-auto">
 
-        <div className="relative">
-          <KnowledgeBase projectId={projectId} triggerClassName="group flex flex-col items-start gap-2 p-4 rounded-xl border border-black/10 dark:border-white/10 hover:border-amber-400 dark:hover:border-amber/60 bg-white/60 dark:bg-white/5 hover:bg-amber-50/50 dark:hover:bg-amber/5 transition-all text-left w-full h-full" />
-        </div>
-      </div>
-
-      {/* Knowledge Base Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-2">
-            <BookOpen size={13} /> Knowledge Base
-          </h2>
-          <KnowledgeBase projectId={projectId} compact />
-        </div>
-
-        {knowledgeDocs.length === 0 ? (
-          <div className="border-2 border-dashed border-black/10 dark:border-white/10 rounded-xl p-8 text-center">
-            <Upload size={20} className="mx-auto mb-2 text-black/20 dark:text-white/20" />
-            <p className="text-sm text-black/40 dark:text-white/40">No files uploaded yet.</p>
-            <p className="text-xs text-black/30 dark:text-white/30 mt-1">Upload user interviews, PDFs, or strategy docs from the sidebar or above.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {knowledgeDocs.map(doc => (
+        {/* ── Header ─────────────────────────────────────────── */}
+        <div className="mb-7 pm-fade-in">
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-black/30 dark:text-white/30 mb-1.5">
+            Project
+          </p>
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); commitName(); }
+                  if (e.key === "Escape") { e.preventDefault(); setEditingName(false); }
+                }}
+                className="text-[28px] font-serif font-bold tracking-tight text-black/85 dark:text-white/85 leading-none bg-transparent border-b-2 border-amber-400 dark:border-amber outline-none min-w-0 flex-1"
+              />
+              <button onClick={commitName} className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber/15 text-amber-700 dark:text-amber hover:bg-amber-200 dark:hover:bg-amber/25 transition-colors flex-shrink-0">
+                <Check size={14} strokeWidth={2.5} />
+              </button>
+              <button onClick={() => setEditingName(false)} className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-black/35 dark:text-white/35 transition-colors flex-shrink-0">
+                <X size={14} strokeWidth={2.5} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-[28px] font-serif font-bold tracking-tight text-black/85 dark:text-white/85 leading-none">
+                {projectName}
+              </h1>
               <button
-                key={doc.id}
-                onClick={() => router.push(`/projects/${projectId}/knowledge/${doc.id}`)}
-                className="group flex items-center justify-between p-3 rounded-lg border border-black/5 dark:border-white/5 bg-white/60 dark:bg-white/5 hover:border-amber-300 dark:hover:border-amber/40 hover:bg-amber-50/50 dark:hover:bg-amber/5 transition-all text-left"
+                onClick={startEditName}
+                title="Rename project"
+                className="p-1.5 rounded-lg hover:bg-black/[0.06] dark:hover:bg-white/[0.06] text-black/20 dark:text-white/20 hover:text-black/60 dark:hover:text-white/60 transition-all"
               >
-                <div className="flex items-center gap-3">
-                  <FileText size={15} className="text-amber-600 dark:text-amber flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-black/80 dark:text-white/80">{doc.filename}</p>
-                    <p className="text-xs text-black/40 dark:text-white/40">
-                      {new Date(doc.created_at).toLocaleDateString()}
+                <Pencil size={13} strokeWidth={2} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Today's Schedule — full width ──────────────────── */}
+        <div className="pm-fade-in" style={{ animationDelay: "60ms" }}>
+          <TodaySchedule />
+        </div>
+
+        {/* ── Getting Started Guide ───────────────────────── */}
+        <div className="glass-pane rounded-2xl overflow-hidden mb-7 pm-fade-in" style={{ animationDelay: "80ms" }}>
+          {/* Header row */}
+          <button
+            onClick={() => {
+              const next = !guideOpen;
+              setGuideOpen(next);
+              if (!next) localStorage.setItem("pmind_guide_dismissed", "1");
+              else localStorage.removeItem("pmind_guide_dismissed");
+            }}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles size={13} className="text-amber-500 dark:text-amber" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-black/50 dark:text-white/45">
+                Getting Started
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/quickstart"
+                onClick={e => e.stopPropagation()}
+                className="text-[11px] font-semibold text-amber-600 dark:text-amber hover:underline underline-offset-2"
+              >
+                Full guide →
+              </Link>
+              <ChevronDown
+                size={13}
+                className={`text-black/30 dark:text-white/30 transition-transform duration-200 ${guideOpen ? "" : "-rotate-90"}`}
+              />
+            </div>
+          </button>
+
+          {/* Collapsible content */}
+          {guideOpen && (
+            <div className="border-t border-black/5 dark:border-white/5 p-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { n:"01", icon:"🧠", title:"Set up Product Brain", desc:"Add strategy & users once — AI uses it in every command." },
+                  { n:"02", icon:"⌘", title:"Press ⌘K in a doc", desc:"Generate PRDs, tickets, briefs, updates, or custom prompts." },
+                  { n:"03", icon:"💬", title:"Chat with your docs", desc:"Ask the AI anything about the open document or @mention files." },
+                  { n:"04", icon:"📚", title:"Upload to Knowledge Base", desc:"Add PDFs & interviews — AI searches them automatically." },
+                  { n:"05", icon:"@", title:"Tag with @ in chat", desc:"@mention any doc or KB file to include it in AI context." },
+                  { n:"06", icon:"📅", title:"Check upcoming meetings", desc:"Connect Google Calendar to see conflicts and draft agendas." },
+                  { n:"07", icon:"✦", title:"Accept AI suggestions", desc:"AI highlights edits in the doc — accept or reject one by one." },
+                  { n:"08", icon:"📎", title:"View Knowledge Base files", desc:"Click any KB file in your project to view extracted content." },
+                ].map((item) => (
+                  <div
+                    key={item.n}
+                    className="glass-inset rounded-xl px-3.5 py-3 flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-black/25 dark:text-white/20">{item.n}</span>
+                      <span className="text-sm leading-none">{item.icon}</span>
+                    </div>
+                    <p className="text-[12px] font-semibold text-black/75 dark:text-white/75 leading-snug">{item.title}</p>
+                    <p className="text-[11px] text-black/40 dark:text-white/35 leading-relaxed">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── 2-Column asymmetric grid ────────────────────────── */}
+        <div className="grid grid-cols-5 gap-5 items-start">
+
+          {/* ════ LEFT COLUMN (60%) ════════════════════════════ */}
+          <div
+            className="col-span-3 flex flex-col gap-4 pm-slide-up"
+            style={{ animationDelay: "110ms" }}
+          >
+            {/* Primary CTA — New Document */}
+            <button
+              onClick={createDoc}
+              className="amber-grad amber-glow hover-lift group flex items-center gap-4 p-5 rounded-2xl text-white w-full text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/20 dark:bg-white/15 flex items-center justify-center shrink-0 ring-1 ring-white/30">
+                <FileText size={19} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[15px] leading-tight">New Document</p>
+                <p className="text-[12px] text-white/65 mt-0.5">PRD, roadmap, brief, one-pager</p>
+              </div>
+              <ChevronRight
+                size={16}
+                className="text-white/50 group-hover:translate-x-0.5 group-hover:text-white/80 transition-all flex-shrink-0"
+              />
+            </button>
+
+            {/* Secondary quick actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => router.push(`/projects/${projectId}`)}
+                className="glass-pane hover-lift group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:border-amber-300/60 dark:hover:border-amber/40"
+              >
+                <FolderPlus size={16} className="text-amber-600/70 dark:text-amber/60 flex-shrink-0" />
+                <div>
+                  <p className="text-[12.5px] font-semibold text-black/70 dark:text-white/70">New Folder</p>
+                  <p className="text-[10.5px] text-black/35 dark:text-white/35">Organise work</p>
+                </div>
+              </button>
+
+              <div className="glass-pane rounded-xl hover:border-amber-300/60 dark:hover:border-amber/40 transition-all">
+                <KnowledgeBase
+                  projectId={projectId}
+                  triggerClassName="hover-lift group flex items-center gap-3 px-4 py-3.5 text-left w-full h-full"
+                />
+              </div>
+            </div>
+
+            {/* ── Knowledge Base ── */}
+            <div className="glass-pane rounded-2xl overflow-hidden pm-fade-in" style={{ animationDelay: "160ms" }}>
+              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-black/5 dark:border-white/5">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-1.5">
+                  <BookOpen size={11} /> Knowledge Base
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-black/30 dark:text-white/25">
+                    {knowledgeDocs.length > 0 ? `${knowledgeDocs.length} file${knowledgeDocs.length !== 1 ? "s" : ""}` : ""}
+                  </span>
+                  <KnowledgeBase projectId={projectId} compact />
+                </div>
+              </div>
+
+              <div className="p-3">
+                {knowledgeDocs.length === 0 ? (
+                  <div className="glass-inset rounded-xl p-7 text-center">
+                    <div className="w-9 h-9 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center mx-auto mb-2.5">
+                      <Upload size={16} className="text-black/25 dark:text-white/25" />
+                    </div>
+                    <p className="text-[12.5px] font-medium text-black/40 dark:text-white/40">No files uploaded yet</p>
+                    <p className="text-[11px] text-black/25 dark:text-white/25 mt-1 leading-relaxed max-w-[220px] mx-auto">
+                      Upload PDFs, CSVs, or research docs — the AI will reference them automatically.
                     </p>
                   </div>
-                </div>
-                <ArrowRight size={14} className="text-black/20 dark:text-white/20 group-hover:text-amber-600 dark:group-hover:text-amber transition-colors" />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Templates */}
-      {templates.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center mb-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-2">
-              <BookMarked size={13} /> Start from a Template
-            </h2>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            {templates.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => applyTemplate(t.id)}
-                className="flex flex-col items-start gap-1.5 p-3 rounded-xl border border-black/10 dark:border-white/10 hover:border-amber-400 dark:hover:border-amber/60 bg-white/60 dark:bg-white/5 hover:bg-amber-50/50 dark:hover:bg-amber/5 transition-all text-left"
-              >
-                <span className="text-lg">{t.icon}</span>
-                <span className="text-xs font-semibold text-black/70 dark:text-white/70 leading-tight">{t.name}</span>
-                <span className="text-[10px] text-black/35 dark:text-white/35">{t.category}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Integrations */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-2">
-            <Plug size={13} /> Issue Tracker
-          </h2>
-          <button
-            onClick={() => router.push(`/projects/${projectId}/settings`)}
-            className="flex items-center gap-1 text-[11px] text-black/40 dark:text-white/40 hover:text-amber-600 dark:hover:text-amber transition-colors"
-          >
-            <Settings2 size={12} /> Settings
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {/* Jira */}
-          <div className={`rounded-xl border p-4 transition-all ${
-            integrations.jira.connected
-              ? "border-green-200 dark:border-green-800/40 bg-green-50/50 dark:bg-green-900/10"
-              : "border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5"
-          }`}>
-            <div className="flex items-center gap-2.5 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-[11px] font-bold shrink-0">J</div>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-black dark:text-ivory truncate">Jira</p>
-                {integrations.jira.domain && (
-                  <p className="text-[11px] text-black/40 dark:text-white/40 truncate">{integrations.jira.domain}</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {knowledgeDocs.map((doc, i) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => router.push(`/projects/${projectId}/knowledge/${doc.id}`)}
+                        className="glass-inset hover-lift group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all hover:border-amber-200 dark:hover:border-amber/30 pm-fade-in"
+                        style={{ animationDelay: `${200 + i * 40}ms` }}
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-amber-100/80 dark:bg-amber/10 flex items-center justify-center flex-shrink-0">
+                          <FileText size={13} className="text-amber-600 dark:text-amber" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12.5px] font-medium text-black/80 dark:text-white/80 truncate">{doc.filename}</p>
+                          <p className="text-[10.5px] text-black/35 dark:text-white/30">
+                            {new Date(doc.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
+                        </div>
+                        <ArrowRight
+                          size={13}
+                          className="text-black/15 dark:text-white/15 group-hover:text-amber-600 dark:group-hover:text-amber transition-colors flex-shrink-0"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-              {integrations.jira.connected && <CheckCircle2 size={15} className="ml-auto shrink-0 text-green-500" />}
             </div>
-            {integrations.jira.connected ? (
-              <p className="text-[11px] text-green-700 dark:text-green-400 font-medium">Connected</p>
-            ) : (
-              <button
-                onClick={() => router.push(`/projects/${projectId}/settings`)}
-                className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Connect →
-              </button>
-            )}
           </div>
 
-          {/* Linear */}
-          <div className={`rounded-xl border p-4 transition-all ${
-            integrations.linear.connected
-              ? "border-green-200 dark:border-green-800/40 bg-green-50/50 dark:bg-green-900/10"
-              : "border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5"
-          }`}>
-            <div className="flex items-center gap-2.5 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-[#5E6AD2] flex items-center justify-center text-white text-[11px] font-bold shrink-0">L</div>
-              <div>
-                <p className="text-[13px] font-semibold text-black dark:text-ivory">Linear</p>
+          {/* ════ RIGHT COLUMN (40%) ═══════════════════════════ */}
+          <div
+            className="col-span-2 flex flex-col gap-4 pm-slide-up"
+            style={{ animationDelay: "190ms" }}
+          >
+            {/* Templates */}
+            {templates.length > 0 && (
+              <div className="glass-pane rounded-2xl overflow-hidden">
+                <div className="flex items-center px-4 pt-4 pb-3 border-b border-black/5 dark:border-white/5">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-1.5">
+                    <BookMarked size={11} /> Templates
+                  </h2>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-2">
+                  {templates.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => applyTemplate(t.id)}
+                      className="glass-inset hover-lift group flex flex-col items-start gap-1 p-3 rounded-xl text-left transition-all hover:border-amber-200 dark:hover:border-amber/30"
+                    >
+                      <span className="text-base leading-none">{t.icon}</span>
+                      <span className="text-[11.5px] font-semibold text-black/70 dark:text-white/70 leading-snug mt-0.5">{t.name}</span>
+                      <span className="text-[9.5px] text-black/30 dark:text-white/30">{t.category}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              {integrations.linear.connected && <CheckCircle2 size={15} className="ml-auto shrink-0 text-green-500" />}
-            </div>
-            {integrations.linear.connected ? (
-              <p className="text-[11px] text-green-700 dark:text-green-400 font-medium">Connected</p>
-            ) : (
-              <button
-                onClick={() => router.push(`/projects/${projectId}/settings`)}
-                className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
-                Connect →
-              </button>
             )}
+
+            {/* Integrations */}
+            <div className="glass-pane rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-black/5 dark:border-white/5">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 flex items-center gap-1.5">
+                  <Plug size={11} /> Issue Tracker
+                </h2>
+                <button
+                  onClick={() => router.push(`/projects/${projectId}/settings`)}
+                  className="flex items-center gap-1 text-[10px] text-black/35 dark:text-white/35 hover:text-amber-600 dark:hover:text-amber transition-colors"
+                >
+                  <Settings2 size={10} /> Settings
+                </button>
+              </div>
+
+              <div className="p-3 flex flex-col gap-2">
+                {/* Jira */}
+                <div
+                  className={`glass-inset flex items-center gap-3 p-3 rounded-xl transition-all ${
+                    integrations.jira.connected
+                      ? "border-green-200/60 dark:border-green-700/30"
+                      : ""
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                    J
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-black/80 dark:text-white/80 leading-none">Jira</p>
+                    {integrations.jira.domain && (
+                      <p className="text-[10px] text-black/35 dark:text-white/30 truncate mt-0.5">{integrations.jira.domain}</p>
+                    )}
+                  </div>
+                  {integrations.jira.connected ? (
+                    <CheckCircle2 size={13} className="text-green-500 flex-shrink-0" />
+                  ) : (
+                    <button
+                      onClick={() => router.push(`/projects/${projectId}/settings`)}
+                      className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex-shrink-0"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+
+                {/* Linear */}
+                <div
+                  className={`glass-inset flex items-center gap-3 p-3 rounded-xl transition-all ${
+                    integrations.linear.connected
+                      ? "border-green-200/60 dark:border-green-700/30"
+                      : ""
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-[#5E6AD2] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                    L
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-black/80 dark:text-white/80 leading-none">Linear</p>
+                  </div>
+                  {integrations.linear.connected ? (
+                    <CheckCircle2 size={13} className="text-green-500 flex-shrink-0" />
+                  ) : (
+                    <button
+                      onClick={() => router.push(`/projects/${projectId}/settings`)}
+                      className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex-shrink-0"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+
+                {!bothConnected && (
+                  <p className="text-[10.5px] text-black/35 dark:text-white/30 px-1 leading-relaxed">
+                    Export AI-generated tickets directly from{" "}
+                    <span className="font-mono text-[9.5px] bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded">Cmd+K</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Pro tip */}
+            <div className="glass-pane rounded-2xl p-4">
+              <div className="flex items-start gap-2.5">
+                <span className="text-base leading-none mt-0.5">💡</span>
+                <div>
+                  <p className="text-[11.5px] font-semibold text-amber-800 dark:text-amber mb-1">Pro tip</p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber/65 leading-relaxed">
+                    Upload CSVs, Excel sheets, or research PDFs — then ask the AI to calculate metrics,
+                    spot trends, or draft updates grounded in your actual data.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-
-        {!integrations.jira.connected && !integrations.linear.connected && (
-          <p className="text-[11px] text-black/40 dark:text-white/40 mt-3 leading-relaxed">
-            Connect Jira or Linear to export AI-generated tickets directly from <strong>Cmd+K → Break into tickets</strong>.
-          </p>
-        )}
-      </div>
-
-      {/* Tips */}
-      <div className="mt-8 p-4 rounded-xl bg-amber-50 dark:bg-amber/5 border border-amber-100 dark:border-amber/10">
-        <p className="text-xs font-semibold text-amber-800 dark:text-amber mb-1">💡 Pro tip</p>
-        <p className="text-xs text-amber-700 dark:text-amber/70">
-          Upload user interviews or research PDFs to the Knowledge Base, then ask the AI chat anything about them. It will automatically find and reference the right sections.
-        </p>
       </div>
     </div>
   );
 }
-

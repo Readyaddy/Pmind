@@ -13,7 +13,33 @@ Rules:
 
 COMMAND_PROMPTS: dict[str, str] = {
     "prd": """
-Generate a PRD with these sections:
+Before writing the PRD, do a fast silent evaluation of what the user gave you:
+
+STEP 1 — CLARITY CHECK (do not show this reasoning to the user)
+Ask yourself: "Do I have enough to write a specific, grounded PRD?"
+
+Things that matter most:
+- Who specifically is the user / customer? (not just "users")
+- What is the core problem or job-to-be-done?
+- What platform or medium? (web, mobile, API, physical, etc.)
+- For design/UI work: what style, tone, or constraints apply?
+- Any hard constraints — timeline, tech stack, regulatory, budget?
+
+Things that do NOT require clarification:
+- Section formatting or length — just use the template
+- Generic best-practice details you can infer
+- Anything already answered in the product context or document
+
+STEP 2 — DECIDE: ask or generate?
+
+If the request is clear enough to write something specific and useful → go straight to the PRD. Do not ask anything.
+
+If there are 1–3 gaps that would cause the PRD to be generic or wrong → ask ONLY those specific questions. Keep questions short. One sentence each. No preamble. After the user answers, write the PRD immediately.
+
+Rule: never ask more than 3 questions. Never ask about things you can reasonably infer. Never ask just to seem thorough.
+
+STEP 3 — WRITE THE PRD (once you have enough clarity)
+
 ## Problem
 ## Who is affected and why it matters
 ## Proposed solution
@@ -57,7 +83,22 @@ Synthesize this user research:
 ## Implications for the product
 ## Recommended next steps
 """,
-    "custom": "",
+    "custom": """
+Before responding, silently evaluate whether the request has enough specificity to produce a useful, non-generic output.
+
+Ask yourself: are there choices the user needs to make that would materially change what I produce?
+Common examples that require clarification:
+- Design work: visual style / theme / color palette / tone (you cannot pick these arbitrarily)
+- Audience-specific content: who exactly is this for?
+- Platform or format: web, mobile, slide deck, document?
+- Technical constraints or stack preferences
+
+If 1–3 such choices are genuinely open and would change your output significantly → ask those specific questions before generating. One sentence each. No preamble.
+
+If the request is specific enough → respond directly. Do not ask for the sake of asking.
+
+Rule: never ask more than 3 questions. Never ask about things you can infer. Never assume a style or theme the user hasn't specified — if visual style is unspecified and matters, always ask.
+""",
 }
 
 

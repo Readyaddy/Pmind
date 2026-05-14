@@ -1,0 +1,33 @@
+Terms of Service
+Last updated: May 14, 2026
+
+1. Acceptance of Terms
+By accessing or using PMind ("the Service"), you agree to be bound by these Terms of Service. If you disagree with any part of the terms, you may not access the Service.
+
+2. Description of Service
+PMind is an AI-native product management workspace that allows users to organize documents, interact with AI assistants, and manage product development workflows.
+
+3. User Accounts
+To use PMind, you must register for an account. You are responsible for safeguarding the credentials that you use to access the Service and for any activities or actions under your account.
+
+4. User Content and Data
+You retain all rights to any documents, projects, or knowledge base files you upload ("User Content"). By uploading content, you grant PMind a license to use, store, and process this content solely for the purpose of providing the Service, including processing via our LLM partners to generate AI responses. We do not use your private User Content to train our proprietary models.
+
+5. Acceptable Use
+You agree not to use the Service to:
+- Upload any content that is illegal, harmful, threatening, abusive, or harassing.
+- Attempt to gain unauthorized access to any part of the Service.
+- Use the Service for any unauthorized automated scraping or data extraction.
+- Introduce viruses, trojans, worms, or other technologically harmful material.
+
+6. Termination
+We may terminate or suspend your access to our Service immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach the Terms.
+
+7. Limitation of Liability
+In no event shall PMind, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the Service.
+
+8. Changes to Terms
+We reserve the right, at our sole discretion, to modify or replace these Terms at any time. By continuing to access or use our Service after those revisions become effective, you agree to be bound by the revised terms.
+
+9. Contact Us
+If you have any questions about these Terms, please contact us at support@pmind.app.
