@@ -147,6 +147,16 @@ export default function Sidebar() {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
+  // Auto-navigate from /projects to the active project once loaded
+  useEffect(() => {
+    if (urlProjectId || loadingProjects || projects.length === 0) return;
+    const targetId =
+      storedProjectId && projects.find((p) => p.id === storedProjectId)
+        ? storedProjectId
+        : projects[0].id;
+    router.push(`/projects/${targetId}`);
+  }, [urlProjectId, loadingProjects, projects, storedProjectId, router]);
+
   // Sync URL project → store
   useEffect(() => {
     if (urlProjectId && projects.length > 0) {

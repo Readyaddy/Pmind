@@ -639,5 +639,5 @@ async def get_calendar_upcoming(
         "conflicts": conflicts,
         "provider": provider,
         "total_meeting_minutes": total_minutes,
-        "date": today.strftime("%A, %B ") + str(today.day),
+        "date": now.strftime("%A, %B ") + str(now.day),
     }
