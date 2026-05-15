@@ -34,6 +34,7 @@ class GeminiProvider(LLMProvider):
         messages: list[Message],
         tools: list[Tool],
         model: str | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream one assistant turn with tool detection.
 
@@ -59,10 +60,18 @@ class GeminiProvider(LLMProvider):
                 for t in tools
             ],
         )
-        config = gtypes.GenerateContentConfig(
-            system_instruction=system,
-            tools=[gem_tool],
-        )
+        cfg_kwargs: dict = {
+            "system_instruction": system,
+            "tools": [gem_tool],
+        }
+        if tool_choice == "any":
+            try:
+                cfg_kwargs["tool_config"] = gtypes.ToolConfig(
+                    function_calling_config=gtypes.FunctionCallingConfig(mode="ANY")
+                )
+            except Exception:
+                pass
+        config = gtypes.GenerateContentConfig(**cfg_kwargs)
         contents = _to_gemini_contents(messages)
 
         # ── Phase 1: streaming pass ─────────────────────────────────────────

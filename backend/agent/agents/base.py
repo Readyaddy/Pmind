@@ -194,8 +194,18 @@ async def run_agent_loop(
         stop_reason = "end_turn"
         error_msg: str | None = None
 
+        # Force a tool call on the very first step of each agent's run so
+        # agents can't output plain text before searching/acting.
+        # Don't force when last msg is "tool" — that's a resume after permission
+        # approval, where the agent may legitimately produce a final text response.
+        last_role = canonical_msgs[-1]["role"] if canonical_msgs else None
+        is_first_agent_step = step == 0 and bool(tools) and last_role != "tool"
         llm_gen = llm.stream_with_tools(
-            system=system, messages=canonical_msgs, tools=tools, model=model
+            system=system,
+            messages=canonical_msgs,
+            tools=tools,
+            model=model,
+            tool_choice="any" if is_first_agent_step else None,
         )
 
         try:

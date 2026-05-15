@@ -32,6 +32,7 @@ class ClaudeProvider(LLMProvider):
         messages: list[Message],
         tools: list[Tool],
         model: str | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         anth_tools = [
             {
@@ -42,6 +43,9 @@ class ClaudeProvider(LLMProvider):
             for t in tools
         ]
         anth_messages = _to_anthropic_messages(messages)
+        extra: dict = {}
+        if tool_choice == "any" and anth_tools:
+            extra["tool_choice"] = {"type": "any"}
 
         try:
             async with self.client.messages.stream(
@@ -50,6 +54,7 @@ class ClaudeProvider(LLMProvider):
                 system=system,
                 tools=anth_tools,
                 messages=anth_messages,
+                **extra,
             ) as stream:
                 stop_reason: str = "end_turn"
                 async for event in stream:

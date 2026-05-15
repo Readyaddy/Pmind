@@ -22,8 +22,11 @@ class LLMProvider(ABC):
         messages: list[Message],
         tools: list[Tool],
         model: str | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream ONE assistant turn that may include text and tool calls.
+
+        tool_choice="any" forces at least one tool call (no plain-text response).
 
         Yields canonical events:
           {"type": "text", "delta": str}

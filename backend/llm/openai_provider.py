@@ -37,6 +37,7 @@ class OpenAIProvider(LLMProvider):
         messages: list[Message],
         tools: list[Tool],
         model: str | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         oai_tools = [
             {
@@ -50,6 +51,9 @@ class OpenAIProvider(LLMProvider):
             for t in tools
         ]
         oai_messages = _to_openai_messages(system, messages)
+        extra: dict = {}
+        if tool_choice == "any" and oai_tools:
+            extra["tool_choice"] = "required"
 
         try:
             stream = await self.client.chat.completions.create(
@@ -57,6 +61,7 @@ class OpenAIProvider(LLMProvider):
                 messages=oai_messages,
                 tools=oai_tools,
                 stream=True,
+                **extra,
             )
 
             # Tool calls arrive in deltas; assemble by index

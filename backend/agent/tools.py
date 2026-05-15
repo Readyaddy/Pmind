@@ -173,8 +173,15 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "Build a working UI preview the user can see, copy, and integrate. "
             "Use this whenever they ask for ANY visual artifact — mockup, "
             "component, dashboard, landing page, modal, card, form, table. "
-            "DO NOT describe the UI in prose; build it. Output renders in a "
-            "sandboxed iframe with Preview/HTML/CSS/JS tabs.\n\n"
+            "DO NOT describe the UI in prose; build it.\n\n"
+            "SINGLE PAGE: provide html/css/js — renders in one sandboxed iframe.\n"
+            "MULTI-PAGE WEBSITE: provide `pages` — an array of page objects, each "
+            "with {name, html, css?, js?}. The preview shows a file-tab bar so the "
+            "user can switch between pages (Home, About, Contact, etc.). Each page "
+            "is a fully self-contained HTML document with its own <style> and <script>. "
+            "Pages can navigate to each other via links like <a href='#'>About</a> — "
+            "the file tabs handle routing. Use this for full websites where each route "
+            "is a separate file.\n\n"
             "Quality bar: pick ONE clear aesthetic direction (glassmorphism, "
             "brutalist, editorial, neo-tech, etc.) and execute it precisely. "
             "Use distinctive typography (load Google Fonts via <link> if "
@@ -193,27 +200,56 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "properties": {
                 "title": {
                     "type": "string",
-                    "description": "Short label shown above the preview, e.g. 'Pricing card'.",
+                    "description": "Short label shown above the preview, e.g. 'Portfolio Website'.",
                 },
                 "html": {
                     "type": "string",
-                    "description": "Body HTML — what goes inside <body>. Self-contained.",
+                    "description": "Body HTML for single-page renders. Omit when using `pages`.",
                 },
                 "css": {
                     "type": "string",
-                    "description": "(optional) CSS rules — injected into <style>.",
+                    "description": "(optional) CSS rules for single-page renders.",
                 },
                 "js": {
                     "type": "string",
-                    "description": "(optional) JS — runs after the body in a <script> tag.",
+                    "description": "(optional) JS for single-page renders.",
                 },
                 "framework": {
                     "type": "string",
                     "enum": ["vanilla", "tailwind"],
                     "description": "'tailwind' loads the CDN. Default 'vanilla'.",
                 },
+                "pages": {
+                    "type": "array",
+                    "description": (
+                        "Multi-page website: array of page objects. Use instead of html/css/js. "
+                        "Each page is a fully self-contained HTML file."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Page display name, e.g. 'Home', 'About', 'Contact'.",
+                            },
+                            "html": {
+                                "type": "string",
+                                "description": "Full body HTML for this page.",
+                            },
+                            "css": {
+                                "type": "string",
+                                "description": "(optional) CSS for this page.",
+                            },
+                            "js": {
+                                "type": "string",
+                                "description": "(optional) JS for this page.",
+                            },
+                        },
+                        "required": ["name", "html"],
+                    },
+                },
             },
-            "required": ["title", "html"],
+            "required": ["title"],
         },
     },
     {
@@ -820,24 +856,26 @@ async def _design_brief(
 async def _render_ui(
     ctx: dict,
     title: str,
-    html: str,
+    html: str | None = None,
     css: str | None = None,
     js: str | None = None,
     framework: str = "vanilla",
+    pages: list[dict] | None = None,
 ) -> dict:
     """No-op server-side. The frontend reads the args off the tool_call event
     and renders the iframe preview itself. We return a short summary for the
     agent so it knows the user saw it."""
-    parts = [f"html: {len(html)} chars"]
-    if css:
-        parts.append(f"css: {len(css)}")
-    if js:
-        parts.append(f"js: {len(js)}")
-    parts.append(f"framework: {framework or 'vanilla'}")
-    return {
-        "summary": f"Rendered '{title}' ({', '.join(parts)}). User is viewing it in the chat.",
-        "sources": [],
-    }
+    if pages:
+        summary = f"Rendered '{title}' — {len(pages)} pages: {', '.join(p['name'] for p in pages)}. User is viewing it in the chat."
+    else:
+        parts = [f"html: {len(html or '')} chars"]
+        if css:
+            parts.append(f"css: {len(css)}")
+        if js:
+            parts.append(f"js: {len(js)}")
+        parts.append(f"framework: {framework or 'vanilla'}")
+        summary = f"Rendered '{title}' ({', '.join(parts)}). User is viewing it in the chat."
+    return {"summary": summary, "sources": []}
 
 
 async def _check_calendar(ctx: dict, timeframe: str = "today") -> dict:
