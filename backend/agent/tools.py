@@ -28,30 +28,6 @@ logger = logging.getLogger(__name__)
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
-        "name": "search_kb",
-        "description": (
-            "Semantic search over the project's knowledge base (uploaded customer "
-            "interviews, research, PDFs, docs). Use this BEFORE drafting any PM "
-            "artifact to ground output in real evidence. Returns relevant excerpts "
-            "with source filenames."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Natural-language query, e.g. 'pain points around checkout flow'.",
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of excerpts to retrieve (default 5, max 10).",
-                    "default": 5,
-                },
-            },
-            "required": ["query"],
-        },
-    },
-    {
         "name": "list_docs",
         "description": (
             "List all documents in the current project with their id, title, and "
@@ -64,37 +40,23 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "read_doc",
+        "name": "read",
         "description": (
-            "Read the full plain-text content of one document by id. Use after "
-            "list_docs or search_docs to pull context from a specific doc."
+            "Read the full content of a workspace item by its prefixed id. "
+            "Pass `doc:<uuid>` for PM documents or `kb:<uuid>` for knowledge "
+            "base files. The source_id you receive from search_workspace "
+            "already has the correct prefix — pass it as-is. Use this "
+            "whenever you need the full text of something a search returned."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "doc_id": {
+                "source_id": {
                     "type": "string",
-                    "description": "Document id from list_docs or search_docs.",
+                    "description": "Prefixed id from search_workspace, e.g. 'doc:abc-uuid' or 'kb:xyz-uuid'.",
                 },
             },
-            "required": ["doc_id"],
-        },
-    },
-    {
-        "name": "search_docs",
-        "description": (
-            "Full-text search over the titles of documents in the current project. "
-            "Faster than list_docs when you know roughly what you're looking for."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Substring to match against document titles.",
-                },
-            },
-            "required": ["query"],
+            "required": ["source_id"],
         },
     },
     {
@@ -305,25 +267,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "read_kb_document",
-        "description": (
-            "Read the FULL text of an uploaded knowledge base document by its id. "
-            "Use this when search_workspace returns a relevant snippet but you need "
-            "deeper context from the same KB file. Pass the knowledge_document_id "
-            "from any search_workspace or search_kb result."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "knowledge_document_id": {
-                    "type": "string",
-                    "description": "The knowledge_document_id from a search result.",
-                },
-            },
-            "required": ["knowledge_document_id"],
-        },
-    },
-    {
         "name": "analyze_data",
         "description": (
             "Run pandas analysis on an uploaded CSV or Excel file from the knowledge base. "
@@ -347,7 +290,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "properties": {
                 "knowledge_document_id": {
                     "type": "string",
-                    "description": "The knowledge_document_id of the CSV or Excel file (from search_workspace or search_kb results).",
+                    "description": "The knowledge_document_id of the CSV or Excel file (from search_workspace results).",
                 },
                 "expression": {
                     "type": "string",
@@ -431,11 +374,114 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["html", "design_goals"],
         },
     },
+    # ── Handoff tools ──────────────────────────────────────────────────────────
+    # These are intercepted by the agent loop (by name prefix) and never reach
+    # the tool executor. Their args become the handoff_payload for the
+    # receiving agent. No-op executors are registered below as a safety net.
+    {
+        "name": "handoff_to_designer",
+        "description": (
+            "Hand the conversation off to the Designer specialist. Use when the "
+            "user wants a visual artifact (UI, mockup, website, landing page, "
+            "dashboard, component) AND you've gathered the content/research "
+            "needed — or there's no research to gather. Pass a structured brief "
+            "so the Designer can pre-fill its design_brief form. If you have "
+            "nothing to add (e.g. the user already gave the full spec), pass "
+            "only `product` and `audience`."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product": {"type": "string", "description": "Product or company name."},
+                "tagline": {"type": "string", "description": "Compelling one-liner."},
+                "audience": {"type": "string", "description": "Who this is for."},
+                "capabilities": {"type": "array", "items": {"type": "string"}, "description": "Key capabilities, 3-6 short bullets."},
+                "hero_headline": {"type": "string"},
+                "hero_subheadline": {"type": "string"},
+                "cta_text": {"type": "string", "description": "Primary call-to-action button text."},
+                "features": {"type": "array", "items": {"type": "string"}, "description": "Feature name: short description, one per line."},
+                "social_proof": {"type": "string", "description": "Numbers, clients, achievements found in workspace."},
+                "cta_goal": {"type": "string", "description": "What the page should get visitors to do."},
+                "notes": {"type": "string", "description": "Any extra constraints (sections to include, aesthetic hints, etc.)."},
+            },
+            "required": ["product", "audience"],
+        },
+    },
+    {
+        "name": "handoff_to_pm",
+        "description": (
+            "Hand the conversation off to the PM specialist. Use when you need "
+            "workspace research, document creation/editing, or content the user "
+            "hasn't provided and isn't in Product Brain. Pass a focused query — "
+            "the PM will search and synthesise, then either return to you with "
+            "a structured brief or answer the user directly."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Specific information need or task for the PM agent."},
+                "intent": {
+                    "type": "string",
+                    "enum": ["research", "draft_doc", "edit_doc"],
+                    "description": "What kind of PM work is needed.",
+                    "default": "research",
+                },
+                "return_to": {
+                    "type": "string",
+                    "enum": ["designer", "analyst", "calendar"],
+                    "description": "(optional) Which agent the PM should hand back to once done. Omit if the PM should reply to the user directly.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "handoff_to_analyst",
+        "description": (
+            "Hand off to the data analyst specialist for CSV/Excel computation "
+            "(churn, revenue, NPS, aggregations). Pass the question and any "
+            "hint about which file to use."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "What numbers / analysis the user wants."},
+                "file_hint": {"type": "string", "description": "Filename or topic to help locate the data file."},
+            },
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "handoff_to_calendar",
+        "description": (
+            "Hand off to the calendar specialist for scheduling, conflicts, "
+            "meeting prep, and time-blocking advice."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string", "description": "What the user wants to know about their schedule."},
+                "timeframe": {"type": "string", "enum": ["today", "tomorrow"], "default": "today"},
+            },
+            "required": ["intent"],
+        },
+    },
 ]
 
 
 # Tools whose execution requires explicit user approval.
 REQUIRES_PERMISSION: set[str] = {"create_doc", "edit_doc", "create_folder"}
+
+# Tools that halt the agent loop after running so the user can interact with a
+# frontend form. The loop emits the tool_call/result and then ends; the user's
+# next message resumes the conversation (no pending_decision tuple needed —
+# the form submits as a new user message).
+STOPS_FOR_USER_INPUT: set[str] = {"design_brief"}
+
+# Handoff tools never reach an executor — the loop intercepts them by this
+# prefix and switches to the target agent. The no-op executors registered in
+# TOOL_EXECUTORS exist only as a safety net in case the intercept is skipped.
+HANDOFF_TOOL_PREFIX = "handoff_to_"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1267,6 +1313,47 @@ async def _analyze_data(
         }
 
 
+async def _read(ctx: dict, source_id: str) -> dict:
+    """Unified read — dispatches to _read_doc or _read_kb_document based on prefix.
+
+    Accepts the prefixed `source_id` shape that search_workspace emits, e.g.
+    `doc:abc-uuid` or `kb:xyz-uuid`. Tolerates the optional trailing `:i` index
+    (e.g. `doc:abc-uuid:3`) by stripping anything after the second colon.
+    """
+    if not isinstance(source_id, str) or ":" not in source_id:
+        return {
+            "summary": (
+                f"Bad source_id '{source_id}'. Use the prefixed id from "
+                f"search_workspace, e.g. 'doc:<uuid>' or 'kb:<uuid>'."
+            ),
+            "sources": [],
+        }
+
+    prefix, _, rest = source_id.partition(":")
+    raw_id = rest.split(":", 1)[0]  # tolerate trailing :<index>
+
+    if prefix == "doc":
+        return await _read_doc(ctx, doc_id=raw_id)
+    if prefix == "kb":
+        return await _read_kb_document(ctx, knowledge_document_id=raw_id)
+    return {
+        "summary": (
+            f"Unknown source_id prefix '{prefix}'. Use 'doc:<uuid>' for PM "
+            f"documents or 'kb:<uuid>' for knowledge base files."
+        ),
+        "sources": [],
+    }
+
+
+async def _handoff_noop(ctx: dict, **kwargs) -> dict:
+    """Safety net. The agent loop intercepts handoff_to_* tools by name prefix
+    and never reaches this executor — if it does, something has gone wrong."""
+    return {
+        "summary": "Handoff tool was not intercepted by the orchestrator (this is a bug).",
+        "sources": [],
+    }
+
+
 async def _create_folder(
     ctx: dict, name: str, parent_folder_id: str | None = None
 ) -> dict:
@@ -1304,14 +1391,16 @@ TOOL_EXECUTORS = {
     "check_calendar": _check_calendar,
     "analyze_data": _analyze_data,
     "search_workspace": _search_workspace,
-    "search_kb": _search_kb,
-    "read_kb_document": _read_kb_document,
+    "read": _read,
     "list_docs": _list_docs,
-    "read_doc": _read_doc,
-    "search_docs": _search_docs,
     "create_doc": _create_doc,
     "edit_doc": _edit_doc,
     "create_folder": _create_folder,
     "render_ui": _render_ui,
     "critique_design": _critique_design,
+    # Handoff executors — never actually invoked; intercepted by loop.
+    "handoff_to_pm": _handoff_noop,
+    "handoff_to_designer": _handoff_noop,
+    "handoff_to_analyst": _handoff_noop,
+    "handoff_to_calendar": _handoff_noop,
 }

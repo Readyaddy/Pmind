@@ -363,6 +363,348 @@ class TestEmbedDocumentChunks:
         supabase_mock.table.assert_not_called()
 
 
+# ─── _read (unified) ────────────────────────────────────────────────────────
+
+class TestUnifiedRead:
+    @pytest.mark.asyncio
+    async def test_doc_prefix_dispatches_to_read_doc(self, agent_ctx):
+        from agent.tools import _read
+        with patch("agent.tools._read_doc", new=AsyncMock(return_value={"summary": "doc!", "sources": []})) as m:
+            result = await _read(agent_ctx, source_id="doc:abc-uuid")
+        m.assert_awaited_once()
+        assert m.call_args.kwargs.get("doc_id") == "abc-uuid"
+        assert result["summary"] == "doc!"
+
+    @pytest.mark.asyncio
+    async def test_kb_prefix_dispatches_to_read_kb_document(self, agent_ctx):
+        from agent.tools import _read
+        with patch("agent.tools._read_kb_document", new=AsyncMock(return_value={"summary": "kb!", "sources": []})) as m:
+            result = await _read(agent_ctx, source_id="kb:xyz-uuid")
+        m.assert_awaited_once()
+        assert m.call_args.kwargs.get("knowledge_document_id") == "xyz-uuid"
+        assert result["summary"] == "kb!"
+
+    @pytest.mark.asyncio
+    async def test_tolerates_trailing_index(self, agent_ctx):
+        """search_workspace emits ids like 'doc:uuid:3' — read must strip the index."""
+        from agent.tools import _read
+        with patch("agent.tools._read_doc", new=AsyncMock(return_value={"summary": "ok", "sources": []})) as m:
+            await _read(agent_ctx, source_id="doc:abc-uuid:7")
+        assert m.call_args.kwargs.get("doc_id") == "abc-uuid"
+
+    @pytest.mark.asyncio
+    async def test_bad_prefix_returns_helpful_error(self, agent_ctx):
+        from agent.tools import _read
+        result = await _read(agent_ctx, source_id="folder:abc")
+        assert "Unknown source_id prefix" in result["summary"]
+        assert result["sources"] == []
+
+    @pytest.mark.asyncio
+    async def test_no_colon_returns_helpful_error(self, agent_ctx):
+        from agent.tools import _read
+        result = await _read(agent_ctx, source_id="abc-uuid")
+        assert "Bad source_id" in result["summary"]
+
+
+# ─── Tool inventory per agent ───────────────────────────────────────────────
+
+class TestAgentToolInventory:
+    """Verify each agent exposes exactly the tools it should — no more, no less.
+
+    Counts come from the handoff-driven design: each agent has its work tools
+    plus the handoff tools relevant to its role.
+    """
+    def test_pm_tool_count(self):
+        from agent.agents import pm
+        names = {t["name"] for t in pm.get_tools()}
+        expected = {
+            "search_workspace", "read", "list_docs",
+            "create_doc", "edit_doc", "create_folder",
+            "handoff_to_designer", "handoff_to_analyst", "handoff_to_calendar",
+        }
+        assert names == expected, f"PM tools diverged: {names ^ expected}"
+
+    def test_designer_tool_count(self):
+        from agent.agents import designer
+        names = {t["name"] for t in designer.get_tools()}
+        expected = {"design_brief", "render_ui", "critique_design", "handoff_to_pm"}
+        assert names == expected
+
+    def test_analyst_tool_count(self):
+        from agent.agents import analyst
+        names = {t["name"] for t in analyst.get_tools()}
+        expected = {"analyze_data", "search_workspace", "read", "handoff_to_pm"}
+        assert names == expected
+
+    def test_calendar_tool_count(self):
+        from agent.agents import calendar
+        names = {t["name"] for t in calendar.get_tools()}
+        expected = {"check_calendar", "handoff_to_pm"}
+        assert names == expected
+
+    def test_no_agent_exposes_deprecated_tools(self):
+        """search_kb, search_docs, read_doc, read_kb_document must not be in any
+        agent's tool list (their schemas were removed from TOOL_SCHEMAS)."""
+        from agent.agents import pm, designer, analyst, calendar
+        deprecated = {"search_kb", "search_docs", "read_doc", "read_kb_document"}
+        for mod in (pm, designer, analyst, calendar):
+            names = {t["name"] for t in mod.get_tools()}
+            leaked = names & deprecated
+            assert not leaked, f"{mod.DISPLAY_NAME} still exposes deprecated tools: {leaked}"
+
+
+# ─── Handoff & stops-for-input registration ─────────────────────────────────
+
+class TestHandoffWiring:
+    def test_handoff_executors_registered(self):
+        from agent.tools import TOOL_EXECUTORS, HANDOFF_TOOL_PREFIX
+        handoff_names = [n for n in TOOL_EXECUTORS if n.startswith(HANDOFF_TOOL_PREFIX)]
+        assert set(handoff_names) == {
+            "handoff_to_pm", "handoff_to_designer",
+            "handoff_to_analyst", "handoff_to_calendar",
+        }
+
+    def test_handoff_schemas_registered(self):
+        from agent.tools import TOOL_SCHEMAS, HANDOFF_TOOL_PREFIX
+        handoff_schemas = [
+            t for t in TOOL_SCHEMAS if t["name"].startswith(HANDOFF_TOOL_PREFIX)
+        ]
+        assert len(handoff_schemas) == 4
+        # handoff_to_designer must accept a structured brief
+        designer_schema = next(t for t in handoff_schemas if t["name"] == "handoff_to_designer")
+        props = designer_schema["parameters"]["properties"]
+        assert "product" in props
+        assert "audience" in props
+        assert "features" in props
+
+    def test_stops_for_user_input_contains_design_brief(self):
+        from agent.tools import STOPS_FOR_USER_INPUT
+        assert "design_brief" in STOPS_FOR_USER_INPUT
+
+    def test_design_brief_not_in_requires_permission(self):
+        """design_brief uses the stops-for-input path, NOT the permission-gate path."""
+        from agent.tools import REQUIRES_PERMISSION
+        assert "design_brief" not in REQUIRES_PERMISSION
+
+    @pytest.mark.asyncio
+    async def test_handoff_noop_returns_safety_message(self, agent_ctx):
+        """If the loop ever forgets to intercept a handoff, the no-op executor
+        surfaces a clear message rather than silently doing nothing."""
+        from agent.tools import _handoff_noop
+        result = await _handoff_noop(agent_ctx, product="X", audience="Y")
+        assert "bug" in result["summary"].lower() or "not intercepted" in result["summary"].lower()
+
+
+# ─── Orchestrator state machine ─────────────────────────────────────────────
+
+def _collect_events(sse_chunks):
+    """Parse a list of SSE chunks into (event_type, data) tuples."""
+    import json as _json
+    events = []
+    for chunk in sse_chunks:
+        lines = chunk.strip().split("\n")
+        event_type = data_str = None
+        for line in lines:
+            if line.startswith("event: "):
+                event_type = line[7:].strip()
+            elif line.startswith("data: "):
+                data_str = line[6:].strip()
+        if event_type:
+            try:
+                data = _json.loads(data_str) if data_str else {}
+            except Exception:
+                data = {"raw": data_str}
+            events.append((event_type, data))
+    return events
+
+
+class TestOrchestratorStateMachine:
+    @pytest.mark.asyncio
+    async def test_no_handoff_runs_one_agent_then_done(self, agent_ctx):
+        """Router returns 'pm'; agent ends naturally → orchestrator emits done."""
+        from agent import orchestrator as orch
+
+        async def fake_loop(**kwargs):
+            yield orch._sse("text", {"delta": "Here is the answer."})
+            yield orch._sse("_loop_end", {
+                "final_text": "Here is the answer.",
+                "hit_permission_gate": False, "stopped_for_input": False,
+                "handoff_target": None, "handoff_payload": None, "errored": False,
+            })
+
+        async def fake_route(message, history):
+            return "pm"
+
+        chunks = []
+        with patch.object(orch, "run_agent_loop", fake_loop), \
+             patch.object(orch, "_route", new=AsyncMock(side_effect=fake_route)):
+            async for c in orch.run_orchestrated(
+                messages=[{"role": "user", "content": "what's a PRD?"}],
+                user_id="u1", project_id=None,
+            ):
+                chunks.append(c)
+
+        events = _collect_events(chunks)
+        types = [t for t, _ in events]
+        assert types.count("agent_start") == 1
+        assert "done" in types
+        # final done payload includes the agent's final text
+        done = next(d for t, d in events if t == "done")
+        assert "Here is the answer." in done["final_text"]
+
+    @pytest.mark.asyncio
+    async def test_pm_to_designer_handoff_switches_agent(self, agent_ctx):
+        """PM emits handoff_to_designer → orchestrator runs Designer next."""
+        from agent import orchestrator as orch
+
+        call_log = []
+
+        async def fake_loop(*, system, **kwargs):
+            # Use the system prompt to detect which agent is running.
+            if "PM specialist" in system or "PM research agent" in system or "PM Agent" in (kwargs.get("ctx") or {}).get("_agent", "") or "PMind's PM" in system:
+                call_log.append("pm")
+                yield orch._sse("tool_call", {"id": "h1", "name": "handoff_to_designer",
+                                              "args": {"product": "Acme", "audience": "PMs"},
+                                              "status": "running"})
+                yield orch._sse("tool_result", {"id": "h1", "summary": "Handing off to Designer.", "sources": []})
+                yield orch._sse("_loop_end", {
+                    "final_text": "", "hit_permission_gate": False,
+                    "stopped_for_input": False,
+                    "handoff_target": "designer",
+                    "handoff_payload": {"product": "Acme", "audience": "PMs"},
+                    "errored": False,
+                })
+            else:
+                call_log.append("designer")
+                yield orch._sse("text", {"delta": "Built the page."})
+                yield orch._sse("_loop_end", {
+                    "final_text": "Built the page.", "hit_permission_gate": False,
+                    "stopped_for_input": False, "handoff_target": None,
+                    "handoff_payload": None, "errored": False,
+                })
+
+        with patch.object(orch, "run_agent_loop", fake_loop), \
+             patch.object(orch, "_route", new=AsyncMock(return_value="pm")):
+            chunks = []
+            async for c in orch.run_orchestrated(
+                messages=[{"role": "user", "content": "build me a website"}],
+                user_id="u1", project_id=None,
+            ):
+                chunks.append(c)
+
+        assert call_log == ["pm", "designer"], f"agent sequence was {call_log}"
+        events = _collect_events(chunks)
+        # Two agent_start events: PM then Designer
+        agent_starts = [d["name"] for t, d in events if t == "agent_start"]
+        assert agent_starts == ["PM Agent", "Designer"]
+        done = next(d for t, d in events if t == "done")
+        assert "Built the page." in done["final_text"]
+
+    @pytest.mark.asyncio
+    async def test_stops_for_input_terminates(self, agent_ctx):
+        """When sub-agent reports stopped_for_input, orchestrator emits done immediately."""
+        from agent import orchestrator as orch
+
+        async def fake_loop(**kwargs):
+            yield orch._sse("tool_call", {"id": "db1", "name": "design_brief",
+                                          "args": {"context": "portfolio"}, "status": "running"})
+            yield orch._sse("tool_result", {"id": "db1", "summary": "Form shown.", "sources": []})
+            yield orch._sse("_loop_end", {
+                "final_text": "", "hit_permission_gate": False,
+                "stopped_for_input": True,
+                "handoff_target": None, "handoff_payload": None, "errored": False,
+            })
+
+        with patch.object(orch, "run_agent_loop", fake_loop), \
+             patch.object(orch, "_route", new=AsyncMock(return_value="designer")):
+            chunks = []
+            async for c in orch.run_orchestrated(
+                messages=[{"role": "user", "content": "design a portfolio page"}],
+                user_id="u1", project_id=None,
+            ):
+                chunks.append(c)
+
+        events = _collect_events(chunks)
+        types = [t for t, _ in events]
+        assert "done" in types
+        # No second agent_start — loop halted for user input
+        assert sum(1 for t in types if t == "agent_start") == 1
+
+    @pytest.mark.asyncio
+    async def test_handoff_chain_capped(self, agent_ctx):
+        """If agents keep handing off, the chain is capped at MAX_HANDOFFS."""
+        from agent import orchestrator as orch
+
+        # Alternating handoffs: pm → designer → pm → designer → ...
+        cycle = ["designer", "pm", "designer", "pm", "designer"]
+        idx = {"i": 0}
+
+        async def fake_loop(**kwargs):
+            target = cycle[idx["i"] % len(cycle)]
+            idx["i"] += 1
+            yield orch._sse("_loop_end", {
+                "final_text": "", "hit_permission_gate": False,
+                "stopped_for_input": False,
+                "handoff_target": target,
+                "handoff_payload": {"product": "x", "audience": "y"} if target == "designer" else {"query": "more"},
+                "errored": False,
+            })
+
+        with patch.object(orch, "run_agent_loop", fake_loop), \
+             patch.object(orch, "_route", new=AsyncMock(return_value="pm")):
+            chunks = []
+            async for c in orch.run_orchestrated(
+                messages=[{"role": "user", "content": "spin"}],
+                user_id="u1", project_id=None,
+            ):
+                chunks.append(c)
+
+        events = _collect_events(chunks)
+        # MAX_HANDOFFS = 3 → starting agent + 3 handoff switches = 4 agent_start events
+        agent_starts = sum(1 for t, _ in events if t == "agent_start")
+        assert agent_starts == orch.MAX_HANDOFFS + 1, f"got {agent_starts} agent_start events"
+        assert "done" in [t for t, _ in events]
+
+    @pytest.mark.asyncio
+    async def test_resume_with_pending_decisions_skips_router(self, agent_ctx):
+        """When pending_decisions is provided, the agent is picked deterministically
+        from the tool name — no router LLM call."""
+        from agent import orchestrator as orch
+
+        route_called = {"n": 0}
+
+        async def fake_route(*args, **kwargs):
+            route_called["n"] += 1
+            return "pm"
+
+        async def fake_loop(**kwargs):
+            yield orch._sse("text", {"delta": "Created."})
+            yield orch._sse("_loop_end", {
+                "final_text": "Created.", "hit_permission_gate": False,
+                "stopped_for_input": False, "handoff_target": None,
+                "handoff_payload": None, "errored": False,
+            })
+
+        messages = [
+            {"role": "user", "content": "make a doc"},
+            {"role": "assistant", "blocks": [
+                {"type": "tool_call", "id": "c1", "name": "create_doc",
+                 "args": {"title": "X", "content": "Y"}},
+            ]},
+        ]
+        pending = [{"tool_call_id": "c1", "decision": "approve"}]
+
+        with patch.object(orch, "run_agent_loop", fake_loop), \
+             patch.object(orch, "_route", new=AsyncMock(side_effect=fake_route)):
+            async for _ in orch.run_orchestrated(
+                messages=messages, user_id="u1", project_id=None,
+                pending_decisions=pending,
+            ):
+                pass
+
+        assert route_called["n"] == 0, "Router should not be called on resume"
+
+
 # ─── _tiptap_to_text ────────────────────────────────────────────────────────
 
 class TestTiptapToText:

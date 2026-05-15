@@ -1,19 +1,18 @@
 """
-Multi-agent orchestrator.
+Multi-agent orchestrator — handoff-driven state machine.
 
-Routes user messages to one or more specialist sub-agents (PM, Designer,
-Analyst, Calendar) using a fast LLM intent classifier that reads the full
-conversation context. Keyword matching is kept as an instant fallback.
+Routes a user message to ONE starting specialist via a cheap flash-lite
+classifier (or zero LLM calls on a permission/form resume), then runs
+sub-agents in a state machine. Agents themselves request handoffs via
+`handoff_to_<other>` tools — the orchestrator switches when one fires.
 
 SSE events emitted:
-  agent_start  { name, task }          — sub-agent beginning work
-  agent_done   { name, summary }       — sub-agent finished
+  agent_start  { name, task }       — sub-agent beginning work
   text / tool_call / tool_result / error  — forwarded from sub-agents
-  done         { final_text }          — everything complete
+  done         { final_text }       — everything complete
 """
 import json
 import logging
-import re
 from typing import AsyncGenerator
 
 from llm.factory import get_llm_provider
@@ -40,42 +39,31 @@ _DOMAIN_TOOL_NAMES: dict[str, list[str]] = {
     domain: mod.TOOL_NAMES for domain, mod in AGENT_MODULES.items()
 }
 
-_CANONICAL_ORDER = ["pm", "analyst", "calendar", "designer"]
+# Worst case: 1 starting agent + MAX_HANDOFFS switches = MAX_HANDOFFS + 1 runs.
+MAX_HANDOFFS = 3
 
-# ── LLM intent classifier ─────────────────────────────────────────────────────
+# Always-cheap router. Independent of the user's selected model so a fast Pro
+# user doesn't pay Pro rates for routing, and a free user doesn't burn their
+# limited model quota on it.
+ROUTER_PROVIDER = "gemini"
+ROUTER_MODEL = "gemini-2.5-flash-lite"
 
-_CLASSIFIER_SYSTEM = """You are a routing classifier for a multi-agent AI assistant called PMind.
-Given a short conversation history and the latest user message, decide which specialist agents to run.
+ROUTER_SYSTEM = """Pick the specialist who should handle the user's latest message.
 
-AGENTS:
-- pm        Research, documents, PRDs, user stories, knowledge base search. Default agent.
-- designer  UI design, websites, landing pages, mockups, visual artifacts, renders.
-- analyst   CSV/Excel data analysis, charts, metrics calculations.
-- calendar  Calendar events, meetings, scheduling, time blocks.
+pm        — research, PRDs, user stories, docs, knowledge-base search. Default.
+designer  — UI, mockups, websites, landing pages, components, visual artifacts.
+analyst   — CSV/Excel data analysis, metrics, churn/revenue/NPS calculations.
+calendar  — schedules, meetings, time-blocking, "do I have time", "prep me".
 
-ROUTING RULES (apply in order, stop at first match):
-1. Message contains "aesthetic direction:" OR "color palette:" → ["designer"]
-2. Message references designer tools by name (critique_design, render_ui) → ["designer"]
-3. Last assistant tool in history was design_brief OR render_ui AND message is short/continuation
-   ("now", "go ahead", "yes", "do it", "build it", "the page", "design it") → ["designer"]
-4. Last assistant tool was render_ui AND message is iteration
-   ("improve", "fix", "change", "refine", "dark mode", "add", "remove", "better") → ["designer"]
-5. Message asks for a visual artifact for the FIRST time with no prior design context → ["pm", "designer"]
-6. Message is PM work only (PRD, user story, research, summarise, analyse text) → ["pm"]
-7. Message is data/spreadsheet work → ["analyst"]
-8. Message is calendar/scheduling work → ["calendar"]
-9. Anything else → ["pm"]
-
-Respond with ONLY this JSON (no explanation, no markdown):
-{"agents": ["pm"]}"""
+Return ONLY the name. No JSON. No explanation. Just one word: pm, designer, analyst, or calendar."""
 
 
-def _build_classifier_context(messages: list[dict], canonical_msgs: list) -> str:
-    """Build a short context string for the classifier from recent history."""
+# ── Routing ───────────────────────────────────────────────────────────────────
+
+def _history_tail(messages: list[dict], max_msgs: int = 4) -> str:
+    """Stringify the last few user/assistant turns for router context."""
     lines: list[str] = []
-
-    # Last 3 user/assistant exchanges (6 messages max)
-    recent = messages[-6:] if len(messages) > 6 else messages
+    recent = messages[-max_msgs:] if len(messages) > max_msgs else messages
     for m in recent:
         role = m.get("role", "")
         if role not in ("user", "assistant"):
@@ -85,39 +73,45 @@ def _build_classifier_context(messages: list[dict], canonical_msgs: list) -> str
             content = " ".join(
                 b.get("text", "") for b in content if b.get("type") == "text"
             )
+        if not content:
+            continue
         lines.append(f"{role.upper()}: {str(content)[:200]}")
-
-    # Append last-tool-used summary from canonical history
-    for msg in reversed(canonical_msgs):
-        if msg.get("role") != "assistant":
-            continue
-        for block in reversed(msg.get("content") or []):
-            if block.get("type") == "tool_call":
-                lines.append(f"[Last tool used: {block['name']}]")
-                break
-        else:
-            continue
-        break
-
     return "\n".join(lines)
 
 
-async def _classify_domains_llm(
-    message: str,
-    messages: list[dict],
-    canonical_msgs: list,
-    model: str | None,
-    provider: str | None,
-) -> list[str]:
-    """Fast LLM call to classify routing intent. Falls back to keywords on error."""
+def _resume_agent(canonical_msgs: list, pending_decisions: list[dict] | None) -> str | None:
+    """If a previous turn ended at a permission gate (pending_decisions present),
+    or with an unfulfilled tool_call on the assistant turn (e.g. design_brief
+    form awaiting submission), return the agent that owns the pending tool."""
+    if not pending_decisions:
+        return None
+    pending = _find_pending_tool_calls(canonical_msgs)
+    for call in pending:
+        for domain, tool_names in _DOMAIN_TOOL_NAMES.items():
+            if call["name"] in tool_names:
+                return domain
+    return None
+
+
+async def _route(message: str, history_tail: str) -> str:
+    """Single cheap LLM call. Returns one of: pm | designer | analyst | calendar.
+    Falls back to 'pm' on any error."""
+    if not message.strip():
+        return "pm"
+
     try:
-        llm = get_llm_provider(model_override=model, provider_override=provider)
-        context = _build_classifier_context(messages, canonical_msgs)
-        prompt = f"{context}\n\nNEW MESSAGE: {message}"
+        llm = get_llm_provider(
+            model_override=ROUTER_MODEL,
+            provider_override=ROUTER_PROVIDER,
+        )
+        prompt = (
+            f"{history_tail}\n\nLATEST USER MESSAGE: {message}"
+            if history_tail else f"USER: {message}"
+        )
 
         result = ""
         async for ev in llm.stream_text(
-            system=_CLASSIFIER_SYSTEM,
+            system=ROUTER_SYSTEM,
             messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
             disable_thinking=True,
         ):
@@ -126,95 +120,23 @@ async def _classify_domains_llm(
             elif ev.get("type") == "turn_end":
                 break
 
-        # Extract JSON — model may wrap it in markdown
-        m = re.search(r'\{[^}]+\}', result, re.DOTALL)
-        if m:
-            data = json.loads(m.group())
-            agents = [a for a in data.get("agents", []) if a in AGENT_MODULES]
-            if agents:
-                logger.info("LLM classifier → %s (msg: %.60s)", agents, message)
-                return sorted(agents, key=lambda d: _CANONICAL_ORDER.index(d) if d in _CANONICAL_ORDER else 99)
-
+        # Take the first whitespace-separated token, lowercase, strip punctuation.
+        token = result.strip().lower().split()[0] if result.strip() else ""
+        token = token.strip(".,!?\"'`")
+        if token in AGENT_MODULES:
+            logger.info("Router → %s (msg: %.60s)", token, message)
+            return token
+        logger.warning("Router returned unknown '%s' — defaulting to pm", token)
     except Exception as e:
-        logger.warning("LLM classifier failed (%s), falling back to keywords", e)
+        logger.warning("Router failed (%s) — defaulting to pm", e)
 
-    # Keyword fallback
-    return _classify_domains_keywords(message, canonical_msgs)
-
-
-# ── Keyword fallback classifier ───────────────────────────────────────────────
-
-_DOMAIN_KEYWORDS: dict[str, list[str]] = {
-    "designer": [
-        "mockup", "ui ", " ui", "landing page", "website", "component",
-        "dashboard", "layout", "interface", "wireframe", "design brief",
-        "build a page", "make a page", "render ", "visual design",
-        "design a", "design me", "design the", "design it", "design this",
-        "build me a", "make me a", "create a page",
-        "create a site", "create a website",
-    ],
-    "analyst": [
-        "csv", "excel", "spreadsheet", "analyze data", "analyse data",
-        "calculate", "average", "total revenue", "churn", "metrics chart",
-        "data analysis", "run analysis", "analyze the",
-    ],
-    "calendar": [
-        "calendar", "meeting", "schedule", " today", "tomorrow",
-        "busy", "free slot", "time block", "prep me", "my schedule",
-        "do i have time", "when is my",
-    ],
-}
-
-_BRIEF_MARKERS = ["aesthetic direction:", "build the full design now using render_ui", "color palette:"]
-_DESIGNER_TOOLS = {"critique_design", "render_ui", "design_brief"}
-_ITERATION_WORDS = [
-    "improve", "refine", "fix", "update", "change", "adjust", "make it",
-    "redo", "dark mode", "light mode", "lighter", "darker", "bigger",
-    "smaller", "font", "color", "layout", "section", "better", "nicer",
-    "cleaner", "bolder", "add a", "remove", "critique", "review",
-    "design", "build", "now", "go ahead", "proceed", "page",
-]
-
-
-def _last_active_tool(canonical_msgs: list) -> str | None:
-    for msg in reversed(canonical_msgs):
-        if msg.get("role") != "assistant":
-            continue
-        for block in reversed(msg.get("content") or []):
-            if block.get("type") == "tool_call":
-                return block.get("name")
-    return None
-
-
-def _classify_domains_keywords(message: str, canonical_msgs: list | None = None) -> list[str]:
-    msg = message.lower()
-
-    if sum(1 for m in _BRIEF_MARKERS if m in msg) >= 2:
-        return ["designer"]
-
-    if any(t in msg for t in _DESIGNER_TOOLS):
-        if not any(w in msg for w in ["search", "research", "find", "document"]):
-            return ["designer"]
-
-    if canonical_msgs:
-        last_tool = _last_active_tool(canonical_msgs)
-        if last_tool in _DESIGNER_TOOLS and any(w in msg for w in _ITERATION_WORDS):
-            return ["designer"]
-
-    domains: set[str] = set()
-    for domain, keywords in _DOMAIN_KEYWORDS.items():
-        if any(k in msg for k in keywords):
-            domains.add(domain)
-
-    if not domains or "designer" in domains:
-        domains.add("pm")
-
-    return sorted(domains, key=lambda d: _CANONICAL_ORDER.index(d) if d in _CANONICAL_ORDER else 99)
+    return "pm"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_loop_end(chunk: str) -> dict | None:
+    """Pluck the _loop_end sentinel payload out of an SSE chunk."""
     if "_loop_end" not in chunk:
         return None
     lines = chunk.strip().split("\n")
@@ -246,15 +168,6 @@ def _get_last_user_text(messages: list[dict]) -> str:
     return ""
 
 
-def _get_resume_domain(canonical_msgs: list) -> str | None:
-    pending = _find_pending_tool_calls(canonical_msgs)
-    for call in pending:
-        for domain, tool_names in _DOMAIN_TOOL_NAMES.items():
-            if call["name"] in tool_names:
-                return domain
-    return None
-
-
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 async def run_orchestrated(
@@ -281,50 +194,39 @@ async def run_orchestrated(
     decisions_by_id = {d["tool_call_id"]: d for d in (pending_decisions or [])}
     last_user_text = _get_last_user_text(messages)
 
-    if pending_decisions:
-        resume_domain = _get_resume_domain(canonical_msgs)
-        if resume_domain:
-            # Resume: find the domain that was paused and run from there
-            all_domains = await _classify_domains_llm(
-                last_user_text, messages, canonical_msgs, model, provider
-            )
-            if resume_domain in all_domains:
-                domains = all_domains[all_domains.index(resume_domain):]
-            else:
-                domains = [resume_domain]
-        else:
-            domains = await _classify_domains_llm(
-                last_user_text, messages, canonical_msgs, model, provider
-            )
-    else:
-        domains = await _classify_domains_llm(
-            last_user_text, messages, canonical_msgs, model, provider
-        )
+    # Pick the starting agent.
+    current = _resume_agent(canonical_msgs, pending_decisions)
+    if current is None:
+        current = await _route(last_user_text, _history_tail(messages))
 
     logger.info(
-        "Orchestrator start — user=%s domains=%s pending=%d",
-        user_id, domains, len(pending_decisions or []),
+        "Orchestrator start — user=%s start_agent=%s pending=%d",
+        user_id, current, len(pending_decisions or []),
     )
 
+    handoff_payload: dict | None = None
     final_texts: list[str] = []
-    passed_context = ""
+    handoffs_used = 0
 
-    for domain in domains:
-        agent_mod = AGENT_MODULES[domain]
+    while True:
+        agent_mod = AGENT_MODULES[current]
 
-        yield _sse("agent_start", {"name": agent_mod.DISPLAY_NAME, "task": last_user_text[:120]})
+        yield _sse("agent_start", {
+            "name": agent_mod.DISPLAY_NAME,
+            "task": last_user_text[:120],
+        })
 
         system = agent_mod.get_system_prompt(
             product_context=product_context,
-            passed_context=passed_context,
             document_context=document_context,
             mentions_context=mentions_context,
+            handoff_payload=handoff_payload,
         )
+        # handoff_payload is consumed by the receiving agent; reset for the next
+        # iteration unless the agent itself requests another handoff.
+        handoff_payload = None
 
-        agent_final_text = ""
-        hit_permission_gate = False
-        agent_errored = False
-
+        loop_result: dict = {}
         async for chunk in run_agent_loop(
             system=system,
             tools=agent_mod.get_tools(),
@@ -335,23 +237,40 @@ async def run_orchestrated(
             provider=provider,
             max_steps=max_steps,
         ):
-            loop_end = _parse_loop_end(chunk)
-            if loop_end is not None:
-                agent_final_text = loop_end.get("final_text", "")
-                hit_permission_gate = loop_end.get("hit_permission_gate", False)
+            parsed = _parse_loop_end(chunk)
+            if parsed is not None:
+                loop_result = parsed
                 continue
-            if "event: error\n" in chunk:
-                agent_errored = True
             yield chunk
 
-        yield _sse("agent_done", {"name": agent_mod.DISPLAY_NAME, "summary": agent_final_text[:300]})
-
-        if hit_permission_gate or agent_errored:
-            yield _sse("done", {"final_text": agent_final_text})
+        # Terminal conditions — propagate `done` and stop the state machine.
+        if loop_result.get("hit_permission_gate") or loop_result.get("stopped_for_input"):
+            yield _sse("done", {"final_text": loop_result.get("final_text", "")})
+            return
+        if loop_result.get("errored"):
+            yield _sse("done", {"final_text": loop_result.get("final_text", "")})
             return
 
-        passed_context = agent_final_text
-        if agent_final_text:
-            final_texts.append(agent_final_text)
+        # Handoff requested — switch agent and re-enter the loop.
+        target = loop_result.get("handoff_target")
+        if target and target in AGENT_MODULES:
+            if loop_result.get("final_text"):
+                final_texts.append(loop_result["final_text"])
+            handoffs_used += 1
+            if handoffs_used > MAX_HANDOFFS:
+                logger.warning(
+                    "Handoff chain hit MAX_HANDOFFS=%d — stopping (user=%s)",
+                    MAX_HANDOFFS, user_id,
+                )
+                yield _sse("done", {"final_text": "\n\n".join(t for t in final_texts if t)})
+                return
+            handoff_payload = loop_result.get("handoff_payload") or {}
+            current = target
+            continue
 
-    yield _sse("done", {"final_text": "\n\n".join(final_texts)})
+        # Natural end of turn.
+        if loop_result.get("final_text"):
+            final_texts.append(loop_result["final_text"])
+        break
+
+    yield _sse("done", {"final_text": "\n\n".join(t for t in final_texts if t)})

@@ -1,15 +1,23 @@
 """
 Shared agent loop and utilities.
 
-run_agent_loop() is the core agentic LLM loop, extracted from the original
-runner.py. It:
+run_agent_loop() is the core agentic LLM loop. It:
   1. Resolves any pending tool calls from a previous run (permission resume).
-  2. Runs the plan→execute→reflect loop until done or a permission gate is hit.
+  2. Runs the plan→execute→reflect loop until done, a permission gate is hit,
+     the agent requests a handoff to another specialist, or the agent calls
+     a STOPS_FOR_USER_INPUT tool (e.g. design_brief).
   3. Yields typed SSE strings. The final yield is always:
        event: _loop_end
-       data: {"final_text": "...", "hit_permission_gate": true/false}
+       data: {
+         "final_text": str,
+         "hit_permission_gate": bool,
+         "stopped_for_input": bool,
+         "handoff_target": str | None,
+         "handoff_payload": dict | None,
+         "errored": bool,
+       }
      This sentinel is NEVER forwarded to the HTTP client; the orchestrator
-     reads it to decide whether to continue with the next sub-agent.
+     reads it to decide whether to continue, switch agent, or terminate.
 """
 import json
 import logging
@@ -18,7 +26,12 @@ from typing import AsyncGenerator
 from llm.factory import get_llm_provider
 from llm.types import Message, Tool
 
-from ..tools import REQUIRES_PERMISSION, TOOL_EXECUTORS
+from ..tools import (
+    HANDOFF_TOOL_PREFIX,
+    REQUIRES_PERMISSION,
+    STOPS_FOR_USER_INPUT,
+    TOOL_EXECUTORS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +40,26 @@ logger = logging.getLogger(__name__)
 
 def _sse(event_type: str, payload: dict) -> str:
     return f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _loop_end(
+    final_text: str,
+    *,
+    hit_permission_gate: bool = False,
+    stopped_for_input: bool = False,
+    handoff_target: str | None = None,
+    handoff_payload: dict | None = None,
+    errored: bool = False,
+) -> str:
+    """Construct the canonical _loop_end sentinel with every key populated."""
+    return _sse("_loop_end", {
+        "final_text": final_text,
+        "hit_permission_gate": hit_permission_gate,
+        "stopped_for_input": stopped_for_input,
+        "handoff_target": handoff_target,
+        "handoff_payload": handoff_payload,
+        "errored": errored,
+    })
 
 
 # ── Wire → canonical conversion ───────────────────────────────────────────────
@@ -132,7 +165,7 @@ async def run_agent_loop(
     except Exception as e:
         logger.error("LLM provider unavailable: %s", e)
         yield _sse("error", {"message": f"LLM provider not available: {e}"})
-        yield _sse("_loop_end", {"final_text": "", "hit_permission_gate": False})
+        yield _loop_end("", errored=True)
         return
 
     final_text_parts: list[str] = []
@@ -153,7 +186,7 @@ async def run_agent_loop(
                         "args": call.get("args") or {},
                         "status": "awaiting_permission",
                     })
-                    yield _sse("_loop_end", {"final_text": "", "hit_permission_gate": True})
+                    yield _loop_end("", hit_permission_gate=True)
                     return
                 if decision.get("decision") == "deny":
                     reason = (decision.get("reason") or "").strip()
@@ -250,10 +283,7 @@ async def run_agent_loop(
                 step + 1, ctx.get("user_id"), e, exc_info=True,
             )
             yield _sse("error", {"message": f"Agent error: {e}"})
-            yield _sse("_loop_end", {
-                "final_text": "".join(final_text_parts),
-                "hit_permission_gate": False,
-            })
+            yield _loop_end("".join(final_text_parts), errored=True)
             return
 
         # Append this assistant turn to shared history
@@ -275,21 +305,56 @@ async def run_agent_loop(
 
         if stop_reason == "error":
             yield _sse("error", {"message": error_msg or "Provider error"})
-            break
+            yield _loop_end("".join(final_text_parts), errored=True)
+            return
 
         if stop_reason != "tool_use" or not turn_calls:
             break
 
-        # Permission gate — stop loop, let orchestrator surface the prompt
-        gated = [c for c in turn_calls if c["name"] in REQUIRES_PERMISSION]
-        if gated:
-            yield _sse("_loop_end", {
-                "final_text": "".join(final_text_parts),
-                "hit_permission_gate": True,
+        # ── Handoff request — surrender to the orchestrator ──────────────────
+        handoff_calls = [
+            c for c in turn_calls if c["name"].startswith(HANDOFF_TOOL_PREFIX)
+        ]
+        if handoff_calls:
+            call = handoff_calls[0]
+            target = call["name"][len(HANDOFF_TOOL_PREFIX):]
+            payload = call.get("args") or {}
+            logger.info(
+                "Handoff requested — from_user=%s to=%s payload_keys=%s",
+                ctx.get("user_id"), target, list(payload.keys()),
+            )
+            # Emit a synthetic tool_result so the frontend doesn't see a
+            # dangling tool_call, and so canonical_msgs stays well-formed
+            # for any subsequent resume.
+            result_summary = f"Handing off to {target.title()} with structured brief."
+            yield _sse("tool_result", {
+                "id": call["id"],
+                "summary": result_summary,
+                "sources": [],
             })
+            canonical_msgs.append({"role": "tool", "content": [{
+                "type": "tool_result",
+                "tool_call_id": call["id"],
+                "name": call["name"],
+                "content": result_summary,
+            }]})
+            yield _loop_end(
+                "".join(final_text_parts),
+                handoff_target=target,
+                handoff_payload=payload,
+            )
             return
 
-        # Auto-execute all tool calls and feed results back
+        # ── Permission gate — stop loop, orchestrator surfaces the prompt ────
+        gated = [c for c in turn_calls if c["name"] in REQUIRES_PERMISSION]
+        if gated:
+            yield _loop_end(
+                "".join(final_text_parts),
+                hit_permission_gate=True,
+            )
+            return
+
+        # ── Auto-execute all tool calls and feed results back ────────────────
         tool_blocks = []
         for call in turn_calls:
             result = await _execute_call(call, ctx)
@@ -302,8 +367,20 @@ async def run_agent_loop(
             tool_blocks.append(_result_block(call, result))
         canonical_msgs.append({"role": "tool", "content": tool_blocks})
 
+        # ── Stops-for-user-input gate — halt deterministically ───────────────
+        # Tools like design_brief render a frontend form; the user's next
+        # message resumes the conversation as a new user turn.
+        if any(c["name"] in STOPS_FOR_USER_INPUT for c in turn_calls):
+            logger.info(
+                "Loop halted for user input — tools=%s user=%s",
+                [c["name"] for c in turn_calls if c["name"] in STOPS_FOR_USER_INPUT],
+                ctx.get("user_id"),
+            )
+            yield _loop_end(
+                "".join(final_text_parts),
+                stopped_for_input=True,
+            )
+            return
+
     logger.info("Agent loop complete — user=%s steps=%d", ctx.get("user_id"), step + 1)
-    yield _sse("_loop_end", {
-        "final_text": "".join(final_text_parts),
-        "hit_permission_gate": False,
-    })
+    yield _loop_end("".join(final_text_parts))
