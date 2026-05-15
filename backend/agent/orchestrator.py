@@ -145,12 +145,13 @@ async def run_orchestrated(
     pending_decisions: list[dict] | None = None,
     model: str | None = None,
     provider: str | None = None,
+    calendar_provider: str = "google",
     max_steps: int = 8,
 ) -> AsyncGenerator[str, None]:
     ctx = {
         "user_id": user_id,
         "project_id": project_id,
-        "calendar_provider": "google",
+        "calendar_provider": calendar_provider,
     }
 
     canonical_msgs = _wire_to_canonical(messages)

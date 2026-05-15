@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Calendar, AlertTriangle, Clock, Users, Video, ChevronRight, RefreshCw } from "lucide-react";
 
@@ -58,6 +58,8 @@ interface TodayScheduleProps {
   onMeetingClick?: (prompt: string) => void;
 }
 
+const PROVIDER_KEY = "pmind:calendar_provider";
+
 export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
   const { user } = useUser();
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -66,19 +68,30 @@ export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<"no_token" | "api_error" | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const calendarProviderRef = useRef<"google" | "microsoft">("google");
+  const [calendarProvider, setCalendarProvider] = useState<"google" | "microsoft">("google");
 
-  const fetchCalendar = useCallback(async () => {
+  useEffect(() => {
+    const saved = localStorage.getItem(PROVIDER_KEY) as "google" | "microsoft" | null;
+    if (saved === "google" || saved === "microsoft") {
+      calendarProviderRef.current = saved;
+      setCalendarProvider(saved);
+    }
+  }, []);
+
+  const fetchCalendar = useCallback(async (explicitProvider?: "google" | "microsoft") => {
+    const activeProvider = explicitProvider ?? calendarProviderRef.current;
     setLoading(true);
     setError(null);
 
-    // Dev-mode mock so the UI is visible without a real Google connection
+    // Dev-mode mock
     if (process.env.NEXT_PUBLIC_DEV_MODE === "true") {
       await new Promise((r) => setTimeout(r, 400));
       const now = new Date();
       const h = now.getHours();
       setData({
         date: now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
-        provider: "google",
+        provider: activeProvider,
         total_meeting_minutes: 150,
         events: [
           {
@@ -113,23 +126,38 @@ export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
 
     try {
       const userId = user?.id;
-      if (!userId) {
+      if (!userId) { setError("no_token"); setLoading(false); return; }
+
+      const res = await fetch(`${API}/integrations/calendar/upcoming?provider=${activeProvider}`, {
+        headers: { Authorization: `Bearer ${userId}` },
+      });
+
+      if (res.status === 400 && !explicitProvider) {
+        // Auto-fallback: try the other provider once
+        const fallback: "google" | "microsoft" = activeProvider === "google" ? "microsoft" : "google";
+        const res2 = await fetch(`${API}/integrations/calendar/upcoming?provider=${fallback}`, {
+          headers: { Authorization: `Bearer ${userId}` },
+        });
+        if (res2.ok) {
+          calendarProviderRef.current = fallback;
+          setCalendarProvider(fallback);
+          localStorage.setItem(PROVIDER_KEY, fallback);
+          setData(await res2.json());
+          setLoading(false);
+          setRetrying(false);
+          return;
+        }
         setError("no_token");
         setLoading(false);
         return;
       }
 
-      const res = await fetch(`${API}/integrations/calendar/upcoming?provider=google`, {
-        headers: { Authorization: `Bearer ${userId}` },
-      });
-
       if (!res.ok) {
-        // 400 = calendar not connected (missing scope/secret key); other errors = api_error
         setError(res.status === 400 ? "no_token" : "api_error");
-        setLoading(false);
         return;
       }
 
+      localStorage.setItem(PROVIDER_KEY, activeProvider);
       setData(await res.json());
     } catch {
       setError("api_error");
@@ -140,6 +168,16 @@ export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
   }, [user, API]);
 
   useEffect(() => { fetchCalendar(); }, [fetchCalendar]);
+
+  const switchProvider = (p: "google" | "microsoft") => {
+    if (p === calendarProviderRef.current) return;
+    calendarProviderRef.current = p;
+    setCalendarProvider(p);
+    localStorage.setItem(PROVIDER_KEY, p);
+    setData(null);
+    setError(null);
+    fetchCalendar(p);
+  };
 
   const handleMeetingClick = (event: CalendarEvent) => {
     const prompt = `Draft an agenda for my upcoming "${event.title}" meeting (${event.start_formatted}${event.duration_minutes ? `, ${durationLabel(event.duration_minutes)}` : ""}) based on recent work in this project.`;
@@ -153,16 +191,37 @@ export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
   // ── Empty / error states ──────────────────────────────────────────────────
 
   if (error === "no_token" || error === "api_error") {
+    const scopeHint = calendarProvider === "microsoft"
+      ? <><code className="text-[10px] bg-black/5 dark:bg-white/5 px-1 rounded">Calendars.Read</code> scope on your Microsoft social connection</>
+      : <><code className="text-[10px] bg-black/5 dark:bg-white/5 px-1 rounded">calendar.readonly</code> scope on your Google social connection</>;
     return (
-      <div className="mb-8 p-4 rounded-xl border border-black/8 dark:border-white/8 bg-white/50 dark:bg-white/[0.03] flex items-center gap-3">
-        <Calendar size={16} className="text-black/25 dark:text-white/25 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[12.5px] font-medium text-black/60 dark:text-white/60">
-            Google Calendar not connected
-          </p>
-          <p className="text-[11px] text-black/35 dark:text-white/35 mt-0.5">
-            Add <code className="text-[10px] bg-black/5 dark:bg-white/5 px-1 rounded">calendar.readonly</code> scope to your Google social connection in the Clerk Dashboard, and set <code className="text-[10px] bg-black/5 dark:bg-white/5 px-1 rounded">CLERK_SECRET_KEY</code> in the backend env.
-          </p>
+      <div className="mb-8 p-4 rounded-xl border border-black/8 dark:border-white/8 bg-white/50 dark:bg-white/[0.03]">
+        <div className="flex items-start gap-3 mb-3">
+          <Calendar size={16} className="text-black/25 dark:text-white/25 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[12.5px] font-medium text-black/60 dark:text-white/60">
+              {calendarProvider === "microsoft" ? "Microsoft" : "Google"} Calendar not connected
+            </p>
+            <p className="text-[11px] text-black/35 dark:text-white/35 mt-0.5 leading-relaxed">
+              Enable {scopeHint} in Clerk Dashboard, and set{" "}
+              <code className="text-[10px] bg-black/5 dark:bg-white/5 px-1 rounded">CLERK_SECRET_KEY</code> in the backend env.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-1.5 ml-7">
+          {(["google", "microsoft"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => switchProvider(p)}
+              className={`text-[11px] px-2.5 py-1 rounded-md border transition-all capitalize ${
+                calendarProvider === p
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                  : "border-black/8 dark:border-white/8 text-black/40 dark:text-white/40 hover:border-black/20 dark:hover:border-white/20"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
         </div>
       </div>
     );
@@ -249,6 +308,22 @@ export default function TodaySchedule({ onMeetingClick }: TodayScheduleProps) {
           <span className="text-[11px] text-black/35 dark:text-white/35">
             {totalHours > 0 ? `${totalHours}h ` : ""}{totalMins > 0 ? `${totalMins}m` : ""} remaining
           </span>
+          <div className="flex gap-0.5 p-0.5 rounded-md bg-black/5 dark:bg-white/5">
+            {(["google", "microsoft"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => switchProvider(p)}
+                title={`Switch to ${p === "google" ? "Google" : "Microsoft"} Calendar`}
+                className={`text-[10px] px-2 py-0.5 rounded transition-all capitalize ${
+                  calendarProvider === p
+                    ? "bg-white dark:bg-white/15 text-black/70 dark:text-white/70 shadow-sm"
+                    : "text-black/35 dark:text-white/30 hover:text-black/55 dark:hover:text-white/55"
+                }`}
+              >
+                {p === "google" ? "G" : "MS"}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => { setRetrying(true); fetchCalendar(); }}
             className="p-1 rounded-lg text-black/20 dark:text-white/20 hover:text-black/50 dark:hover:text-white/50 transition-colors"

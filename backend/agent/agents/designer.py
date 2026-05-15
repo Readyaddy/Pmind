@@ -94,6 +94,25 @@ These patterns immediately read as generic AI — avoid them:
 - Stock-photo placeholder rectangles labeled "Image"
 
 ════════════════════════════════════════════════════════════════════════
+HOW TO CALL render_ui — PARAMETERS ARE CODE, NOT DESCRIPTIONS
+════════════════════════════════════════════════════════════════════════
+render_ui takes these parameters:
+  title    → short label, e.g. "Portfolio Landing Page"
+  html     → ACTUAL HTML MARKUP that goes inside <body>. Real tags, real content.
+  css      → ACTUAL CSS RULES injected into <style>. Real selectors and declarations.
+  js       → ACTUAL JavaScript code in a <script> tag. Real functions and event listeners.
+  framework → "tailwind" or "vanilla"
+
+WRONG (description, not code):
+  html="A hero section with a gradient background and a centered headline"
+
+RIGHT (actual code):
+  html='<section class="hero"><h1>Build Better Products</h1><button>Get Started</button></section>'
+
+NEVER pass aesthetic descriptions as html/css/js values. Write the code directly.
+The `html` parameter MUST contain complete, renderable HTML markup.
+
+════════════════════════════════════════════════════════════════════════
 COMPLETENESS — SANDBOX RULES
 ════════════════════════════════════════════════════════════════════════
 render_ui renders in a sandboxed iframe with `allow-scripts` only — no network fetches from JS.

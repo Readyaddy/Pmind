@@ -606,12 +606,17 @@ async def get_calendar_upcoming(
     token = await _get_clerk_oauth_token(user_id, clerk_provider)
 
     if not token:
+        scope_hint = (
+            "Calendars.Read scope on your Microsoft social connection"
+            if provider == "microsoft"
+            else "calendar.readonly scope on your Google social connection"
+        )
         raise HTTPException(
             status_code=400,
             detail=(
                 f"{provider.capitalize()} Calendar not connected. "
-                "Enable the calendar.readonly scope on your Google social connection "
-                "in the Clerk Dashboard."
+                f"Enable the {scope_hint} in the Clerk Dashboard, "
+                "and set CLERK_SECRET_KEY in the backend env."
             ),
         )
 

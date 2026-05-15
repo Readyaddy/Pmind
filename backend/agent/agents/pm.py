@@ -77,8 +77,8 @@ WHEN TO USE EACH TOOL:
 ════════════════════════════════════════════════════════════════════════
 DOC/FOLDER ID RULES
 ════════════════════════════════════════════════════════════════════════
-Doc IDs and folder IDs are UUIDs — e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890".
-NEVER integers. NEVER guessed.
+Doc IDs and folder IDs are UUIDs (36-character strings like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+NEVER integers. NEVER guessed. NEVER fabricated.
 
 To edit or read a document:
   1. Get the UUID from search_workspace (doc_id field) OR list_docs.

@@ -18,6 +18,7 @@ async def run_agent(
     pending_decisions: list[dict] | None = None,
     model: str | None = None,
     provider: str | None = None,
+    calendar_provider: str = "google",
     max_steps: int = 8,
 ) -> AsyncGenerator[str, None]:
     async for chunk in run_orchestrated(
@@ -30,6 +31,7 @@ async def run_agent(
         pending_decisions=pending_decisions,
         model=model,
         provider=provider,
+        calendar_provider=calendar_provider,
         max_steps=max_steps,
     ):
         yield chunk

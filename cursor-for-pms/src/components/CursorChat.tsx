@@ -682,6 +682,7 @@ export default function CursorChat() {
         project_id: projectId,
         thread_id: activeThreadId,
         pending_decisions: decisions,
+        calendar_provider: (localStorage.getItem("pmind:calendar_provider") as "google" | "microsoft") || "google",
         ...(selectedModel ? { model_override: selectedModel } : {}),
       });
 
@@ -789,6 +790,7 @@ export default function CursorChat() {
         thread_id: activeThreadId,
         mentioned_doc_ids: mentionedDocIds,
         mentioned_kb_ids: mentionedKbIds,
+        calendar_provider: (localStorage.getItem("pmind:calendar_provider") as "google" | "microsoft") || "google",
         ...(selectedModel ? { model_override: selectedModel } : {}),
       });
 

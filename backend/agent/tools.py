@@ -503,7 +503,7 @@ async def _search_kb(ctx: dict, query: str, top_k: int = 5) -> dict:
             "title": title,
             "snippet": snippet,
         })
-        excerpts_text.append(f"[{i + 1}] {title}\n{r.get('content', '')}")
+        excerpts_text.append(f"[{i + 1}] {title} · knowledge_document_id:{doc_id}\n{r.get('content', '')}")
 
     return {
         "summary": f"Found {len(rows)} excerpt(s) across {len(set(filenames.values()))} file(s).",
@@ -1046,7 +1046,11 @@ async def _search_workspace(ctx: dict, query: str, top_k: int = 5) -> dict:
         })
         ref = item["title"]
         tag = "(KB)" if item["source_type"] == "knowledge_base" else "(Doc)"
-        excerpts.append(f"[{i + 1}] {ref} {tag}\n{item['content']}")
+        if item["source_type"] == "knowledge_base":
+            id_label = f" · knowledge_document_id:{item['knowledge_document_id']}"
+        else:
+            id_label = f" · doc_id:{item['doc_id']}"
+        excerpts.append(f"[{i + 1}] {ref} {tag}{id_label}\n{item['content']}")
 
     total = len(kb_rows) + len(doc_rows)
     summary = (

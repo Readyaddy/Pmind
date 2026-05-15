@@ -527,6 +527,7 @@ class AgentRequest(BaseModel):
     mentioned_doc_ids: Optional[List[str]] = None
     mentioned_kb_ids: Optional[List[str]] = None
     model_override: Optional[str] = None
+    calendar_provider: str = "google"
 
 
 def _get_plan(user_id: str) -> str:
@@ -746,6 +747,7 @@ async def ai_agent(
                 pending_decisions=pending or None,
                 model=model,
                 provider=provider,
+                calendar_provider=request.calendar_provider,
             ):
                 try:
                     if sse_chunk.startswith("event: text"):
