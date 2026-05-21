@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
 import {
   ChevronLeft, ChevronDown, RefreshCw, ArrowUpRight,
-  Bookmark, Trash2, CheckCircle2, Circle, Loader2,
+  Bookmark, Trash2, CheckCircle2, Loader2,
 } from "lucide-react";
 
 interface Theme {
@@ -227,7 +227,7 @@ export default function DiscoveryPage() {
             <div className="flex items-baseline justify-between mb-4">
               <span className="editorial-eyebrow">— Opportunities</span>
               <span className="mono-meta">
-                Ask the agent: <span className="text-amber-700 dark:text-amber">"what should we build next?"</span>
+                Ask the agent: <span className="text-amber-700 dark:text-amber">&quot;what should we build next?&quot;</span>
               </span>
             </div>
 
@@ -397,8 +397,8 @@ export default function DiscoveryPage() {
             <p className="editorial-h2 mb-2" style={{ fontSize: "18px" }}>No opportunities yet.</p>
             <p className="text-[13.5px] text-black/55 dark:text-white/50 max-w-[44ch] mx-auto leading-relaxed">
               In the chat, ask the Opportunity agent
-              <span className="text-amber-700 dark:text-amber"> "what should we build next?" </span>
-              — it'll mine your themes and propose three RICE-scored opportunities.
+              <span className="text-amber-700 dark:text-amber"> &quot;what should we build next?&quot; </span>
+              — it&apos;ll mine your themes and propose three RICE-scored opportunities.
             </p>
           </div>
         )}

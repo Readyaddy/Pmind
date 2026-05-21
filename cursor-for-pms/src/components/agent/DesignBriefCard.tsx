@@ -109,7 +109,7 @@ const ALL_SECTIONS = [
   "Footer",
 ];
 
-export default function DesignBriefCard({ args, status, onSubmit }: Props) {
+export default function DesignBriefCard({ args, status: _status, onSubmit }: Props) {
   const suggestedId =
     args.suggested_styles?.[0]?.toLowerCase().replace(/[\s/]+/g, "-") ?? "";
   const initialStyle =
