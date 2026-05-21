@@ -1,0 +1,40 @@
+USER INTERVIEW — Petar L., Head of Ops, "Atlas Outdoor"
+Company: Outdoor goods, ~40k orders/mo, multi-channel
+Product: Shopflow
+Interviewer: Maya R. (Product)
+Date: Jan 22, 2026
+
+═════════════════════════════════════════════════════════════════
+
+Maya: You've been with us almost two years. What keeps you?
+
+Petar: Switching cost, mostly. I'm being honest with you. We've trained 18
+people on Shopflow. Migrating that knowledge to another platform is a
+quarter of work I don't have.
+
+Maya: What are your biggest current frictions?
+
+Petar: The reports module. I cannot export a custom report to CSV. The PDF
+export works, but my finance team needs it in Sheets for the consolidated
+P&L. I literally screenshot the table and OCR it. That's medieval. There
+must be a button I can ask for that takes one engineer a day.
+
+Maya: What else?
+
+Petar: The notification system. We get a Slack ping for every single low-
+stock alert. No way to digest them, no way to group by supplier, no way
+to mute below a threshold. So we muted the whole channel six months ago.
+Which means we missed three actual stockouts last month. Net negative
+feature.
+
+Maya: That's a great phrase — "net negative feature".
+
+Petar: Put it on a t-shirt. Look — I want to be clear, the core product is
+good. Inventory tracking is accurate to a degree I never had with Stitch.
+But the surrounding workflows — alerts, exports, mobile, bulk edit — feel
+like they were built by someone who's never run a warehouse.
+
+Maya: If I gave you one wish?
+
+Petar: Saved filter views. With names. Shared across the team. That alone
+saves us 30 hours a month.

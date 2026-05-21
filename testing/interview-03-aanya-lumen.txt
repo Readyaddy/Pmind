@@ -1,0 +1,38 @@
+USER INTERVIEW — Aanya P., Inventory Manager, "Lumen Lighting"
+Company: Lighting wholesaler, ~120k SKUs
+Product: Shopflow
+Interviewer: Maya R. (Product)
+Date: Jan 15, 2026
+
+═════════════════════════════════════════════════════════════════
+
+Maya: How does your team use Shopflow?
+
+Aanya: Mostly through the app on the warehouse floor. And that's where the
+mobile experience just falls apart. The barcode scanner integration drops
+the connection if there's a single weak wifi spot — and our warehouse has
+about six of those. Every time it drops, the scan history is gone. The
+scanners on Cin7 hold onto a local queue. Yours doesn't.
+
+Maya: Have your warehouse staff complained?
+
+Aanya: They've stopped complaining. They just go back to clipboards. Which
+defeats the entire point of paying you. Last quarter we re-counted 6,000
+units because of phantom inventory caused by missed scans.
+
+Maya: That's... rough. Six thousand?
+
+Aanya: Six thousand. I have the audit report. Our finance team treats it
+as a known tax on using this software now.
+
+Maya: What about your QuickBooks sync?
+
+Aanya: Breaks weekly. We file a ticket every Monday morning. Same error
+every time — "credential refresh required". Nobody's fixed the root
+cause; we just reconnect. It's been 9 months.
+
+Maya: Anything you genuinely like?
+
+Aanya: The forecasting model is actually really good when it works. The
+demand prediction for Q4 was within 3%. So I know your team CAN ship
+quality. That's what's so frustrating.

@@ -1,19 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock } from "lucide-react";
+import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock, Lightbulb, Rocket } from "lucide-react";
 import type { ToolCall } from "./ToolCallBlock";
 
 const TOOL_META: Record<string, { label: string; icon: React.ElementType }> = {
-  create_doc:    { label: "Create document",   icon: FilePlus },
-  edit_doc:      { label: "Edit document",     icon: Pencil },
-  create_folder: { label: "Create folder",     icon: FolderPlus },
+  create_doc:         { label: "Create document",   icon: FilePlus },
+  edit_doc:           { label: "Edit document",     icon: Pencil },
+  create_folder:      { label: "Create folder",     icon: FolderPlus },
+  save_opportunity:   { label: "Save opportunity",  icon: Lightbulb },
+  promote_to_feature: { label: "Promote to feature", icon: Rocket },
 };
 
 function previewArgs(name: string, args: Record<string, unknown>): string {
   if (name === "create_doc") return String(args.title ?? "(untitled)");
   if (name === "create_folder") return String(args.name ?? "(unnamed)");
   if (name === "edit_doc") return `doc ${String(args.doc_id ?? "?")}`;
+  if (name === "save_opportunity") return String(args.title ?? "(untitled opportunity)");
+  if (name === "promote_to_feature") {
+    const ids = Array.isArray(args.opportunity_ids) ? (args.opportunity_ids as unknown[]).length : 0;
+    return `${String(args.name ?? "(unnamed feature)")} · ${ids} opportunity(ies)`;
+  }
   return JSON.stringify(args);
 }
 
@@ -35,6 +42,28 @@ export default function PermissionPrompt({
   const bodyPreview =
     call.name === "create_doc" || call.name === "edit_doc"
       ? String((call.args.content as string) ?? (call.args.new_content as string) ?? "")
+      : call.name === "save_opportunity"
+      ? [
+          call.args.problem ? `Problem: ${call.args.problem}` : "",
+          call.args.proposed_solution ? `\nDirection: ${call.args.proposed_solution}` : "",
+          [
+            call.args.reach != null ? `Reach ${call.args.reach}` : null,
+            call.args.impact != null ? `Impact ${call.args.impact}` : null,
+            call.args.confidence != null ? `Conf ${call.args.confidence}` : null,
+            call.args.effort != null ? `Effort ${call.args.effort}` : null,
+          ].filter(Boolean).length
+            ? `\n\nScore — ${[
+                call.args.reach != null ? `R${call.args.reach}` : null,
+                call.args.impact != null ? `I${call.args.impact}` : null,
+                call.args.confidence != null ? `C${call.args.confidence}` : null,
+                call.args.effort != null ? `E${call.args.effort}` : null,
+              ].filter(Boolean).join(" · ")}`
+            : "",
+          call.args.risks ? `\n\nRisks: ${call.args.risks}` : "",
+          Array.isArray(call.args.evidence_insight_ids)
+            ? `\n\nEvidence: ${(call.args.evidence_insight_ids as unknown[]).length} customer quote(s)`
+            : "",
+        ].join("")
       : "";
 
   if (resolved === "approved") {

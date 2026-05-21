@@ -22,6 +22,7 @@ from .agents import pm as pm_agent
 from .agents import designer as designer_agent
 from .agents import analyst as analyst_agent
 from .agents import calendar as calendar_agent
+from .agents import opportunity as opportunity_agent
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ AGENT_MODULES = {
     "designer": designer_agent,
     "analyst": analyst_agent,
     "calendar": calendar_agent,
+    "opportunity": opportunity_agent,
 }
 
 _DOMAIN_TOOL_NAMES: dict[str, list[str]] = {
@@ -40,7 +42,10 @@ _DOMAIN_TOOL_NAMES: dict[str, list[str]] = {
 }
 
 # Worst case: 1 starting agent + MAX_HANDOFFS switches = MAX_HANDOFFS + 1 runs.
-MAX_HANDOFFS = 3
+# Realistic multi-domain chain with synthesis-back is:
+#   PM → Analyst → PM → Designer → PM  (4 handoffs).
+# 5 gives one round of headroom for edge cases without enabling runaway loops.
+MAX_HANDOFFS = 5
 
 # Always-cheap router. Independent of the user's selected model so a fast Pro
 # user doesn't pay Pro rates for routing, and a free user doesn't burn their
@@ -50,12 +55,14 @@ ROUTER_MODEL = "gemini-2.5-flash-lite"
 
 ROUTER_SYSTEM = """Pick the specialist who should handle the user's latest message.
 
-pm        — research, PRDs, user stories, docs, knowledge-base search. Default.
-designer  — UI, mockups, websites, landing pages, components, visual artifacts.
-analyst   — CSV/Excel data analysis, metrics, churn/revenue/NPS calculations.
-calendar  — schedules, meetings, time-blocking, "do I have time", "prep me".
+pm           — research, PRDs, user stories, docs, knowledge-base search. Default.
+designer     — UI, mockups, websites, landing pages, components, visual artifacts.
+analyst      — CSV/Excel data analysis, metrics, churn/revenue/NPS calculations.
+calendar     — schedules, meetings, time-blocking, "do I have time", "prep me".
+opportunity  — "what should we build?", "rank opportunities", "mine themes",
+               "biggest pain points by RICE", promoting opportunity → feature.
 
-Return ONLY the name. No JSON. No explanation. Just one word: pm, designer, analyst, or calendar."""
+Return ONLY the name. No JSON. No explanation. Just one word: pm, designer, analyst, calendar, or opportunity."""
 
 
 # ── Routing ───────────────────────────────────────────────────────────────────

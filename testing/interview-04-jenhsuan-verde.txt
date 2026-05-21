@@ -1,0 +1,36 @@
+USER INTERVIEW — Jen-Hsuan W., COO, "Verde Skincare"
+Company: Small skincare brand, ~600 orders/mo
+Product: Shopflow
+Interviewer: Maya R. (Product)
+Date: Jan 18, 2026
+
+═════════════════════════════════════════════════════════════════
+
+Maya: First impression of Shopflow when you signed up?
+
+Jen-Hsuan: Honestly, friendly. The marketing site is great. The trial gave
+me 14 days, which felt fair. But the moment I tried to actually connect
+to Shopify, the OAuth flow timed out twice. I almost gave up. I only got
+through because I'd seen a Reddit thread saying you have to use Chrome
+incognito — Safari just hangs forever.
+
+Maya: That's a known thing?
+
+Jen-Hsuan: Apparently. Why is it not on your help page? I spent an hour on
+this. For a smaller brand evaluating five tools that week, that's enough
+to lose the deal.
+
+Maya: Beyond setup?
+
+Jen-Hsuan: The interface is fine. The thing that hurts is — we're tiny. We
+don't need most of what Growth tier offers, but Starter cuts us off from
+multi-warehouse, and we have a fulfilment partner in Texas plus our
+garage in California. So we're forced to Growth at $399 just for that
+one feature. I'd happily pay $150 for "small business with 2 warehouses"
+but that doesn't exist.
+
+Maya: How are you feeling about renewing?
+
+Jen-Hsuan: 60/40 yes. The forecasting and the Shopify sync (once it
+works) are solid. But if a competitor launches a more honest pricing
+tier in the next 90 days, I'm gone.

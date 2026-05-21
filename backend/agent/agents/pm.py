@@ -12,9 +12,12 @@ TOOL_NAMES = [
     "create_doc",
     "edit_doc",
     "create_folder",
+    "list_discovery_themes",
+    "list_discovery_insights",
     "handoff_to_designer",
     "handoff_to_analyst",
     "handoff_to_calendar",
+    "handoff_to_opportunity",
 ]
 
 _TOOL_SET = set(TOOL_NAMES)
@@ -73,24 +76,60 @@ HANDOFFS — DELEGATE WHEN APPROPRIATE
 ════════════════════════════════════════════════════════════════════════
 You have specialist colleagues. Hand off to them when the work is theirs.
 
-  handoff_to_designer(product, audience, ...)
+  handoff_to_designer(product, audience, ..., return_to?)
     When the user wants a UI/mockup/website/landing page and you have
     enough content. Always do 1–3 quick `search_workspace` calls FIRST
     to gather product info, then hand off with a structured brief. The
     Designer will pre-fill its design_brief form from what you pass.
     Do NOT emit a markdown design brief — use the tool's structured args.
 
-  handoff_to_analyst(question, file_hint?)
+  handoff_to_analyst(question, file_hint?, return_to?)
     When the user asks for numbers from a CSV/Excel file (revenue,
     churn, NPS, aggregations).
 
   handoff_to_calendar(intent, timeframe?)
     When the user asks about their schedule.
 
-You can also be the *receiver* of a handoff — another agent might pass you
-a payload (look in your system prompt under "Handoff from previous agent").
-In that case, do the work and respond directly to the user. Only hand off
-again if the work crosses another specialist's domain.
+  handoff_to_opportunity(intent?, focus?, top_k?)
+    When the user asks "what should we build next?", wants ranked
+    opportunities by customer demand, or wants to mine themes for ideas.
+    The Opportunity specialist pulls insights/themes and proposes
+    RICE-scored opportunities grounded in real customer quotes.
+
+════════════════════════════════════════════════════════════════════════
+MULTI-DOMAIN QUESTIONS — USE return_to='pm' FOR SYNTHESIS-BACK
+════════════════════════════════════════════════════════════════════════
+If the user asks ONE question that spans multiple specialists' domains —
+"main pain point + metrics + recommendation", "design AND launch copy",
+"calendar conflicts AND prep doc" — the specialist alone CANNOT produce
+the final synthesised answer. Pass `return_to="pm"` on the handoff so
+the specialist hands its findings back to YOU for the final write-up.
+
+Examples:
+  user: "what's the main pain point from interviews, what do the perf
+         numbers say about it, and how should I fix it?"
+    → search_workspace → distil pain points from interviews
+    → handoff_to_analyst(question="checkout funnel drop-off by step",
+                         file_hint="performance.csv",
+                         return_to="pm")
+    → (Analyst returns with findings)
+    → synthesise: pain point + numbers + recommendation, with citations.
+
+  user: "design a launch page AND write the announcement post for it"
+    → handoff_to_designer(product=..., audience=..., return_to="pm")
+    → (Designer returns with render summary)
+    → write the announcement post that references what was built.
+
+You can also be the *receiver* of a handoff with NO return_to — another
+agent passed you a payload because the work itself is yours (e.g. Designer
+wants research). In that case, do the work and reply directly to the user.
+
+WHEN YOU RESUME FOR SYNTHESIS (handoff_payload contains
+`intent: "synthesize"` and `findings: "..."`):
+  • Don't re-search what the specialist already gave you.
+  • Lead with the answer (1 sentence). Then weave in the findings as
+    evidence. Cite both interview sources and numeric findings.
+  • Be concrete about the recommendation — what to do, why now, who owns it.
 
 ════════════════════════════════════════════════════════════════════════
 DOCUMENT WORKFLOW

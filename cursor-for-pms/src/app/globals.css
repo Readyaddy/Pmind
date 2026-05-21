@@ -2,16 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────────────────────────────────────────────────────────
+   PMind Design System — warm-glass + editorial
+   ───────────────────────────────────────────────────────────────────────────
+   Rules (don't break these without a good reason):
+
+   1. EARNED AMBER. Amber is the most expensive ink. Restrict to ONE moment
+      per screen: the primary CTA, or the single most important data point.
+      Everything else is grayscale. Don't sprinkle amber liberally.
+
+   2. GLASS FOR LAYERS. `.glass-pane` marks floating / elevated surfaces
+      (chat panel, modals, hero cards). Inline content gets flat backgrounds
+      with `.hairline` dividers. Don't wrap everything in glass.
+
+   3. TYPE DOES THE WORK. Hierarchy comes from size + weight + family,
+      not color. Use `.editorial-h1/h2/eyebrow` for display, body text for
+      prose, `.mono-meta` for metadata / IDs / numbers.
+
+   4. NEGATIVE SPACE IS CONTENT. Generous top margins on display headings
+      (`mt-16` / `mt-20`). Don't pack the viewport edge-to-edge.
+
+   5. MONO FOR DATA. File paths, IDs, scores, sizes, timestamps — anything
+      machine-generated — uses `.mono-meta`. Reads as "data" not "UI text."
+   ─────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
     --background: #ffffff;
     --foreground: #09090b;
     --border: #e4e4e7;
+
+    /* Editorial type scale — bigger deltas than the previous 13/14/15 cluster */
+    --type-display: 48px;   /* hero h1 — page-defining */
+    --type-h1:      32px;   /* section h1 */
+    --type-h2:      22px;   /* subsection */
+    --type-lead:    17px;   /* opening paragraph */
+    --type-body:    14px;   /* prose */
+    --type-ui:      12.5px; /* UI text */
+    --type-meta:    11px;   /* mono metadata */
+    --type-eyebrow: 10.5px; /* small-caps overlines */
+
+    /* Hairline borders — 8% black in light, 6% white in dark */
+    --hairline: rgba(15, 15, 15, 0.08);
   }
   .dark {
     --background: #050505;
     --foreground: #F3F2F1;
     --border: rgba(255, 255, 255, 0.05);
+    --hairline: rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -89,6 +127,143 @@ body {
     0 16px 48px -12px rgba(0, 0, 0, 0.45),
     0 1px 3px rgba(0, 0, 0, 0.30);
 }
+
+/* ─── Editorial type system ─────────────────────────────────────────────── */
+
+/* Hero display heading — used once per page on the most important surface */
+.editorial-display {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-weight: 600;
+  font-size: var(--type-display);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: rgba(20, 20, 20, 0.92);
+}
+.dark .editorial-display { color: rgba(243, 242, 241, 0.94); }
+
+/* Section heading */
+.editorial-h1 {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-weight: 600;
+  font-size: var(--type-h1);
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+  color: rgba(20, 20, 20, 0.92);
+}
+.dark .editorial-h1 { color: rgba(243, 242, 241, 0.94); }
+
+/* Subsection / card title */
+.editorial-h2 {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-weight: 500;
+  font-size: var(--type-h2);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: rgba(20, 20, 20, 0.88);
+}
+.dark .editorial-h2 { color: rgba(243, 242, 241, 0.92); }
+
+/* Opening paragraph — slightly larger body */
+.editorial-lead {
+  font-size: var(--type-lead);
+  line-height: 1.55;
+  color: rgba(20, 20, 20, 0.70);
+}
+.dark .editorial-lead { color: rgba(243, 242, 241, 0.72); }
+
+/* Small-caps overline — sits ABOVE a heading like a magazine kicker */
+.editorial-eyebrow {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: var(--type-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(217, 119, 6, 0.85);
+}
+.dark .editorial-eyebrow { color: rgba(245, 158, 11, 0.85); }
+
+/* Mono metadata — IDs, scores, file paths, timestamps, anything machine */
+.mono-meta {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: var(--type-meta);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgba(20, 20, 20, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.dark .mono-meta { color: rgba(243, 242, 241, 0.50); }
+
+/* Hairline — replaces border-black/5 across the system */
+.hairline      { border: 1px solid var(--hairline); }
+.hairline-t    { border-top:    1px solid var(--hairline); }
+.hairline-b    { border-bottom: 1px solid var(--hairline); }
+.hairline-l    { border-left:   1px solid var(--hairline); }
+.hairline-r    { border-right:  1px solid var(--hairline); }
+
+/* ─── Pull quote ─────────────────────────────────────────────────────────
+   Editorial treatment for customer quotes / evidence. Hanging quote mark,
+   serif body, attribution line in small-caps mono. */
+.pull-quote {
+  position: relative;
+  padding-left: 1.6em;
+  font-family: var(--font-playfair), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.45;
+  color: rgba(20, 20, 20, 0.82);
+}
+.dark .pull-quote { color: rgba(243, 242, 241, 0.85); }
+
+.pull-quote::before {
+  content: "\201C";  /* opening curly quote */
+  position: absolute;
+  left: 0;
+  top: -0.15em;
+  font-size: 2.4em;
+  line-height: 1;
+  color: rgba(217, 119, 6, 0.55);
+  font-style: normal;
+  font-weight: 600;
+}
+.dark .pull-quote::before { color: rgba(245, 158, 11, 0.55); }
+
+.pull-quote-attr {
+  display: block;
+  margin-top: 0.55em;
+  margin-left: 1.6em;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(20, 20, 20, 0.45);
+}
+.dark .pull-quote-attr { color: rgba(243, 242, 241, 0.42); }
+
+/* ─── Stat strip — hero-row metrics in editorial display ─────────────── */
+.stat-strip      { display: flex; align-items: baseline; gap: 32px; flex-wrap: wrap; }
+.stat-strip > *  { display: flex; flex-direction: column; gap: 4px; }
+.stat-strip .stat-value {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.022em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(20, 20, 20, 0.92);
+}
+.dark .stat-strip .stat-value { color: rgba(243, 242, 241, 0.94); }
+.stat-strip .stat-label {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(20, 20, 20, 0.45);
+}
+.dark .stat-strip .stat-label { color: rgba(243, 242, 241, 0.42); }
 
 /* Subtle, recessed surface inside a glass pane (e.g. message bubbles) */
 .glass-inset {

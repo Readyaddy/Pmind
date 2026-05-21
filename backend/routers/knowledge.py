@@ -8,6 +8,8 @@ from google import genai
 import PyPDF2
 import docx
 
+from agent.discovery import schedule_extraction
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -26,14 +28,78 @@ def get_gemini_client():
 
 # ── Text chunking (non-tabular) ───────────────────────────────────────────────
 
+# Sentence terminator: ., !, ?, possibly followed by closing quotes/parens.
+_SENTENCE_END_RE = re.compile(r'(?<=[.!?])["\'\)\]]?\s+')
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Naive but practical sentence splitter — splits on terminal punctuation
+    + whitespace. Keeps the terminator with the preceding sentence."""
+    text = text.strip()
+    if not text:
+        return []
+    pieces = _SENTENCE_END_RE.split(text)
+    return [p.strip() for p in pieces if p.strip()]
+
+
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
-    return chunks
+    """
+    Sentence-aware chunker. Groups whole sentences into chunks up to
+    `chunk_size` chars; carries the trailing ~`overlap` chars of context
+    into the next chunk. Critically: chunks never end mid-sentence, so
+    downstream insight extraction can quote them verbatim without
+    truncating mid-word.
+
+    Falls back to a hard char-cut only if a single sentence exceeds
+    `chunk_size` (rare — usually unbroken machine output).
+    """
+    # First, split on paragraph breaks to preserve natural document structure.
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+    chunks: list[str] = []
+    buffer: list[str] = []
+    buf_len = 0
+
+    def flush() -> None:
+        nonlocal buffer, buf_len
+        if buffer:
+            chunks.append(" ".join(buffer).strip())
+            buffer = []
+            buf_len = 0
+
+    for paragraph in paragraphs:
+        sentences = _split_sentences(paragraph)
+        if not sentences:
+            continue
+        for sent in sentences:
+            sent_len = len(sent) + 1  # +1 for join space
+            # Sentence alone exceeds chunk_size → hard-split it
+            if sent_len > chunk_size:
+                flush()
+                for i in range(0, len(sent), chunk_size):
+                    chunks.append(sent[i:i + chunk_size])
+                continue
+            if buf_len + sent_len > chunk_size:
+                flush()
+                # Carry overlap: pull the last few sentences forward
+                if chunks and overlap > 0:
+                    tail = chunks[-1][-overlap:]
+                    # Trim to the start of a sentence within tail if possible
+                    m = _SENTENCE_END_RE.search(tail)
+                    if m:
+                        tail = tail[m.end():]
+                    if tail:
+                        buffer.append(tail.strip())
+                        buf_len += len(tail) + 1
+            buffer.append(sent)
+            buf_len += sent_len
+        # Paragraph boundary — break only if buffer already big enough
+        if buf_len > chunk_size * 0.6:
+            flush()
+
+    flush()
+    # Filter pathologically short / blank chunks
+    return [c for c in chunks if len(c) >= 30]
 
 
 # ── Tabular chunking (CSV / Excel) ────────────────────────────────────────────
@@ -136,22 +202,42 @@ async def extract_text_from_file(file: UploadFile) -> str:
 
 # ── Embedding helper ──────────────────────────────────────────────────────────
 
-def _embed_chunks(chunks: list[str]) -> list[list[float]]:
-    """Embed a list of chunks, batching into groups of 100 to avoid API limits."""
+def _embed_chunks(chunks: list[str]) -> list[list[float] | None]:
+    """Embed a list of chunks, batching into groups of 100 to avoid API limits.
+
+    Returns a list aligned 1:1 with `chunks`. Any chunk the API failed to
+    embed gets a `None` placeholder so callers can skip it without scrambling
+    indices.
+    """
     from google.genai import types as genai_types
     client = get_gemini_client()
-    vectors: list[list[float]] = []
+    vectors: list[list[float] | None] = []
     BATCH = 100
     for i in range(0, len(chunks), BATCH):
         batch = chunks[i : i + BATCH]
-        resp = client.models.embed_content(
-            model="gemini-embedding-2",
-            contents=batch,
-            config=genai_types.EmbedContentConfig(output_dimensionality=768),
-        )
+        try:
+            resp = client.models.embed_content(
+                model="gemini-embedding-2",
+                contents=batch,
+                config=genai_types.EmbedContentConfig(output_dimensionality=768),
+            )
+        except Exception as e:
+            logger.warning("Embed batch %d failed: %s — padding with None", i // BATCH, e)
+            vectors.extend([None] * len(batch))
+            continue
         emb_list = resp.embeddings if hasattr(resp, "embeddings") else resp
-        for emb_obj in emb_list:
-            vectors.append(emb_obj.values if hasattr(emb_obj, "values") else emb_obj)
+        emb_list = list(emb_list or [])
+        if len(emb_list) != len(batch):
+            logger.warning(
+                "Embed batch %d returned %d vectors for %d chunks — padding",
+                i // BATCH, len(emb_list), len(batch),
+            )
+        for j in range(len(batch)):
+            if j < len(emb_list):
+                emb = emb_list[j]
+                vectors.append(emb.values if hasattr(emb, "values") else emb)
+            else:
+                vectors.append(None)
     return vectors
 
 
@@ -225,8 +311,15 @@ async def upload_knowledge_document(
                 "content": chunks[i],
                 "embedding": vectors[i],
             }
-            for i in range(len(chunks))
+            for i in range(min(len(chunks), len(vectors)))
+            if vectors[i] is not None
         ]
+        skipped = len(chunks) - len(chunk_records)
+        if skipped:
+            logger.warning(
+                "Skipped %d chunk(s) without embeddings for doc=%s",
+                skipped, doc_id,
+            )
         if chunk_records:
             supabase.table("knowledge_chunks").insert(chunk_records).execute()
 
@@ -234,6 +327,21 @@ async def upload_knowledge_document(
             "KB upload complete — file=%s doc_id=%s chunks=%d tabular=%s",
             filename, doc_id, len(chunk_records), is_tabular,
         )
+
+        # Fire-and-forget insight extraction for non-tabular docs. Tabular
+        # files (CSV/Excel) go through analyze_data instead — surfacing
+        # insights from rows of numbers isn't meaningful.
+        if not is_tabular and chunk_records:
+            try:
+                schedule_extraction(
+                    knowledge_document_id=doc_id,
+                    project_id=project_id,
+                    user_id=user_id,
+                    filename=filename,
+                )
+            except Exception as e:
+                logger.warning("Could not schedule insight extraction: %s", e)
+
         return {"success": True, "document_id": doc_id, "chunks": len(chunk_records), "tabular": is_tabular}
 
     except Exception as e:

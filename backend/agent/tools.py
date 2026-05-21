@@ -374,10 +374,180 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["html", "design_goals"],
         },
     },
+    # ── Discovery tools (insights → themes → opportunities → features) ────────
+    {
+        "name": "list_discovery_themes",
+        "description": (
+            "List the top customer-feedback themes for the current project, "
+            "ranked by how many distinct insights (customer quotes) they "
+            "contain. Each theme has an id, name, insight_count, and an "
+            "optional summary. Call this BEFORE proposing opportunities — "
+            "themes are the raw material."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max themes to return (default 20).",
+                    "default": 20,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "list_discovery_insights",
+        "description": (
+            "List customer-quote-level insights extracted from uploaded "
+            "interviews / support tickets / surveys. Filter by theme_id, "
+            "sentiment, or minimum severity. Use this to gather evidence "
+            "before drafting a problem statement. Returns quote, paraphrase, "
+            "sentiment, severity, persona, and the source filename."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "theme_id": {
+                    "type": "string",
+                    "description": "(optional) Restrict to insights linked to this theme.",
+                },
+                "sentiment": {
+                    "type": "string",
+                    "enum": ["positive", "neutral", "negative", "mixed"],
+                    "description": "(optional) Filter by sentiment.",
+                },
+                "min_severity": {
+                    "type": "integer",
+                    "description": "Only include insights with severity >= this (1-5). Default 1.",
+                    "default": 1,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default 25, hard max 100).",
+                    "default": 25,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "list_opportunities",
+        "description": (
+            "List opportunities ALREADY SAVED for this project. ALWAYS call "
+            "this BEFORE proposing new opportunities — you must not duplicate "
+            "what's already there. Returns title, problem, status, and "
+            "rice_score for each existing row. Use the returned titles + "
+            "problems to skip any new proposal that overlaps substantially."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["proposed", "shortlisted", "discarded", "committed"],
+                    "description": "(optional) Filter to one status. Omit to see all.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "save_opportunity",
+        "description": (
+            "Persist a proposed product opportunity grounded in customer "
+            "evidence. The user must approve before this is executed. "
+            "Use `evidence_insight_ids` (from list_discovery_insights) to "
+            "anchor the opportunity to quotes — never invent IDs. Score "
+            "reach/impact/confidence/effort on 1–10 scales; the RICE score "
+            "is computed automatically."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short, problem-framed title."},
+                "problem": {"type": "string", "description": "Why this matters, grounded in customer evidence."},
+                "proposed_solution": {"type": "string", "description": "(optional) Sketch of a solution direction."},
+                "evidence_insight_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Insight UUIDs that justify this opportunity. Required for credibility.",
+                },
+                "theme_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "(optional) Theme UUIDs this opportunity ladders up to.",
+                },
+                "reach": {"type": "integer", "description": "1-10 — how many users affected."},
+                "impact": {"type": "integer", "description": "1-10 — per-user pain reduction."},
+                "confidence": {"type": "integer", "description": "1-10 — how sure we are."},
+                "effort": {"type": "integer", "description": "1-10 — build cost (HIGHER = MORE effort)."},
+                "risks": {"type": "string", "description": "(optional) Key risks / unknowns."},
+            },
+            "required": ["title", "problem", "evidence_insight_ids"],
+        },
+    },
+    {
+        "name": "promote_to_feature",
+        "description": (
+            "Promote one or more committed opportunities into a Feature — "
+            "a buildable initiative with optional PRD link. The user must "
+            "approve. Promotion auto-marks the linked opportunities as "
+            "'committed' so they drop off the active backlog."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Feature name."},
+                "summary": {"type": "string", "description": "1-2 sentence summary of what we're building and why."},
+                "opportunity_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Opportunity UUIDs this feature addresses.",
+                },
+                "prd_document_id": {
+                    "type": "string",
+                    "description": "(optional) doc_id of the PRD document for this feature.",
+                },
+            },
+            "required": ["name", "opportunity_ids"],
+        },
+    },
     # ── Handoff tools ──────────────────────────────────────────────────────────
     # These are intercepted by the agent loop (by name prefix) and never reach
     # the tool executor. Their args become the handoff_payload for the
     # receiving agent. No-op executors are registered below as a safety net.
+    {
+        "name": "handoff_to_opportunity",
+        "description": (
+            "Hand the conversation off to the Opportunity specialist. Use "
+            "when the user asks 'what should we build next?', wants to "
+            "review/score opportunities, or wants to mine themes for "
+            "feature ideas. The specialist will pull insights/themes from "
+            "the project and propose ranked opportunities with citations."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "enum": ["discover", "score", "promote"],
+                    "description": "discover=propose new opportunities from themes; score=re-evaluate existing ones; promote=turn opportunity into feature.",
+                    "default": "discover",
+                },
+                "focus": {
+                    "type": "string",
+                    "description": "(optional) Specific theme/area to focus on, e.g. 'checkout friction'.",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "(optional) How many opportunities to surface. Default 3.",
+                    "default": 3,
+                },
+            },
+            "required": [],
+        },
+    },
     {
         "name": "handoff_to_designer",
         "description": (
@@ -387,7 +557,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "needed — or there's no research to gather. Pass a structured brief "
             "so the Designer can pre-fill its design_brief form. If you have "
             "nothing to add (e.g. the user already gave the full spec), pass "
-            "only `product` and `audience`."
+            "only `product` and `audience`. Set `return_to='pm'` when the user's "
+            "actual request is a multi-part synthesis (e.g. 'design + write the "
+            "launch copy') and you need the Designer's output back for stitching."
         ),
         "parameters": {
             "type": "object",
@@ -403,6 +575,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "social_proof": {"type": "string", "description": "Numbers, clients, achievements found in workspace."},
                 "cta_goal": {"type": "string", "description": "What the page should get visitors to do."},
                 "notes": {"type": "string", "description": "Any extra constraints (sections to include, aesthetic hints, etc.)."},
+                "return_to": {
+                    "type": "string",
+                    "enum": ["pm"],
+                    "description": "(optional) Set to 'pm' if the Designer should hand its render summary back to PM for synthesis instead of replying to the user directly.",
+                },
             },
             "required": ["product", "audience"],
         },
@@ -414,22 +591,29 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "workspace research, document creation/editing, or content the user "
             "hasn't provided and isn't in Product Brain. Pass a focused query — "
             "the PM will search and synthesise, then either return to you with "
-            "a structured brief or answer the user directly."
+            "a structured brief or answer the user directly. When called as a "
+            "synthesis-back handoff (the upstream PM passed you `return_to='pm'`), "
+            "set `intent='synthesize'` and put your findings in `findings` so the "
+            "PM can weave them into a final cross-domain answer."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Specific information need or task for the PM agent."},
+                "query": {"type": "string", "description": "Specific information need or task for the PM agent. For synthesis-back, restate the original user question."},
                 "intent": {
                     "type": "string",
-                    "enum": ["research", "draft_doc", "edit_doc"],
-                    "description": "What kind of PM work is needed.",
+                    "enum": ["research", "draft_doc", "edit_doc", "synthesize"],
+                    "description": "What kind of PM work is needed. Use 'synthesize' when handing findings back to PM after the PM originally delegated this work.",
                     "default": "research",
                 },
                 "return_to": {
                     "type": "string",
                     "enum": ["designer", "analyst", "calendar"],
                     "description": "(optional) Which agent the PM should hand back to once done. Omit if the PM should reply to the user directly.",
+                },
+                "findings": {
+                    "type": "string",
+                    "description": "(optional) When intent='synthesize', the specialist's findings to hand back — numbers, design summary, schedule details. PM uses these to ground its final answer.",
                 },
             },
             "required": ["query"],
@@ -440,13 +624,22 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": (
             "Hand off to the data analyst specialist for CSV/Excel computation "
             "(churn, revenue, NPS, aggregations). Pass the question and any "
-            "hint about which file to use."
+            "hint about which file to use. Set `return_to='pm'` when the user's "
+            "real request is multi-domain (e.g. 'main pain point + numbers + "
+            "recommendation') and you need the Analyst's findings back so YOU "
+            "can synthesise the final answer — otherwise the Analyst will reply "
+            "directly to the user with just the numbers."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "question": {"type": "string", "description": "What numbers / analysis the user wants."},
                 "file_hint": {"type": "string", "description": "Filename or topic to help locate the data file."},
+                "return_to": {
+                    "type": "string",
+                    "enum": ["pm"],
+                    "description": "(optional) Set to 'pm' if the Analyst should hand its findings back to PM for cross-domain synthesis instead of replying to the user directly.",
+                },
             },
             "required": ["question"],
         },
@@ -470,7 +663,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 
 
 # Tools whose execution requires explicit user approval.
-REQUIRES_PERMISSION: set[str] = {"create_doc", "edit_doc", "create_folder"}
+REQUIRES_PERMISSION: set[str] = {
+    "create_doc", "edit_doc", "create_folder",
+    "save_opportunity", "promote_to_feature",
+}
 
 # Tools that halt the agent loop after running so the user can interact with a
 # frontend form. The loop emits the tool_call/result and then ends; the user's
@@ -1345,6 +1541,329 @@ async def _read(ctx: dict, source_id: str) -> dict:
     }
 
 
+async def _list_discovery_themes(ctx: dict, limit: int = 20) -> dict:
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — themes unavailable.", "sources": []}
+
+    supabase = get_supabase()
+    try:
+        res = (
+            supabase.table("themes")
+            .select("id, name, description, insight_count, summary")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .order("insight_count", desc=True)
+            .limit(max(1, min(int(limit or 20), 100)))
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"Theme lookup failed: {e}", "sources": []}
+
+    rows = res.data or []
+    if not rows:
+        return {
+            "summary": (
+                "No themes yet. Upload customer interviews / support tickets / "
+                "surveys to the knowledge base — insights and themes are "
+                "extracted automatically after upload."
+            ),
+            "sources": [],
+        }
+
+    lines = [
+        f"- {r['name']} (id: {r['id']}) · {r['insight_count']} insight(s)"
+        + (f" · {r['summary']}" if r.get("summary") else "")
+        for r in rows
+    ]
+    return {
+        "summary": f"Found {len(rows)} theme(s).",
+        "data": "\n".join(lines),
+        "sources": [],
+    }
+
+
+async def _list_discovery_insights(
+    ctx: dict,
+    theme_id: str | None = None,
+    sentiment: str | None = None,
+    min_severity: int = 1,
+    limit: int = 25,
+) -> dict:
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — insights unavailable.", "sources": []}
+
+    supabase = get_supabase()
+    try:
+        q = (
+            supabase.table("insights")
+            .select("id, quote, paraphrase, sentiment, severity, persona, themes, knowledge_document_id")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .gte("severity", max(1, min(int(min_severity or 1), 5)))
+            .order("severity", desc=True)
+            .limit(max(1, min(int(limit or 25), 100)))
+        )
+        if theme_id:
+            q = q.eq("theme_id", theme_id)
+        if sentiment:
+            q = q.eq("sentiment", sentiment)
+        res = q.execute()
+    except Exception as e:
+        return {"summary": f"Insight lookup failed: {e}", "sources": []}
+
+    rows = res.data or []
+    if not rows:
+        return {
+            "summary": "No insights match those filters.",
+            "sources": [],
+        }
+
+    # Enrich with filenames
+    kb_ids = list({r["knowledge_document_id"] for r in rows if r.get("knowledge_document_id")})
+    fnames: dict[str, str] = {}
+    if kb_ids:
+        try:
+            d = (
+                supabase.table("knowledge_documents")
+                .select("id, filename")
+                .in_("id", kb_ids)
+                .execute()
+            )
+            fnames = {x["id"]: x["filename"] for x in (d.data or [])}
+        except Exception:
+            pass
+
+    lines = []
+    sources = []
+    for i, r in enumerate(rows):
+        src = fnames.get(r.get("knowledge_document_id") or "", "Unknown source")
+        persona = f" [{r['persona']}]" if r.get("persona") else ""
+        themes_str = f" themes={r['themes']}" if r.get("themes") else ""
+        lines.append(
+            f"[{i + 1}] (id: {r['id']}) sev={r['severity']} {r['sentiment']}{persona}"
+            f"{themes_str} — \"{r['quote']}\" (source: {src})"
+        )
+        sources.append({
+            "id": f"insight:{r['id']}",
+            "kind": "insight",
+            "title": src,
+            "snippet": r["quote"][:200],
+        })
+
+    return {
+        "summary": f"Found {len(rows)} insight(s).",
+        "data": "\n".join(lines),
+        "sources": sources,
+    }
+
+
+async def _list_opportunities(ctx: dict, status: str | None = None) -> dict:
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — opportunities unavailable.", "sources": []}
+
+    supabase = get_supabase()
+    try:
+        q = (
+            supabase.table("opportunities")
+            .select("id, title, problem, status, rice_score, created_at")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+        )
+        if status:
+            q = q.eq("status", status)
+        res = q.execute()
+    except Exception as e:
+        return {"summary": f"Opportunity lookup failed: {e}", "sources": []}
+
+    rows = res.data or []
+    if not rows:
+        return {
+            "summary": "No existing opportunities saved for this project yet.",
+            "data": "",
+            "sources": [],
+        }
+
+    lines = [
+        f"- [{r['status']}] {r['title']} (id: {r['id']})"
+        + (f" · RICE {r['rice_score']}" if r.get("rice_score") else "")
+        + f"\n  Problem: {(r.get('problem') or '')[:200]}"
+        for r in rows
+    ]
+    return {
+        "summary": f"Found {len(rows)} existing opportunity(ies).",
+        "data": "\n".join(lines),
+        "sources": [
+            {"id": f"opportunity:{r['id']}", "kind": "opportunity", "title": r["title"]}
+            for r in rows
+        ],
+    }
+
+
+async def _save_opportunity(
+    ctx: dict,
+    title: str,
+    problem: str,
+    evidence_insight_ids: list[str],
+    proposed_solution: str | None = None,
+    theme_ids: list[str] | None = None,
+    reach: int | None = None,
+    impact: int | None = None,
+    confidence: int | None = None,
+    effort: int | None = None,
+    risks: str | None = None,
+) -> dict:
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — cannot save opportunity.", "sources": []}
+
+    if not evidence_insight_ids:
+        return {
+            "summary": (
+                "Refusing to save opportunity without evidence. Pass at "
+                "least one insight id in evidence_insight_ids."
+            ),
+            "sources": [],
+        }
+
+    # Dedupe — the agent occasionally passes the same insight id twice.
+    # Preserve order so the strongest quote (first) stays first.
+    seen: set[str] = set()
+    evidence_insight_ids = [
+        x for x in evidence_insight_ids if not (x in seen or seen.add(x))
+    ]
+
+    supabase = get_supabase()
+
+    # Defensive dedup — if a non-discarded opportunity with the same title
+    # already exists for this project, return it without re-inserting.
+    try:
+        existing = (
+            supabase.table("opportunities")
+            .select("id, title, status")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .ilike("title", title.strip())
+            .neq("status", "discarded")
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            row = existing.data[0]
+            return {
+                "summary": (
+                    f"Opportunity '{row['title']}' already exists (status: "
+                    f"{row['status']}). Skipped duplicate save."
+                ),
+                "sources": [{
+                    "id": f"opportunity:{row['id']}",
+                    "kind": "opportunity",
+                    "title": row["title"],
+                }],
+            }
+    except Exception as e:
+        logger.warning("Dedup check failed (continuing with insert): %s", e)
+
+    payload = {
+        "project_id": project_id,
+        "user_id": user_id,
+        "title": title,
+        "problem": problem,
+        "proposed_solution": proposed_solution,
+        "evidence_insight_ids": evidence_insight_ids,
+        "theme_ids": theme_ids or [],
+        "reach": reach,
+        "impact": impact,
+        "confidence": confidence,
+        "effort": effort,
+        "risks": risks,
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    try:
+        res = supabase.table("opportunities").insert(payload).execute()
+    except Exception as e:
+        return {"summary": f"Opportunity insert failed: {e}", "sources": []}
+
+    if not res.data:
+        return {"summary": "Insert returned no row.", "sources": []}
+    row = res.data[0]
+    rice = row.get("rice_score")
+    return {
+        "summary": (
+            f"Saved opportunity '{title}' (id: {row['id']})"
+            f"{f' · RICE={rice}' if rice else ''}."
+        ),
+        "sources": [{
+            "id": f"opportunity:{row['id']}",
+            "kind": "opportunity",
+            "title": title,
+        }],
+    }
+
+
+async def _promote_to_feature(
+    ctx: dict,
+    name: str,
+    opportunity_ids: list[str],
+    summary: str | None = None,
+    prd_document_id: str | None = None,
+) -> dict:
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — cannot create feature.", "sources": []}
+    if not opportunity_ids:
+        return {"summary": "Need at least one opportunity_id to promote.", "sources": []}
+
+    supabase = get_supabase()
+    payload = {
+        "project_id": project_id,
+        "user_id": user_id,
+        "name": name,
+        "summary": summary,
+        "opportunity_ids": opportunity_ids,
+        "prd_document_id": prd_document_id,
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    try:
+        res = supabase.table("features").insert(payload).execute()
+    except Exception as e:
+        return {"summary": f"Feature insert failed: {e}", "sources": []}
+    if not res.data:
+        return {"summary": "Feature insert returned no row.", "sources": []}
+    feature = res.data[0]
+
+    # Mark linked opportunities as committed
+    try:
+        (
+            supabase.table("opportunities")
+            .update({"status": "committed"})
+            .in_("id", opportunity_ids)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as e:
+        logger.warning("Could not bump opportunity status on promotion: %s", e)
+
+    return {
+        "summary": f"Created feature '{name}' (id: {feature['id']}) from {len(opportunity_ids)} opportunity(ies).",
+        "sources": [{
+            "id": f"feature:{feature['id']}",
+            "kind": "feature",
+            "title": name,
+        }],
+    }
+
+
 async def _handoff_noop(ctx: dict, **kwargs) -> dict:
     """Safety net. The agent loop intercepts handoff_to_* tools by name prefix
     and never reaches this executor — if it does, something has gone wrong."""
@@ -1398,9 +1917,15 @@ TOOL_EXECUTORS = {
     "create_folder": _create_folder,
     "render_ui": _render_ui,
     "critique_design": _critique_design,
+    "list_discovery_themes": _list_discovery_themes,
+    "list_discovery_insights": _list_discovery_insights,
+    "list_opportunities": _list_opportunities,
+    "save_opportunity": _save_opportunity,
+    "promote_to_feature": _promote_to_feature,
     # Handoff executors — never actually invoked; intercepted by loop.
     "handoff_to_pm": _handoff_noop,
     "handoff_to_designer": _handoff_noop,
     "handoff_to_analyst": _handoff_noop,
     "handoff_to_calendar": _handoff_noop,
+    "handoff_to_opportunity": _handoff_noop,
 }

@@ -83,6 +83,42 @@ Synthesize this user research:
 ## Implications for the product
 ## Recommended next steps
 """,
+    "discover": """
+You are answering the question "what should we build next?" using ONLY the
+project's accumulated customer evidence — insights extracted from interviews,
+support tickets, surveys, and uploaded research.
+
+PROCESS (silent — do not narrate):
+1. Pull the top themes from this project's customer feedback.
+2. For each of the top 2-4 themes, pull the strongest insights (highest
+   severity, negative or mixed sentiment first).
+3. Cluster into 3 distinct problem statements that are each worth solving.
+4. Score each on RICE (reach × impact × confidence ÷ effort, 1-10 scales).
+5. Save each as an opportunity (the user will approve) with real
+   evidence_insight_ids — never invent UUIDs.
+
+OUTPUT FORMAT:
+## What we should build next
+
+For each of 3 opportunities, ranked by RICE:
+
+### N. <Opportunity title> — RICE: <score>
+**Problem:** <1-2 sentences in the customer's words, with citations [1][2]>
+**Proposed direction:** <1 sentence sketch>
+**Evidence:**
+- "<quote 1>" — <source filename> [1]
+- "<quote 2>" — <source filename> [2]
+**Score:** Reach <r>/10 · Impact <i>/10 · Confidence <c>/10 · Effort <e>/10
+**Risks:** <one line>
+
+End with: "Approve any of these to save as a tracked opportunity."
+
+RULES:
+- Be opinionated. Pick the 3 strongest, not the 3 most common.
+- No PM jargon. Use the customer's language.
+- If there is no evidence in the project, say so plainly and suggest
+  uploading interview transcripts / support tickets to the knowledge base.
+""",
     "custom": """
 Before responding, silently evaluate whether the request has enough specificity to produce a useful, non-generic output.
 

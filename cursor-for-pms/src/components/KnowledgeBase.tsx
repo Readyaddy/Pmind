@@ -72,36 +72,61 @@ export default function KnowledgeBase({
       .catch(() => {});
   }, [isOpen, step, selectedProjectId, userId, API]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedProjectId) return;
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
 
+  const uploadFiles = async (files: File[]) => {
+    if (!selectedProjectId || files.length === 0) return;
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("project_id", selectedProjectId);
+    setUploadProgress({ done: 0, total: files.length });
 
-    try {
-      const res = await fetch(`${API}/knowledge/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${userId}` },
-        body: formData,
-      });
-      if (res.ok) {
-        const updated = await fetch(`${API}/knowledge/?project_id=${selectedProjectId}`, {
-          headers: { Authorization: `Bearer ${userId}` },
-        });
-        if (updated.ok) setDocuments(await updated.json());
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.detail || "Upload failed. Make sure the file is readable text (PDF, DOCX, MD, TXT, CSV, JSON, HTML…).");
+    const failures: string[] = [];
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(3, files.length) }, async () => {
+      while (cursor < files.length) {
+        const file = files[cursor++];
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("project_id", selectedProjectId);
+          const res = await fetch(`${API}/knowledge/`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userId}` },
+            body: fd,
+          });
+          if (!res.ok) failures.push(file.name);
+        } catch {
+          failures.push(file.name);
+        } finally {
+          setUploadProgress(p => ({ ...p, done: p.done + 1 }));
+        }
       }
-    } catch {
-      alert("Upload failed.");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    });
+    await Promise.all(runners);
+
+    // Refresh document list once at the end
+    try {
+      const updated = await fetch(`${API}/knowledge/?project_id=${selectedProjectId}`, {
+        headers: { Authorization: `Bearer ${userId}` },
+      });
+      if (updated.ok) setDocuments(await updated.json());
+    } catch { /* ignore */ }
+
+    if (failures.length) {
+      alert(
+        failures.length === files.length
+          ? "All uploads failed. Check the file types are readable."
+          : `${failures.length} of ${files.length} failed: ${failures.slice(0, 5).join(", ")}${failures.length > 5 ? "…" : ""}`
+      );
     }
+
+    setIsUploading(false);
+    setUploadProgress({ done: 0, total: 0 });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) await uploadFiles(files);
   };
 
   const handleDelete = async (docId: string) => {
@@ -228,12 +253,8 @@ export default function KnowledgeBase({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      const f = e.dataTransfer.files?.[0];
-                      if (!f || !fileInputRef.current) return;
-                      const dt = new DataTransfer();
-                      dt.items.add(f);
-                      fileInputRef.current.files = dt.files;
-                      fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                      const files = Array.from(e.dataTransfer.files || []);
+                      if (files.length) void uploadFiles(files);
                     }}
                   >
                     <input
@@ -241,19 +262,26 @@ export default function KnowledgeBase({
                       ref={fileInputRef}
                       className="hidden"
                       accept="*"
+                      multiple
                       onChange={handleFileChange}
                     />
                     {isUploading ? (
                       <div className="flex flex-col items-center gap-2 text-amber-600">
                         <Loader2 size={24} className="animate-spin" />
-                        <span className="text-sm font-semibold">Processing & Embedding…</span>
+                        <span className="text-sm font-semibold">
+                          {uploadProgress.total > 1
+                            ? `Processing ${uploadProgress.done}/${uploadProgress.total}…`
+                            : "Processing & Embedding…"}
+                        </span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-3 text-black/40 dark:text-white/40">
                         <Upload size={24} />
                         <div>
                           <p className="text-sm font-semibold">Click or drag & drop to upload</p>
-                          <p className="text-xs mt-1 text-black/30 dark:text-white/30">PDF · DOCX · MD · TXT · CSV · JSON · HTML · YAML and more</p>
+                          <p className="text-xs mt-1 text-black/30 dark:text-white/30">
+                            Multiple files supported · PDF · DOCX · MD · TXT · CSV · JSON · HTML · YAML
+                          </p>
                         </div>
                       </div>
                     )}

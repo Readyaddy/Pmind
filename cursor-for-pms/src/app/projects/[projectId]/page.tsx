@@ -47,6 +47,7 @@ export default function ProjectHomePage() {
     linear: { connected: false },
   });
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [discoveryCounts, setDiscoveryCounts] = useState<{ total: number; shortlisted: number; committed: number }>({ total: 0, shortlisted: 0, committed: 0 });
 
   const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -79,6 +80,20 @@ export default function ProjectHomePage() {
     fetch(`${API}/templates/`)
       .then(r => r.ok ? r.json() : [])
       .then(setTemplates)
+      .catch(() => {});
+
+    fetch(`${API}/discovery/opportunities?project_id=${projectId}`, {
+      headers: { Authorization: `Bearer ${userId}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((opps: { status: string }[]) => {
+        const active = opps.filter(o => o.status !== "discarded");
+        setDiscoveryCounts({
+          total:       active.length,
+          shortlisted: opps.filter(o => o.status === "shortlisted").length,
+          committed:   opps.filter(o => o.status === "committed").length,
+        });
+      })
       .catch(() => {});
   }, [userId, projectId, API]);
 
@@ -277,7 +292,7 @@ export default function ProjectHomePage() {
             </button>
 
             {/* Secondary quick actions */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => router.push(`/projects/${projectId}`)}
                 className="glass-pane hover-lift group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:border-amber-300/60 dark:hover:border-amber/40"
@@ -295,6 +310,37 @@ export default function ProjectHomePage() {
                   triggerClassName="hover-lift group flex items-center gap-3 px-4 py-3.5 text-left w-full h-full"
                 />
               </div>
+
+              <button
+                onClick={() => router.push(`/projects/${projectId}/discovery`)}
+                className="glass-pane hover-lift group flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:border-amber-300/60 dark:hover:border-amber/40 relative"
+              >
+                <Sparkles size={16} className="text-amber-600/70 dark:text-amber/60 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[12.5px] font-semibold text-black/70 dark:text-white/70">Discovery</p>
+                    {discoveryCounts.shortlisted > 0 && (
+                      <span
+                        className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber"
+                        style={{ fontFamily: "var(--font-jetbrains), monospace" }}
+                        title={`${discoveryCounts.shortlisted} shortlisted`}
+                      >
+                        {discoveryCounts.shortlisted} ▸
+                      </span>
+                    )}
+                  </div>
+                  {discoveryCounts.total > 0 ? (
+                    <p
+                      className="text-[10.5px] text-black/40 dark:text-white/35"
+                      style={{ fontFamily: "var(--font-jetbrains), monospace", letterSpacing: "0.04em" }}
+                    >
+                      {discoveryCounts.total} active · {discoveryCounts.committed} committed
+                    </p>
+                  ) : (
+                    <p className="text-[10.5px] text-black/35 dark:text-white/35">Insights & opportunities</p>
+                  )}
+                </div>
+              </button>
             </div>
 
             {/* ── Knowledge Base ── */}

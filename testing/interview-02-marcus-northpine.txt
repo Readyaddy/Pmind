@@ -1,0 +1,34 @@
+USER INTERVIEW — Marcus T., Founder, "Northpine Coffee Co."
+Company: DTC coffee, ~8k orders/mo
+Product: Shopflow
+Interviewer: Maya R. (Product)
+Date: Jan 12, 2026
+
+═════════════════════════════════════════════════════════════════
+
+Maya: You've been on Shopflow for, what, 6 months now?
+
+Marcus: Five. And I almost cancelled in month two. The onboarding nearly
+killed me. I had to manually map every SKU from Shopify, Faire, AND our
+wholesale platform. No CSV import wizard, no auto-match. I spent a
+weekend on it. My wife was furious.
+
+Maya: Did you talk to your CSM?
+
+Marcus: Our CSM is good — Priya — but she said the onboarding tool just
+isn't built for multi-channel sellers yet. So she does it manually for
+big accounts. Why isn't there a wizard? Every competitor has one.
+
+Maya: What about pricing — how's that landed?
+
+Marcus: The pricing page is genuinely confusing. There's a Starter tier at
+$99 but it caps you at 1000 orders and we hit that in week one. So we
+went to "Growth" at $399 which includes "premium support" — except
+premium support is just email with a 24h SLA. The seat-based add-ons
+aren't explained anywhere. I budgeted $400/mo and we're paying $680.
+That's a trust issue.
+
+Maya: If you could change one thing tomorrow?
+
+Marcus: Show me the total cost on the pricing page before I click. Just
+build a calculator. Stop hiding the seat fee under a footnote.

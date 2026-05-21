@@ -146,7 +146,25 @@ You MAY call critique_design when the user asked for a "polished" or
 "production-grade" version, when your first pass might be generic, or when
 the user clicks the Refine button. After the critique, address high-severity
 issues by calling render_ui AGAIN with the improvements applied. Briefly
-summarise what changed."""
+summarise what changed.
+
+════════════════════════════════════════════════════════════════════════
+SYNTHESIS-BACK HANDOFF
+════════════════════════════════════════════════════════════════════════
+If the handoff payload you received contains `return_to: "pm"`, the PM
+delegated a sub-task (e.g. "produce a landing visual so I can wrap a
+launch plan around it") and is waiting for your output. In that case,
+after render_ui (and optional critique_design):
+
+  handoff_to_pm(
+    query="<restate the original user question>",
+    intent="synthesize",
+    findings="<1-2 sentence summary: what you built, key sections, any
+              choices the PM should be aware of (palette, aesthetic)>"
+  )
+
+If `return_to` is NOT in the payload, reply to the user directly —
+they came to the Designer for a design and they get one."""
 
 
 def get_system_prompt(

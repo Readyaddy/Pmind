@@ -1,0 +1,40 @@
+USER INTERVIEW — Daniela K., Operations Lead, "Brightwear"
+Company: Apparel brand, ~40k SKUs
+Product: Shopflow
+Interviewer: Maya R. (Product)
+Date: Jan 8, 2026
+
+═════════════════════════════════════════════════════════════════
+
+Maya: Walk me through a typical Monday morning.
+
+Daniela: Honestly? I open Shopflow and immediately dread the reconciliation
+screen. We process maybe 800 orders over the weekend and the dashboard
+takes — I'm not exaggerating — close to a minute to load. My team starts
+the day standing around waiting for the page to render. I've timed it.
+
+Maya: What do you do while you wait?
+
+Daniela: Coffee, mostly. But it's not just slow — when it does load, the
+filters reset every single time. Every morning I have to re-apply
+"unfulfilled" + "marketplace = Amazon" + "ship-by today". That's three
+clicks I make 250 times a year. It's the kind of thing that makes you
+hate software.
+
+Maya: Have you mentioned this to support?
+
+Daniela: Twice. They told me it's a known issue but there's "no ETA". That
+phrase is poison. Just tell me it's not coming. We're now seriously
+evaluating Linnworks because at least their filters stick.
+
+Maya: What else?
+
+Daniela: Bulk editing. If I want to change supplier on 200 SKUs I have to do
+it one at a time. There's no select-all-and-edit. I built a Google Sheet
+workaround that uses the API but our junior staff can't run it, so it's
+just me at 9pm on Sundays.
+
+Maya: That sounds painful.
+
+Daniela: It's a churn risk for us, I'll be honest. If we hit Q2 and this
+isn't better I have to defend the cost to my CEO.

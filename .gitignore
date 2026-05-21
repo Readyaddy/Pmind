@@ -44,3 +44,6 @@ desktop.ini
 # Misc artifacts
 errors
 package-lock.json
+
+# Demo video assets (large files, not for version control)
+demo-video/

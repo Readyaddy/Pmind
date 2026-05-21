@@ -31,7 +31,10 @@ import ArtifactCard, { type ArtifactArgs } from "./agent/ArtifactCard";
 import CritiqueCard, { type Critique } from "./agent/CritiqueCard";
 import DesignBriefCard, { type DesignBriefArgs } from "./agent/DesignBriefCard";
 
-const PERMISSION_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
+const PERMISSION_TOOLS = new Set([
+  "create_doc", "edit_doc", "create_folder",
+  "save_opportunity", "promote_to_feature",
+]);
 const TREE_REFRESH_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
 
 type MessagePart =

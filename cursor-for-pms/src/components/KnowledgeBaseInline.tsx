@@ -16,13 +16,31 @@ interface KnowledgeDocument {
  * upload is a small inline button. No modal, no project picker (a project
  * is always required here).
  */
+// Run N async tasks in parallel with a concurrency cap. Returns when all settle.
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+}
+
 export default function KnowledgeBaseInline({ projectId }: { projectId: string }) {
   const [docs, setDocs] = useState<KnowledgeDocument[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { userId } = useAuth();
   const API = process.env.NEXT_PUBLIC_API_URL;
+  const isUploading = uploadingCount > 0;
 
   const load = useCallback(async () => {
     if (!projectId || !userId) return;
@@ -37,30 +55,41 @@ export default function KnowledgeBaseInline({ projectId }: { projectId: string }
   useEffect(() => { void load(); }, [load]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setError(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("project_id", projectId);
-      const res = await fetch(`${API}/knowledge/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${userId}` },
-        body: fd,
-      });
-      if (res.ok) {
-        await load();
-      } else {
-        setError("Upload failed — must be PDF, DOCX, or TXT.");
+    setTotalCount(files.length);
+    setUploadingCount(files.length);
+
+    const failures: string[] = [];
+    await runWithConcurrency(files, 3, async (file) => {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("project_id", projectId);
+        const res = await fetch(`${API}/knowledge/`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${userId}` },
+          body: fd,
+        });
+        if (!res.ok) failures.push(file.name);
+      } catch {
+        failures.push(file.name);
+      } finally {
+        setUploadingCount((n) => n - 1);
       }
-    } catch {
-      setError("Upload failed.");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    });
+
+    if (failures.length) {
+      setError(
+        failures.length === files.length
+          ? "All uploads failed."
+          : `${failures.length} of ${files.length} failed: ${failures.slice(0, 3).join(", ")}${failures.length > 3 ? "…" : ""}`
+      );
     }
+    setTotalCount(0);
+    await load();
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDelete = async (docId: string) => {
@@ -88,7 +117,10 @@ export default function KnowledgeBaseInline({ projectId }: { projectId: string }
         >
           {isUploading ? (
             <>
-              <Loader2 size={9} className="animate-spin" /> Uploading
+              <Loader2 size={9} className="animate-spin" />
+              {totalCount > 1
+                ? `${totalCount - uploadingCount}/${totalCount}`
+                : "Uploading"}
             </>
           ) : (
             <>
@@ -99,7 +131,8 @@ export default function KnowledgeBaseInline({ projectId }: { projectId: string }
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.txt,.docx"
+          multiple
+          accept=".pdf,.txt,.docx,.md,.csv,.xlsx,.xls,.json,.html,.htm,.yaml,.yml,.xml,.rtf"
           className="hidden"
           onChange={handleFile}
         />

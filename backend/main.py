@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
-from routers import ai, documents, projects, folders, knowledge, integrations, context, billing, templates
+from routers import ai, documents, projects, folders, knowledge, integrations, context, billing, templates, discovery
 
 
 class LoggingMiddleware:
@@ -75,6 +75,7 @@ app.include_router(integrations.router, prefix="/integrations", tags=["Integrati
 app.include_router(context.router, prefix="/context", tags=["Context"])
 app.include_router(billing.router, prefix="/billing", tags=["Billing"])
 app.include_router(templates.router, prefix="/templates", tags=["Templates"])
+app.include_router(discovery.router, prefix="/discovery", tags=["Discovery"])
 
 
 @app.on_event("startup")
