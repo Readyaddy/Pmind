@@ -187,6 +187,17 @@ export default function Editor({ docId, projectId, initialContent, onSave }: Edi
 
       const toastId = toast.loading("Analysing changes…");
       try {
+        const currentText = editor.getText().trim();
+        const suggestionText = suggestion.trim();
+
+        // If the doc is empty or much shorter than the suggestion, it's new content
+        // — skip the diff entirely and set it directly.
+        if (currentText.length < 50 || suggestionText.length > currentText.length * 3) {
+          editor.commands.setContent(mdToHtml(suggestionText));
+          toast.success("Content applied to document.", { id: toastId });
+          return;
+        }
+
         const res = await fetch(`${API}/ai/apply`, {
           method: "POST",
           headers: {
@@ -194,14 +205,21 @@ export default function Editor({ docId, projectId, initialContent, onSave }: Edi
             Authorization: `Bearer ${userId}`,
           },
           body: JSON.stringify({
-            current_content: editor.getText(),
-            ai_suggestion: suggestion,
+            current_content: currentText,
+            ai_suggestion: suggestionText,
             model_override: localStorage.getItem("pm_cursor_model") || "gemini-2.5-flash",
           }),
         });
 
         if (!res.ok) {
-          toast.error("Apply failed — AI couldn't parse the changes.", { id: toastId });
+          // Fall back to direct insert rather than showing an error
+          editor
+            .chain()
+            .focus("end")
+            .insertContent("<hr/>")
+            .insertContent(mdToHtml(suggestionText))
+            .run();
+          toast.info("Applied as new section at end of document.", { id: toastId });
           return;
         }
 
@@ -237,12 +255,12 @@ export default function Editor({ docId, projectId, initialContent, onSave }: Edi
             { id: toastId }
           );
         } else {
-          // Fallback: insert suggestion as a new section at end of document
+          // Fallback: insert as new section at end
           editor
             .chain()
             .focus("end")
             .insertContent("<hr/>")
-            .insertContent(mdToHtml(suggestion))
+            .insertContent(mdToHtml(suggestionText))
             .run();
           toast.info("Couldn't match exact text — suggestion inserted at end of document.", {
             id: toastId,
