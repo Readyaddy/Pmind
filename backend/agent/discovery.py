@@ -26,12 +26,140 @@ logger = logging.getLogger(__name__)
 EXTRACTOR_PROVIDER = "gemini"
 EXTRACTOR_MODEL = "gemini-2.5-flash-lite"
 
-# Cap how many chunks we process per upload to keep costs predictable. For a
-# typical 30-page PDF (~30 chunks) we still cover everything.
-MAX_CHUNKS_PER_DOC = 80
+# If the whole document fits under this limit, pass it in one shot —
+# no splitting needed, full context, one LLM call.
+WHOLE_DOC_CHAR_LIMIT = 28_000   # ~7k tokens, comfortably within flash-lite
 
-# Skip chunks shorter than this — usually headers, page numbers, junk.
-MIN_CHUNK_CHARS = 120
+# For larger docs we split into semantic segments, each up to this size.
+MAX_SEGMENT_CHARS = 5_000
+
+# Skip segments shorter than this — headers, cover pages, junk.
+MIN_SEGMENT_CHARS = 120
+
+
+# ── Semantic segmentation ────────────────────────────────────────────────────
+#
+# RAG chunks (800 chars, stored in knowledge_chunks) are optimised for
+# retrieval — small, targeted, overlapping. They are WRONG for insight
+# extraction: a speaker turn split across two chunks destroys the quote.
+#
+# These helpers produce semantically complete units: whole conversations,
+# full ticket threads, or natural section boundaries. The LLM never sees
+# a thought cut in half.
+
+_SPEAKER_TURN = re.compile(r"^[A-Z][A-Za-z .'\-]{0,35}:\s", re.MULTILINE)
+_TICKET_SEP   = re.compile(r"(?:\n[-=*]{4,}\n|\n\n#+\s|--+ticket--+|Case #\d)", re.IGNORECASE)
+_SECTION_SEP  = re.compile(r"\n{2,}")
+
+
+def _looks_like_interview(text: str) -> bool:
+    """At least 4 speaker-turn labels in the first 3000 chars."""
+    return len(_SPEAKER_TURN.findall(text[:3000])) >= 4
+
+
+def _looks_like_tickets(text: str) -> bool:
+    return bool(_TICKET_SEP.search(text[:5000]))
+
+
+def _split_on_turns(text: str) -> list[str]:
+    """
+    Group consecutive speaker turns into segments of up to MAX_SEGMENT_CHARS.
+    Each segment always ends on a complete turn — never mid-sentence.
+    """
+    # Find every turn boundary position
+    boundaries = [m.start() for m in _SPEAKER_TURN.finditer(text)]
+    if not boundaries:
+        return [text]
+
+    segments: list[str] = []
+    seg_start = 0
+    seg_end = boundaries[0]  # text before the first labelled turn
+
+    for i, pos in enumerate(boundaries):
+        next_pos = boundaries[i + 1] if i + 1 < len(boundaries) else len(text)
+        turn_len = next_pos - pos
+
+        if (pos - seg_start) + turn_len > MAX_SEGMENT_CHARS and pos > seg_start:
+            chunk = text[seg_start:pos].strip()
+            if len(chunk) >= MIN_SEGMENT_CHARS:
+                segments.append(chunk)
+            seg_start = pos
+
+        seg_end = next_pos
+
+    # Flush remainder
+    tail = text[seg_start:].strip()
+    if len(tail) >= MIN_SEGMENT_CHARS:
+        segments.append(tail)
+
+    return segments or [text]
+
+
+def _split_on_tickets(text: str) -> list[str]:
+    parts = [p.strip() for p in _TICKET_SEP.split(text) if p.strip()]
+    out: list[str] = []
+    buf = ""
+    for part in parts:
+        if len(buf) + len(part) > MAX_SEGMENT_CHARS and buf:
+            out.append(buf)
+            buf = part
+        else:
+            buf = (buf + "\n\n" + part).strip() if buf else part
+    if buf:
+        out.append(buf)
+    return [s for s in out if len(s) >= MIN_SEGMENT_CHARS]
+
+
+def _split_on_paragraphs(text: str) -> list[str]:
+    """Fallback: group paragraphs into segments, never cutting mid-paragraph."""
+    paras = [p.strip() for p in _SECTION_SEP.split(text) if p.strip()]
+    out: list[str] = []
+    buf = ""
+    for para in paras:
+        if len(buf) + len(para) > MAX_SEGMENT_CHARS and buf:
+            out.append(buf)
+            buf = para
+        else:
+            buf = (buf + "\n\n" + para).strip() if buf else para
+    if buf:
+        out.append(buf)
+    return [s for s in out if len(s) >= MIN_SEGMENT_CHARS]
+
+
+def segment_for_extraction(text: str) -> list[str]:
+    """
+    Return semantically complete segments for insight extraction.
+
+    Decision tree:
+      1. Small doc  → one segment (whole doc) — full context, one LLM call
+      2. Interview  → split on speaker turns — Q+A pairs stay together
+      3. Tickets    → split on ticket boundaries — each ticket is one unit
+      4. Anything else → split on paragraph/section breaks
+    """
+    text = text.strip()
+    if not text:
+        return []
+
+    # 1. Small enough — pass whole doc
+    if len(text) <= WHOLE_DOC_CHAR_LIMIT:
+        return [text]
+
+    # 2. Interview / conversation format
+    if _looks_like_interview(text):
+        segs = _split_on_turns(text)
+        logger.debug("Segmentation: interview format → %d turns", len(segs))
+        return segs
+
+    # 3. Support ticket / thread format
+    if _looks_like_tickets(text):
+        segs = _split_on_tickets(text)
+        logger.debug("Segmentation: ticket format → %d tickets", len(segs))
+        return segs
+
+    # 4. Paragraph-based fallback
+    segs = _split_on_paragraphs(text)
+    logger.debug("Segmentation: paragraph fallback → %d segments", len(segs))
+    return segs
 
 
 EXTRACTOR_SYSTEM = """You extract product-discovery insights from raw text — user interview transcripts, support tickets, surveys, research notes.
@@ -243,54 +371,37 @@ async def extract_insights_for_document(
     project_id: str,
     user_id: str,
     filename: str,
+    full_text: str,
 ) -> int:
     """
-    Run extraction over every chunk for the given KB document and persist
-    insights. Returns the count of insights saved. Safe to call concurrently.
+    Run extraction over the document's full text using semantic segments and
+    persist insights. Returns the count of insights saved.
+
+    `full_text` is the raw extracted text passed directly from the upload
+    handler — NOT the RAG chunks, which are too small for accurate extraction.
     """
     supabase = get_supabase()
 
-    try:
-        chunks_res = (
-            supabase.table("knowledge_chunks")
-            .select("id, content")
-            .eq("knowledge_document_id", knowledge_document_id)
-            .eq("user_id", user_id)
-            .order("created_at")
-            .limit(MAX_CHUNKS_PER_DOC)
-            .execute()
-        )
-    except Exception as e:
-        logger.error("Insight extraction — chunk fetch failed: %s", e)
-        return 0
-
-    chunks = [
-        c for c in (chunks_res.data or [])
-        if len((c.get("content") or "")) >= MIN_CHUNK_CHARS
-    ]
-    if not chunks:
-        logger.info("Insight extraction — no eligible chunks for doc=%s", knowledge_document_id)
+    segments = segment_for_extraction(full_text)
+    if not segments:
+        logger.info("Insight extraction — no usable segments for doc=%s", knowledge_document_id)
         return 0
 
     logger.info(
-        "Insight extraction — doc=%s file=%s chunks=%d",
-        knowledge_document_id, filename, len(chunks),
+        "Insight extraction — doc=%s file=%s segments=%d mode=%s",
+        knowledge_document_id, filename, len(segments),
+        "whole-doc" if len(segments) == 1 else "segmented",
     )
 
-    # Run chunk extractions concurrently with a small cap to avoid hammering
-    # the LLM provider's rate limit. 5 concurrent calls is comfortable for
-    # Gemini Flash-Lite.
+    # Run segment extractions concurrently with a small cap.
     sem = asyncio.Semaphore(5)
 
-    async def _process(chunk: dict) -> list[dict]:
+    async def _process(seg_text: str) -> list[dict]:
         async with sem:
-            results = await _extract_from_chunk(chunk["content"], filename)
-            for r in results:
-                r["_chunk_id"] = chunk["id"]
-            return results
+            return await _extract_from_chunk(seg_text, filename)
 
-    chunk_results = await asyncio.gather(*[_process(c) for c in chunks])
-    flat: list[dict] = [r for sub in chunk_results for r in sub]
+    seg_results = await asyncio.gather(*[_process(s) for s in segments])
+    flat: list[dict] = [r for sub in seg_results for r in sub]
     if not flat:
         logger.info("Insight extraction — no insights surfaced for doc=%s", knowledge_document_id)
         return 0
@@ -306,7 +417,6 @@ async def extract_insights_for_document(
             "project_id": project_id,
             "user_id": user_id,
             "knowledge_document_id": knowledge_document_id,
-            "knowledge_chunk_id": r["_chunk_id"],
             "quote": r["quote"],
             "paraphrase": r["paraphrase"],
             "sentiment": r["sentiment"],
@@ -340,6 +450,7 @@ def schedule_extraction(
     project_id: str,
     user_id: str,
     filename: str,
+    full_text: str,
 ) -> None:
     """Fire-and-forget. Used by routers/knowledge.py after a successful upload."""
     async def _runner():
@@ -349,6 +460,7 @@ def schedule_extraction(
                 project_id=project_id,
                 user_id=user_id,
                 filename=filename,
+                full_text=full_text,
             )
         except Exception as e:
             logger.exception("Background insight extraction crashed: %s", e)

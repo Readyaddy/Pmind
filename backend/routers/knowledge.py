@@ -1,3 +1,4 @@
+import json
 import logging
 import io
 import os
@@ -241,6 +242,60 @@ def _embed_chunks(chunks: list[str]) -> list[list[float] | None]:
     return vectors
 
 
+# ── Discovery value assessment ───────────────────────────────────────────────
+
+_ASSESS_SYSTEM = """You classify whether a document contains customer feedback useful for product discovery.
+
+Respond with ONLY a JSON object — no markdown, no prose:
+{"value": "high"|"medium"|"low", "doc_type": "...", "note": "..."}
+
+Definitions:
+  "high"   — user interview transcripts, support tickets, customer verbatim quotes,
+              NPS/CSAT open responses, churn interviews, survey free-text — direct voice of customer
+  "medium" — research reports quoting customers, analyst reports with user data,
+              mixed feedback + reference content — signal present but diluted
+  "low"    — technical specs, architecture docs, internal process docs, meeting notes
+              without customer voice, marketing copy, financial data, competitor analyses —
+              useful for RAG but adds nothing to discovery
+
+"doc_type": short human label, e.g. "User interviews", "Support tickets", "Technical spec",
+            "Research report", "Survey responses", "Product roadmap", "Financial data"
+"note": ≤8 words explaining the call, e.g. "Contains verbatim user quotes" or "No customer voice"
+
+Output only the JSON object."""
+
+
+async def _assess_discovery_value(text: str) -> dict:
+    """Run a cheap LLM call on the first ~1500 chars of extracted text.
+    Returns {"value": "high"|"medium"|"low", "doc_type": str, "note": str}.
+    Never raises — returns a safe default on any failure.
+    """
+    from llm.factory import get_llm_provider
+
+    sample = text[:1500].strip()
+    if not sample:
+        return {"value": "low", "doc_type": "Unknown", "note": "No text extracted"}
+
+    try:
+        llm = get_llm_provider(
+            model_override="gemini-2.0-flash-lite",
+            provider_override="gemini",
+        )
+        parts: list[str] = []
+        async for chunk in llm.complete(_ASSESS_SYSTEM, f"Document sample:\n\n{sample}"):
+            parts.append(chunk)
+        raw = "".join(parts).strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```\s*$", "", raw).strip()
+        result = json.loads(raw)
+        if result.get("value") not in ("high", "medium", "low"):
+            result["value"] = "low"
+        return result
+    except Exception as e:
+        logger.warning("Discovery assessment failed: %s", e)
+        return {"value": "low", "doc_type": "Unknown", "note": "Assessment unavailable"}
+
+
 # ── Upload endpoint ───────────────────────────────────────────────────────────
 
 @router.post("/")
@@ -257,8 +312,9 @@ async def upload_knowledge_document(
     raw_bytes = await file.read()
     await file.seek(0)
 
-    # 2. Build semantic chunks
+    # 2. Build semantic chunks + assess discovery value
     is_tabular = ext in TABULAR_EXTENSIONS
+    assessment: dict = {"value": "low", "doc_type": "Data file", "note": "Tabular data — use analyze_data"}
     if is_tabular:
         try:
             chunks = _tabular_chunks(filename, raw_bytes, ext)
@@ -271,6 +327,7 @@ async def upload_knowledge_document(
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from file.")
         chunks = chunk_text(text)
+        assessment = await _assess_discovery_value(text)
 
     # 3. Upload original file to Supabase Storage
     storage_path = f"{user_id}/{project_id}/{filename}"
@@ -287,18 +344,30 @@ async def upload_knowledge_document(
         logger.warning("Storage upload failed (non-fatal) — file=%s: %s", filename, e)
         storage_path = None
 
-    # 4. Save document record
-    doc_result = (
-        supabase.table("knowledge_documents")
-        .insert({
-            "project_id": project_id,
-            "user_id": user_id,
-            "filename": filename,
-            "file_type": file.content_type or "text/plain",
-            "storage_path": storage_path,
-        })
-        .execute()
-    )
+    # 4. Save document record (discovery_value / discovery_note stored if columns exist)
+    insert_payload: dict = {
+        "project_id": project_id,
+        "user_id": user_id,
+        "filename": filename,
+        "file_type": file.content_type or "text/plain",
+        "storage_path": storage_path,
+    }
+    try:
+        insert_payload["discovery_value"] = assessment["value"]
+        insert_payload["discovery_note"]  = assessment.get("note", "")
+        insert_payload["doc_type"]        = assessment.get("doc_type", "")
+    except Exception:
+        pass  # columns may not exist yet — non-fatal
+
+    try:
+        doc_result = supabase.table("knowledge_documents").insert(insert_payload).execute()
+    except Exception:
+        # Retry without assessment fields in case columns don't exist
+        insert_payload.pop("discovery_value", None)
+        insert_payload.pop("discovery_note", None)
+        insert_payload.pop("doc_type", None)
+        doc_result = supabase.table("knowledge_documents").insert(insert_payload).execute()
+
     doc_id = doc_result.data[0]["id"]
 
     # 5. Embed and store chunks
@@ -338,16 +407,93 @@ async def upload_knowledge_document(
                     project_id=project_id,
                     user_id=user_id,
                     filename=filename,
+                    full_text=text,
                 )
             except Exception as e:
                 logger.warning("Could not schedule insight extraction: %s", e)
 
-        return {"success": True, "document_id": doc_id, "chunks": len(chunk_records), "tabular": is_tabular}
+        return {
+            "success": True,
+            "document_id": doc_id,
+            "chunks": len(chunk_records),
+            "tabular": is_tabular,
+            "discovery_value": assessment["value"],
+            "discovery_note":  assessment.get("note", ""),
+            "doc_type":        assessment.get("doc_type", ""),
+        }
 
     except Exception as e:
         logger.error("Embedding failed — file=%s doc_id=%s: %s", filename, doc_id, e, exc_info=True)
         supabase.table("knowledge_documents").delete().eq("id", doc_id).execute()
         raise HTTPException(status_code=500, detail=f"Embedding generation failed: {e}")
+
+
+# ── Backfill endpoint ─────────────────────────────────────────────────────────
+
+@router.post("/assess")
+async def assess_knowledge_documents(project_id: str, user_id: str = Depends(get_user_id)):
+    """Re-assess all unassessed documents in a project.
+    Reads the first chunk of each doc that has no discovery_value yet,
+    runs the LLM classifier, and patches the row. Safe to call multiple times.
+    """
+    supabase = get_supabase()
+
+    # Fetch docs with no assessment yet
+    try:
+        result = (
+            supabase.table("knowledge_documents")
+            .select("id, filename")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .is_("discovery_value", "null")
+            .execute()
+        )
+    except Exception:
+        # Column doesn't exist yet — migration not run
+        return {"assessed": 0, "skipped": 0, "message": "Run the DB migration first."}
+
+    docs = result.data or []
+    assessed = 0
+    skipped = 0
+
+    for doc in docs:
+        doc_id = doc["id"]
+        # Reconstruct text from stored RAG chunks (ordered, no overlap dedup needed
+        # for a ~1500 char assessment sample)
+        try:
+            chunks_res = (
+                supabase.table("knowledge_chunks")
+                .select("content")
+                .eq("knowledge_document_id", doc_id)
+                .eq("user_id", user_id)
+                .order("created_at")
+                .limit(5)
+                .execute()
+            )
+            chunk_rows = chunks_res.data or []
+            if not chunk_rows:
+                skipped += 1
+                continue
+            sample_text = "\n\n".join(r["content"] for r in chunk_rows)
+        except Exception as e:
+            logger.warning("Could not fetch chunks for doc %s: %s", doc_id, e)
+            skipped += 1
+            continue
+
+        assessment = await _assess_discovery_value(sample_text)
+
+        try:
+            supabase.table("knowledge_documents").update({
+                "discovery_value": assessment["value"],
+                "discovery_note":  assessment.get("note", ""),
+                "doc_type":        assessment.get("doc_type", ""),
+            }).eq("id", doc_id).eq("user_id", user_id).execute()
+            assessed += 1
+        except Exception as e:
+            logger.warning("Could not update assessment for doc %s: %s", doc_id, e)
+            skipped += 1
+
+    return {"assessed": assessed, "skipped": skipped}
 
 
 # ── Read endpoints ────────────────────────────────────────────────────────────

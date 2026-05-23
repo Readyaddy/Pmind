@@ -1,7 +1,25 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, X, FileText, Loader2, Trash2, ChevronRight, Eye } from "lucide-react";
+import { Upload, X, FileText, Loader2, Trash2, ChevronRight, Eye, AlertCircle } from "lucide-react";
+
+function DiscoveryBadge({ value, docType, note }: { value?: string; docType?: string; note?: string }) {
+  if (!value) return null;
+  const label = docType || (value === "high" ? "Interviews" : value === "medium" ? "Research" : "Reference");
+  const styles =
+    value === "high"   ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20" :
+    value === "medium" ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-400/10 dark:text-blue-400 dark:border-blue-400/20" :
+                         "bg-black/[0.04] text-black/40 border-black/10 dark:bg-white/[0.04] dark:text-white/35 dark:border-white/10";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${styles} shrink-0`}
+      title={note || label}
+    >
+      {value === "low" && <AlertCircle size={9} className="shrink-0" />}
+      {label}
+    </span>
+  );
+}
 import { useCustomAuth as useAuth } from "@/hooks/useCustomAuth";
 import { useRouter } from "next/navigation";
 import ConfirmDialog from "./ConfirmDialog";
@@ -11,6 +29,9 @@ interface KnowledgeDocument {
   filename: string;
   file_type: string;
   created_at: string;
+  discovery_value?: "high" | "medium" | "low";
+  discovery_note?: string;
+  doc_type?: string;
 }
 
 interface Project {
@@ -73,6 +94,7 @@ export default function KnowledgeBase({
   }, [isOpen, step, selectedProjectId, userId, API]);
 
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+  const [isAssessing, setIsAssessing] = useState(false);
 
   const uploadFiles = async (files: File[]) => {
     if (!selectedProjectId || files.length === 0) return;
@@ -127,6 +149,23 @@ export default function KnowledgeBase({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length) await uploadFiles(files);
+  };
+
+  const assessExisting = async () => {
+    if (!selectedProjectId || !userId) return;
+    setIsAssessing(true);
+    try {
+      await fetch(`${API}/knowledge/assess?project_id=${selectedProjectId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${userId}` },
+      });
+      // Refresh to pick up new discovery_value fields
+      const updated = await fetch(`${API}/knowledge/?project_id=${selectedProjectId}`, {
+        headers: { Authorization: `Bearer ${userId}` },
+      });
+      if (updated.ok) setDocuments(await updated.json());
+    } catch { /* ignore */ }
+    setIsAssessing(false);
   };
 
   const handleDelete = async (docId: string) => {
@@ -289,19 +328,41 @@ export default function KnowledgeBase({
 
                   {documents.length > 0 && (
                     <div className="mt-2 flex flex-col gap-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40 mb-1">
-                        Uploaded Files
-                      </h4>
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">
+                          Uploaded Files
+                        </h4>
+                        {documents.some(d => !d.discovery_value) && (
+                          <button
+                            onClick={assessExisting}
+                            disabled={isAssessing}
+                            className="text-[11px] font-medium text-amber-600 dark:text-amber hover:underline disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {isAssessing ? <><Loader2 size={10} className="animate-spin" /> Assessing…</> : "Assess all files"}
+                          </button>
+                        )}
+                      </div>
                       {documents.map(doc => (
                         <div
                           key={doc.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5"
+                          className="flex items-center gap-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5"
                         >
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <FileText size={16} className="text-amber-600 flex-shrink-0" />
-                            <span className="text-sm font-medium text-black/80 dark:text-white/80 truncate">{doc.filename}</span>
+                          <FileText size={15} className="text-amber-600 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-black/80 dark:text-white/80 truncate leading-tight">
+                              {doc.filename}
+                            </p>
+                            {doc.discovery_value && (
+                              <div className="mt-1">
+                                <DiscoveryBadge
+                                  value={doc.discovery_value}
+                                  docType={doc.doc_type}
+                                  note={doc.discovery_note}
+                                />
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => {
                                 setIsOpen(false);
