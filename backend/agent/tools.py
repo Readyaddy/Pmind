@@ -15,6 +15,8 @@ import os
 import re
 from typing import Any
 
+import httpx
+
 from google import genai
 from google.genai import types as genai_types
 
@@ -511,6 +513,181 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 },
             },
             "required": ["name", "opportunity_ids"],
+        },
+    },
+    # ── Jira sprint tools ─────────────────────────────────────────────────────
+    {
+        "name": "list_jira_boards",
+        "description": (
+            "List the user's Jira Scrum boards and whether each has an active sprint. "
+            "Call this FIRST whenever the user asks about their sprint, standup, weekly "
+            "update, blockers, velocity, or release notes. Use the result to decide "
+            "which board to fetch — if there's only one active sprint, proceed directly; "
+            "if multiple, ask the user which project (one question only)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "fetch_jira_sprint",
+        "description": (
+            "Fetch issues in a Jira sprint grouped into done / in_progress / blocked / todo. "
+            "Returns sprint name, dates, goal, completion stats, and per-issue details "
+            "(key, title, assignee, story points, blocker reason). Use this to write "
+            "sprint updates, standup notes, release notes, or surface risks. "
+            "Always call list_jira_boards first to get the board_id."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "integer",
+                    "description": "Board ID from list_jira_boards.",
+                },
+                "state": {
+                    "type": "string",
+                    "enum": ["active", "next", "closed"],
+                    "description": (
+                        "'active' (default) for the current sprint; "
+                        "'next' for upcoming sprint planning; "
+                        "'closed' for the last completed sprint (release notes)."
+                    ),
+                    "default": "active",
+                },
+            },
+            "required": ["board_id"],
+        },
+    },
+    {
+        "name": "search_jira",
+        "description": (
+            "Search Jira issues using JQL (Jira Query Language). Use this to answer "
+            "ANY question about Jira content — all issues in a project, what's assigned "
+            "to the user, recently updated tickets, issues by status or priority, etc. "
+            "This is more powerful than fetch_jira_sprint — use it whenever the user wants "
+            "to browse, list, or find issues beyond just the current board view.\n\n"
+            "JQL examples:\n"
+            "  project = PT                              → all issues in project PT\n"
+            "  project = PT AND status != Done           → all open issues\n"
+            "  assignee = currentUser()                  → my issues\n"
+            "  project = PT AND status = 'In Progress'   → in-progress only\n"
+            "  project = PT ORDER BY priority DESC       → by priority\n"
+            "  updated >= -7d                            → changed this week\n"
+            "  project = PT AND issuetype = Epic         → only epics\n"
+            "  project = PT AND labels = blocked         → blocked issues\n\n"
+            "Always construct JQL from what the user is asking — don't ask them to write it."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "jql": {
+                    "type": "string",
+                    "description": "Valid JQL query string.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max issues to return (default 50, max 100).",
+                    "default": 50,
+                },
+            },
+            "required": ["jql"],
+        },
+    },
+    {
+        "name": "create_jira_issue",
+        "description": (
+            "Create a single Jira issue (Story, Epic, Bug, Task, Feature) in a project. "
+            "Use this when the user asks to 'write tickets', 'create issues', 'add to Jira', "
+            "or wants to push opportunities/PRD items to Jira. "
+            "Call this once per issue — call it multiple times to create multiple tickets. "
+            "For epics with stories: create the Epic first, then create Stories with parent_key set to the Epic's key."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project_key": {
+                    "type": "string",
+                    "description": "Jira project key, e.g. 'PT' or 'KAN'.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Issue title / summary.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "(optional) Full description — plain text, will be converted to Jira format.",
+                },
+                "issue_type": {
+                    "type": "string",
+                    "description": "Issue type. Common values: 'Story', 'Epic', 'Bug', 'Task', 'Feature'. Default: 'Story'.",
+                    "default": "Story",
+                },
+                "parent_key": {
+                    "type": "string",
+                    "description": "(optional) Parent issue key, e.g. 'PT-6'. Use to nest Stories under an Epic.",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "(optional) Priority: 'Highest', 'High', 'Medium', 'Low', 'Lowest'.",
+                },
+            },
+            "required": ["project_key", "title"],
+        },
+    },
+    {
+        "name": "create_jira_sprint",
+        "description": (
+            "Create a new sprint on a Jira Scrum board. "
+            "Only works on Scrum boards — Kanban boards don't support sprints. "
+            "Use list_jira_boards first to get the board_id and confirm board type is 'scrum'. "
+            "If the user doesn't specify dates, create the sprint without them (Jira allows it)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "integer",
+                    "description": "Scrum board ID from list_jira_boards.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Sprint name, e.g. 'Sprint 1' or 'May Sprint'.",
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "(optional) Start date in YYYY-MM-DD format.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "(optional) End date in YYYY-MM-DD format.",
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "(optional) Sprint goal — one sentence.",
+                },
+            },
+            "required": ["board_id", "name"],
+        },
+    },
+    {
+        "name": "get_jira_issue",
+        "description": (
+            "Fetch full details of a single Jira issue by its key (e.g. PT-4, KAN-12). "
+            "Returns title, status, assignee, priority, description, last 5 comments, "
+            "and subtasks. Use this when the user mentions a specific ticket key, "
+            "or when you need the full description/comments of an issue found via search_jira."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "issue_key": {
+                    "type": "string",
+                    "description": "Jira issue key, e.g. 'PT-4' or 'KAN-12'.",
+                },
+            },
+            "required": ["issue_key"],
         },
     },
     # ── Handoff tools ──────────────────────────────────────────────────────────
@@ -1864,6 +2041,345 @@ async def _promote_to_feature(
     }
 
 
+async def _list_jira_boards(ctx: dict) -> dict:
+    user_id = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {
+            "summary": "Jira is not connected. Go to Project Settings → Integrations to connect.",
+            "sources": [],
+        }
+
+    config = result.data[0]["config"]
+
+    try:
+        from routers.integrations import _fetch_jira_boards
+        boards = await _fetch_jira_boards(config)
+    except Exception as e:
+        return {"summary": f"Failed to fetch Jira boards: {e}", "sources": []}
+
+    if not boards:
+        return {
+            "summary": "No boards found in your Jira workspace.",
+            "sources": [],
+        }
+
+    scrum_boards  = [b for b in boards if b["board_type"] == "scrum"]
+    kanban_boards = [b for b in boards if b["board_type"] != "scrum"]
+    active        = [b for b in boards if b["has_active_sprint"]]
+
+    lines = []
+    for b in boards:
+        btype = b["board_type"].upper()
+        if b["has_active_sprint"]:
+            status = f"active sprint: {b['active_sprint_name']} (sprint_id: {b['active_sprint_id']})"
+        elif b["board_type"] == "scrum":
+            status = "Scrum board — no active sprint (use search_jira to list issues)"
+        else:
+            status = "Kanban — no sprints, use search_jira or fetch_jira_sprint to list issues"
+        lines.append(
+            f"- [{btype}] {b['project_name'] or b['board_name']} "
+            f"(board_id: {b['board_id']}, project_key: {b['project_key']}) — {status}"
+        )
+
+    # Build a clear instruction for the agent
+    if active:
+        instruction = f"{len(active)} active sprint(s) found — call fetch_jira_sprint with the board_id."
+    elif kanban_boards:
+        keys = ", ".join(b["project_key"] for b in kanban_boards if b["project_key"])
+        instruction = (
+            f"All boards are Kanban (no sprints). "
+            f"Use search_jira with JQL like 'project IN ({keys})' to list their issues. "
+            f"Do NOT say 'no sprint found' — just search the issues directly."
+        )
+    else:
+        keys = ", ".join(b["project_key"] for b in scrum_boards if b["project_key"])
+        instruction = (
+            f"Scrum boards found but no active sprint. "
+            f"Use search_jira with JQL like 'project IN ({keys})' to list issues, "
+            f"or ask the user if they want to create a sprint."
+        )
+
+    return {
+        "summary": f"Found {len(boards)} board(s): {len(scrum_boards)} Scrum, {len(kanban_boards)} Kanban. {instruction}",
+        "data": "\n".join(lines),
+        "sources": [],
+    }
+
+
+async def _fetch_jira_sprint(ctx: dict, board_id: int, state: str = "active") -> dict:
+    user_id = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {
+            "summary": "Jira is not connected. Go to Project Settings → Integrations to connect.",
+            "sources": [],
+        }
+
+    config = result.data[0]["config"]
+
+    try:
+        from routers.integrations import _fetch_board_issues
+        data = await _fetch_board_issues(config, board_id, state)
+    except Exception as e:
+        return {"summary": f"Failed to fetch board issues: {e}", "sources": []}
+
+    sprint = data.get("sprint")  # None for Kanban
+    stats  = data["stats"]
+    board_type = data.get("board_type", "kanban")
+
+    # Build a readable summary for the LLM
+    if sprint:
+        lines = [
+            f"Sprint: {sprint['name']}",
+            f"Goal: {sprint['goal']}" if sprint.get("goal") else "",
+            f"Dates: {sprint['start_date']} → {sprint['end_date']}",
+        ]
+    else:
+        lines = [f"Board type: Kanban (no sprints — showing all active issues)"]
+
+    lines += [
+        f"Progress: {stats['done']}/{stats['total']} done ({stats['completion_pct']}%)"
+        f" | {stats['in_progress']} in progress"
+        f" | {stats['blocked']} blocked"
+        f" | {stats['todo']} todo",
+        "",
+    ]
+
+    def _fmt_bucket(label: str, items: list) -> list[str]:
+        if not items:
+            return []
+        out = [f"{label}:"]
+        for it in items:
+            line = f"  [{it['key']}] {it['title']} — {it['assignee']}"
+            if it.get("points"):
+                line += f" ({it['points']}pts)"
+            if it.get("reason"):
+                line += f" | blocked: {it['reason']}"
+            out.append(line)
+        return out
+
+    lines += _fmt_bucket("Done", data["done"])
+    lines += _fmt_bucket("In Progress", data["in_progress"])
+    lines += _fmt_bucket("Blocked", data["blocked"])
+    lines += _fmt_bucket("To Do", data["todo"])
+
+    domain = config.get("domain", "")
+    sources = [
+        {
+            "id": f"jira:{it['key']}",
+            "kind": "jira",
+            "title": f"{it['key']}: {it['title'][:60]}",
+            "snippet": it.get("reason", ""),
+        }
+        for it in data.get("blocked", [])
+    ]
+
+    label = sprint["name"] if sprint else f"Kanban board"
+    return {
+        "summary": (
+            f"{label} — {stats['completion_pct']}% complete, "
+            f"{stats['blocked']} blocked."
+        ),
+        "data": "\n".join(l for l in lines if l is not None),
+        "sources": sources,
+    }
+
+
+async def _create_jira_issue(
+    ctx: dict,
+    project_key: str,
+    title: str,
+    description: str = "",
+    issue_type: str = "Story",
+    parent_key: str | None = None,
+    priority: str | None = None,
+) -> dict:
+    user_id  = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {"summary": "Jira is not connected.", "sources": []}
+
+    config = result.data[0]["config"]
+    try:
+        from routers.integrations import _create_jira_issue as _jira_create
+        data = await _jira_create(config, project_key, title, description, issue_type, parent_key, priority)
+    except Exception as e:
+        return {"summary": f"Could not create issue: {e}", "sources": []}
+
+    return {
+        "summary": f"Created {data['type']} [{data['key']}]: {data['title']} — {data['url']}",
+        "data": f"Key: {data['key']}\nURL: {data['url']}",
+        "sources": [{"id": f"jira:{data['key']}", "kind": "jira", "title": f"{data['key']}: {data['title'][:60]}"}],
+    }
+
+
+async def _create_jira_sprint(
+    ctx: dict,
+    board_id: int,
+    name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    goal: str | None = None,
+) -> dict:
+    user_id  = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {"summary": "Jira is not connected.", "sources": []}
+
+    config = result.data[0]["config"]
+    try:
+        from routers.integrations import _create_sprint
+        data = await _create_sprint(config, board_id, name, start_date, end_date, goal)
+    except Exception as e:
+        return {"summary": f"Could not create sprint: {e}", "sources": []}
+
+    return {
+        "summary": f"Created sprint '{data['name']}' (id: {data['sprint_id']}) on board {board_id}.",
+        "data": (
+            f"Sprint: {data['name']}\n"
+            f"State: {data['state']}\n"
+            + (f"Dates: {data['start_date']} → {data['end_date']}\n" if data.get("start_date") else "")
+            + (f"Goal: {data['goal']}\n" if data.get("goal") else "")
+        ),
+        "sources": [],
+    }
+
+
+async def _search_jira(ctx: dict, jql: str, max_results: int = 50) -> dict:
+    user_id  = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {"summary": "Jira is not connected. Go to Project Settings → Integrations to connect.", "sources": []}
+
+    config = result.data[0]["config"]
+    try:
+        from routers.integrations import _search_jira as _jira_search
+        data = await _jira_search(config, jql, max_results)
+    except Exception as e:
+        return {"summary": f"Jira search failed: {e}", "sources": []}
+
+    issues = data.get("issues", [])
+    if not issues:
+        return {
+            "summary": f"No issues found for: {jql}",
+            "data": "No results.",
+            "sources": [],
+        }
+
+    lines = [f"Found {data['total']} issue(s) (showing {data['returned']}):", ""]
+    for it in issues:
+        line = f"[{it['key']}] {it['title']} — {it['status']}"
+        if it["assignee"] != "Unassigned":
+            line += f" · {it['assignee']}"
+        if it.get("priority"):
+            line += f" · {it['priority']}"
+        lines.append(line)
+
+    sources = [
+        {"id": f"jira:{it['key']}", "kind": "jira", "title": f"{it['key']}: {it['title'][:60]}"}
+        for it in issues
+    ]
+
+    return {
+        "summary": f"Found {data['total']} Jira issue(s) matching: {jql}",
+        "data": "\n".join(lines),
+        "sources": sources,
+    }
+
+
+async def _get_jira_issue(ctx: dict, issue_key: str) -> dict:
+    user_id  = ctx["user_id"]
+    supabase = get_supabase()
+
+    result = (
+        supabase.table("user_integrations")
+        .select("config")
+        .eq("user_id", user_id)
+        .eq("integration_type", "jira")
+        .eq("is_active", True)
+        .execute()
+    )
+    if not result.data:
+        return {"summary": "Jira is not connected.", "sources": []}
+
+    config = result.data[0]["config"]
+    try:
+        from routers.integrations import _get_issue
+        data = await _get_issue(config, issue_key)
+    except Exception as e:
+        return {"summary": f"Could not fetch {issue_key}: {e}", "sources": []}
+
+    lines = [
+        f"[{data['key']}] {data['title']}",
+        f"Type: {data['type']} | Status: {data['status']} | Priority: {data['priority']}",
+        f"Assignee: {data['assignee']}",
+    ]
+    if data.get("labels"):
+        lines.append(f"Labels: {', '.join(data['labels'])}")
+    if data.get("description"):
+        lines.append(f"\nDescription:\n{data['description']}")
+    if data.get("subtasks"):
+        lines.append(f"\nSubtasks:")
+        for s in data["subtasks"]:
+            lines.append(f"  [{s['key']}] {s['title']}")
+    if data.get("comments"):
+        lines.append(f"\nLast {len(data['comments'])} comment(s):")
+        for c in data["comments"]:
+            lines.append(f"  {c['author']} ({c['date']}): {c['body']}")
+
+    return {
+        "summary": f"{data['key']}: {data['title']} ({data['status']})",
+        "data": "\n".join(lines),
+        "sources": [{"id": f"jira:{data['key']}", "kind": "jira", "title": f"{data['key']}: {data['title'][:60]}"}],
+    }
+
+
 async def _handoff_noop(ctx: dict, **kwargs) -> dict:
     """Safety net. The agent loop intercepts handoff_to_* tools by name prefix
     and never reaches this executor — if it does, something has gone wrong."""
@@ -1922,6 +2438,13 @@ TOOL_EXECUTORS = {
     "list_opportunities": _list_opportunities,
     "save_opportunity": _save_opportunity,
     "promote_to_feature": _promote_to_feature,
+    # Jira tools
+    "list_jira_boards":   _list_jira_boards,
+    "fetch_jira_sprint":  _fetch_jira_sprint,
+    "search_jira":        _search_jira,
+    "get_jira_issue":     _get_jira_issue,
+    "create_jira_issue":  _create_jira_issue,
+    "create_jira_sprint": _create_jira_sprint,
     # Handoff executors — never actually invoked; intercepted by loop.
     "handoff_to_pm": _handoff_noop,
     "handoff_to_designer": _handoff_noop,

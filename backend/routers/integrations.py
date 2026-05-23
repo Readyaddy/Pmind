@@ -111,14 +111,46 @@ async def connect_jira(
     user_id: str = Depends(get_user_id),
     supabase=Depends(get_supabase),
 ):
-    async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            f"https://{config.domain}/rest/api/3/myself",
-            auth=(config.email, config.api_token),
-            headers={"Accept": "application/json"},
+    # Clean inputs before storing or testing
+    domain    = config.domain.strip().rstrip("/").replace("https://", "").replace("http://", "")
+    email     = config.email.strip()
+    api_token = config.api_token.strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                f"https://{domain}/rest/api/3/myself",
+                auth=(email, api_token),
+                headers={"Accept": "application/json"},
+            )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not reach '{domain}'. Check the domain is correct (e.g. yourcompany.atlassian.net).",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=400, detail="Connection timed out. Check your domain and try again.")
+
+    if res.status_code == 401:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid email or API token. Make sure you're using an API token (not your password) from id.atlassian.com/manage-profile/security/api-tokens.",
+        )
+    if res.status_code == 403:
+        raise HTTPException(
+            status_code=400,
+            detail="API token doesn't have permission to access this workspace.",
+        )
+    if res.status_code == 404:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workspace '{domain}' not found. Double-check your Jira domain.",
         )
     if res.status_code != 200:
-        raise HTTPException(status_code=400, detail="Invalid Jira credentials — check domain, email, and API token.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Jira returned {res.status_code}. Check your credentials and try again.",
+        )
 
     existing = (
         supabase.table("user_integrations")
@@ -130,7 +162,7 @@ async def connect_jira(
     row = {
         "user_id": user_id,
         "integration_type": "jira",
-        "config": {"domain": config.domain, "email": config.email, "api_token": config.api_token},
+        "config": {"domain": domain, "email": email, "api_token": api_token},
         "is_active": True,
     }
     if existing.data:
@@ -165,6 +197,523 @@ async def list_jira_projects(
     if res.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to fetch Jira projects.")
     return [{"key": p["key"], "name": p["name"], "id": p["id"]} for p in res.json().get("values", [])]
+
+
+@router.get("/jira/boards")
+async def list_jira_boards(
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _fetch_jira_boards(config)
+
+
+@router.get("/jira/board/issues")
+async def get_board_issues(
+    board_id: int,
+    sprint_state: str = "active",
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _fetch_board_issues(config, board_id, sprint_state)
+
+
+# ── Jira sprint helpers (also used by agent tools) ────────────────────────────
+
+def _clean_config(config: dict) -> dict:
+    """Strip whitespace and trailing slashes from all Jira config values."""
+    domain = config.get("domain", "").strip().rstrip("/")
+    domain = domain.replace("https://", "").replace("http://", "")
+    return {
+        "domain":    domain,
+        "email":     config.get("email", "").strip(),
+        "api_token": config.get("api_token", "").strip(),
+    }
+
+
+async def _fetch_jira_boards(config: dict) -> list[dict]:
+    """Return all boards (Scrum + Kanban) with sprint info where applicable."""
+    import asyncio
+    config = _clean_config(config)
+    auth = (config["email"], config["api_token"])
+    base = f"https://{config['domain']}"
+
+    # Fetch all board types — not just scrum
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.get(
+            f"{base}/rest/agile/1.0/board",
+            params={"maxResults": "50"},
+            auth=auth,
+            headers={"Accept": "application/json"},
+        )
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch Jira boards.")
+
+    boards = res.json().get("values", [])
+
+    async def _board_info(board: dict) -> dict:
+        board_id   = board["id"]
+        board_type = board.get("type", "simple")  # scrum | simple (kanban)
+        loc        = board.get("location", {})
+
+        active_sprint_name = None
+        active_sprint_id   = None
+        has_active_sprint  = False
+
+        if board_type == "scrum":
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    sr = await client.get(
+                        f"{base}/rest/agile/1.0/board/{board_id}/sprint",
+                        params={"state": "active"},
+                        auth=auth,
+                        headers={"Accept": "application/json"},
+                    )
+                sprints = sr.json().get("values", []) if sr.status_code == 200 else []
+                if sprints:
+                    active_sprint_name = sprints[0]["name"]
+                    active_sprint_id   = sprints[0]["id"]
+                    has_active_sprint  = True
+            except Exception:
+                pass
+
+        return {
+            "board_id":           board_id,
+            "board_name":         board.get("name", ""),
+            "board_type":         board_type,        # "scrum" | "simple" (kanban)
+            "project_key":        loc.get("projectKey", ""),
+            "project_name":       loc.get("projectName", ""),
+            "has_active_sprint":  has_active_sprint,
+            "active_sprint_name": active_sprint_name,
+            "active_sprint_id":   active_sprint_id,
+        }
+
+    return list(await asyncio.gather(*[_board_info(b) for b in boards]))
+
+
+def _classify_issue(fields: dict) -> str:
+    """Return 'done' | 'blocked' | 'in_progress' | 'todo'."""
+    status_cat  = (fields.get("status", {}).get("statusCategory", {}).get("name") or "").lower()
+    status_name = (fields.get("status", {}).get("name") or "").lower()
+    labels      = [l.lower() for l in fields.get("labels", [])]
+
+    if "done" in status_cat or "complete" in status_name:
+        return "done"
+    if "block" in status_name or "impediment" in status_name:
+        return "blocked"
+    if "blocked" in labels or "impediment" in labels:
+        return "blocked"
+    if "progress" in status_cat or "progress" in status_name or \
+       "review" in status_name or "testing" in status_name:
+        return "in_progress"
+    return "todo"
+
+
+def _blocker_reason(fields: dict) -> str:
+    """Best-effort: extract why an issue is blocked from its latest comment."""
+    comments = fields.get("comment", {}).get("comments", [])
+    if not comments:
+        return ""
+    last = comments[-1]
+    body = last.get("body", "")
+    # ADF (Atlassian Doc Format) body → extract plain text
+    if isinstance(body, dict):
+        texts = []
+        def _walk(node: dict):
+            if node.get("type") == "text":
+                texts.append(node.get("text", ""))
+            for child in node.get("content", []):
+                _walk(child)
+        _walk(body)
+        body = " ".join(texts)
+    return str(body)[:200] if body else ""
+
+
+async def _fetch_board_issues(config: dict, board_id: int, sprint_state: str = "active") -> dict:
+    """
+    Fetch issues for a board grouped into done/in_progress/blocked/todo.
+    Works for both Scrum (fetches the sprint) and Kanban (fetches board issues directly).
+    """
+    config = _clean_config(config)
+    auth = (config["email"], config["api_token"])
+    base = f"https://{config['domain']}"
+    FIELDS = "summary,status,assignee,priority,labels,comment,created,customfield_10016"
+
+    sprint_meta: dict | None = None
+
+    # ── Try sprint endpoint first (Scrum boards) ──────────────────────────────
+    async with httpx.AsyncClient(timeout=10) as client:
+        sr = await client.get(
+            f"{base}/rest/agile/1.0/board/{board_id}/sprint",
+            params={"state": sprint_state},
+            auth=auth,
+            headers={"Accept": "application/json"},
+        )
+
+    supports_sprints = sr.status_code == 200 and "errorMessages" not in sr.json()
+    sprints = sr.json().get("values", []) if supports_sprints else []
+
+    if supports_sprints and sprints:
+        sprint = sprints[-1]
+        sprint_meta = {
+            "id":         sprint["id"],
+            "name":       sprint.get("name", ""),
+            "state":      sprint.get("state", ""),
+            "goal":       sprint.get("goal") or "",
+            "start_date": (sprint.get("startDate") or "")[:10],
+            "end_date":   (sprint.get("endDate")   or "")[:10],
+        }
+        # Fetch issues in this specific sprint
+        async with httpx.AsyncClient(timeout=20) as client:
+            ir = await client.get(
+                f"{base}/rest/agile/1.0/sprint/{sprint['id']}/issue",
+                params={"fields": FIELDS, "maxResults": "100"},
+                auth=auth,
+                headers={"Accept": "application/json"},
+            )
+        if ir.status_code != 200:
+            raise HTTPException(status_code=400, detail="Could not fetch sprint issues.")
+        issues = ir.json().get("issues", [])
+
+    else:
+        # ── Kanban fallback: fetch all board issues ────────────────────────────
+        async with httpx.AsyncClient(timeout=20) as client:
+            ir = await client.get(
+                f"{base}/rest/agile/1.0/board/{board_id}/issue",
+                params={"fields": FIELDS, "maxResults": "100"},
+                auth=auth,
+                headers={"Accept": "application/json"},
+            )
+        if ir.status_code != 200:
+            raise HTTPException(status_code=400, detail="Could not fetch board issues.")
+        issues = ir.json().get("issues", [])
+
+    # ── Shape into buckets ────────────────────────────────────────────────────
+    buckets: dict[str, list] = {"done": [], "in_progress": [], "blocked": [], "todo": []}
+
+    for issue in issues:
+        fields   = issue.get("fields", {})
+        key      = issue.get("key", "")
+        title    = fields.get("summary", "")
+        assignee = (fields.get("assignee") or {}).get("displayName", "Unassigned")
+        points   = fields.get("customfield_10016")
+        category = _classify_issue(fields)
+
+        item: dict = {
+            "key":      key,
+            "title":    title,
+            "assignee": assignee,
+            "status":   (fields.get("status") or {}).get("name", ""),
+        }
+        if points:
+            item["points"] = points
+        if category == "blocked":
+            reason = _blocker_reason(fields)
+            if reason:
+                item["reason"] = reason
+        buckets[category].append(item)
+
+    total = len(issues)
+    done  = len(buckets["done"])
+
+    return {
+        "board_id":    board_id,
+        "board_type":  "scrum" if sprint_meta else "kanban",
+        "sprint":      sprint_meta,   # None for Kanban
+        "stats": {
+            "total":          total,
+            "done":           done,
+            "in_progress":    len(buckets["in_progress"]),
+            "blocked":        len(buckets["blocked"]),
+            "todo":           len(buckets["todo"]),
+            "completion_pct": round(done / total * 100) if total else 0,
+        },
+        **buckets,
+    }
+
+
+# Keep old name as alias so existing callers don't break
+_fetch_sprint_issues = _fetch_board_issues
+
+
+@router.get("/jira/search")
+async def search_jira_issues(
+    jql: str,
+    max_results: int = 50,
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _search_jira(config, jql, max_results)
+
+
+@router.get("/jira/issue/{issue_key}")
+async def get_jira_issue(
+    issue_key: str,
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _get_issue(config, issue_key)
+
+
+async def _search_jira(config: dict, jql: str, max_results: int = 50) -> dict:
+    """Run a JQL query and return shaped issues."""
+    config = _clean_config(config)
+    auth   = (config["email"], config["api_token"])
+    base   = f"https://{config['domain']}"
+    FIELDS = "summary,status,assignee,priority,labels,issuetype,created,updated,comment,customfield_10016,description"
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.post(
+            f"{base}/rest/api/3/search/jql",
+            auth=auth,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json={"jql": jql, "maxResults": min(max_results, 100), "fields": FIELDS.split(",")},
+        )
+
+    if res.status_code == 400:
+        detail = res.json().get("errorMessages") or res.json().get("errors") or "Bad JQL"
+        raise HTTPException(status_code=400, detail=f"Invalid JQL: {detail}")
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail=f"Jira search failed: {res.status_code}")
+
+    raw    = res.json()
+    issues = raw.get("issues", [])
+    total  = raw.get("total", len(issues))
+
+    shaped = []
+    for issue in issues:
+        fields   = issue.get("fields", {})
+        assignee = (fields.get("assignee") or {}).get("displayName", "Unassigned")
+        shaped.append({
+            "key":         issue.get("key", ""),
+            "title":       fields.get("summary", ""),
+            "status":      (fields.get("status") or {}).get("name", ""),
+            "type":        (fields.get("issuetype") or {}).get("name", ""),
+            "priority":    (fields.get("priority") or {}).get("name", ""),
+            "assignee":    assignee,
+            "labels":      fields.get("labels", []),
+            "points":      fields.get("customfield_10016"),
+            "updated":     (fields.get("updated") or "")[:10],
+            "created":     (fields.get("created") or "")[:10],
+        })
+
+    return {"total": total, "returned": len(shaped), "issues": shaped, "jql": jql}
+
+
+async def _get_issue(config: dict, issue_key: str) -> dict:
+    """Fetch a single issue with full detail including description and comments."""
+    config = _clean_config(config)
+    auth   = (config["email"], config["api_token"])
+    base   = f"https://{config['domain']}"
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.get(
+            f"{base}/rest/api/3/issue/{issue_key.upper()}",
+            auth=auth,
+            headers={"Accept": "application/json"},
+            params={"fields": "summary,status,assignee,priority,issuetype,labels,description,comment,created,updated,customfield_10016,subtasks,parent"},
+        )
+
+    if res.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"Issue {issue_key} not found.")
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail=f"Could not fetch issue: {res.status_code}")
+
+    issue  = res.json()
+    fields = issue.get("fields", {})
+
+    # Extract plain text from ADF description
+    desc_raw = fields.get("description") or {}
+    description = ""
+    if isinstance(desc_raw, dict):
+        parts: list[str] = []
+        def _walk(node: dict):
+            if node.get("type") == "text":
+                parts.append(node.get("text", ""))
+            for child in node.get("content", []):
+                _walk(child)
+        _walk(desc_raw)
+        description = " ".join(parts).strip()
+    elif isinstance(desc_raw, str):
+        description = desc_raw
+
+    # Last 5 comments
+    comments_raw = (fields.get("comment") or {}).get("comments", [])[-5:]
+    comments = []
+    for c in comments_raw:
+        body = c.get("body", "")
+        if isinstance(body, dict):
+            parts2: list[str] = []
+            def _walk2(node: dict):
+                if node.get("type") == "text":
+                    parts2.append(node.get("text", ""))
+                for child in node.get("content", []):
+                    _walk2(child)
+            _walk2(body)
+            body = " ".join(parts2).strip()
+        comments.append({
+            "author": (c.get("author") or {}).get("displayName", ""),
+            "body":   str(body)[:500],
+            "date":   (c.get("created") or "")[:10],
+        })
+
+    subtasks = [
+        {"key": s.get("key", ""), "title": (s.get("fields") or {}).get("summary", "")}
+        for s in fields.get("subtasks", [])
+    ]
+
+    return {
+        "key":         issue.get("key", ""),
+        "title":       fields.get("summary", ""),
+        "type":        (fields.get("issuetype") or {}).get("name", ""),
+        "status":      (fields.get("status") or {}).get("name", ""),
+        "priority":    (fields.get("priority") or {}).get("name", ""),
+        "assignee":    (fields.get("assignee") or {}).get("displayName", "Unassigned"),
+        "labels":      fields.get("labels", []),
+        "points":      fields.get("customfield_10016"),
+        "description": description[:2000],
+        "comments":    comments,
+        "subtasks":    subtasks,
+        "parent":      (fields.get("parent") or {}).get("key"),
+        "created":     (fields.get("created") or "")[:10],
+        "updated":     (fields.get("updated") or "")[:10],
+        "url":         f"https://{config['domain']}/browse/{issue.get('key', '')}",
+    }
+
+
+@router.post("/jira/issue")
+async def create_jira_issue_route(
+    project_key: str,
+    title: str,
+    description: str = "",
+    issue_type: str = "Story",
+    parent_key: str | None = None,
+    priority: str | None = None,
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _create_jira_issue(config, project_key, title, description, issue_type, parent_key, priority)
+
+
+async def _create_jira_issue(
+    config: dict,
+    project_key: str,
+    title: str,
+    description: str = "",
+    issue_type: str = "Story",
+    parent_key: str | None = None,
+    priority: str | None = None,
+) -> dict:
+    config  = _clean_config(config)
+    auth    = (config["email"], config["api_token"])
+    base    = f"https://{config['domain']}"
+
+    fields: dict = {
+        "project":   {"key": project_key.upper().strip()},
+        "summary":   title,
+        "issuetype": {"name": issue_type},
+    }
+    if description:
+        fields["description"] = _adf(description)
+    if priority:
+        fields["priority"] = {"name": priority}
+    if parent_key:
+        fields["parent"] = {"key": parent_key.upper().strip()}
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        res = await client.post(
+            f"{base}/rest/api/3/issue",
+            auth=auth,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json={"fields": fields},
+        )
+
+    if res.status_code == 400:
+        detail = res.json()
+        errors = detail.get("errors") or detail.get("errorMessages") or str(detail)
+        raise HTTPException(status_code=400, detail=f"Could not create issue: {errors}")
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=400, detail=f"Issue creation failed: {res.status_code}")
+
+    issue = res.json()
+    key   = issue.get("key", "")
+    return {
+        "key":  key,
+        "url":  f"https://{config['domain']}/browse/{key}",
+        "title": title,
+        "type": issue_type,
+    }
+
+
+@router.post("/jira/sprint")
+async def create_jira_sprint(
+    board_id: int,
+    name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    goal: str | None = None,
+    user_id: str = Depends(get_user_id),
+    supabase=Depends(get_supabase),
+):
+    config = await _get_jira_config(user_id, supabase)
+    return await _create_sprint(config, board_id, name, start_date, end_date, goal)
+
+
+async def _create_sprint(
+    config: dict,
+    board_id: int,
+    name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    goal: str | None = None,
+) -> dict:
+    config = _clean_config(config)
+    auth   = (config["email"], config["api_token"])
+    base   = f"https://{config['domain']}"
+
+    body: dict = {"name": name, "boardId": board_id}
+    if start_date:
+        body["startDate"] = start_date if "T" in start_date else f"{start_date}T00:00:00.000Z"
+    if end_date:
+        body["endDate"]   = end_date   if "T" in end_date   else f"{end_date}T00:00:00.000Z"
+    if goal:
+        body["goal"] = goal
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.post(
+            f"{base}/rest/agile/1.0/sprint",
+            auth=auth,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json=body,
+        )
+
+    if res.status_code == 400:
+        detail = res.json()
+        msg = detail.get("message") or str(detail)
+        if "does not support" in msg.lower() or "simple" in msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="This board doesn't support sprints. Sprints require a Scrum board, not a Kanban board."
+            )
+        raise HTTPException(status_code=400, detail=f"Could not create sprint: {msg}")
+    if res.status_code not in (200, 201):
+        raise HTTPException(status_code=400, detail=f"Sprint creation failed: {res.status_code}")
+
+    sprint = res.json()
+    return {
+        "sprint_id":   sprint.get("id"),
+        "name":        sprint.get("name"),
+        "state":       sprint.get("state"),
+        "start_date":  sprint.get("startDate", "")[:10],
+        "end_date":    sprint.get("endDate", "")[:10],
+        "goal":        sprint.get("goal", ""),
+        "board_id":    board_id,
+        "url":         f"https://{config['domain']}/jira/software/projects/{sprint.get('originBoardId', board_id)}/boards",
+    }
 
 
 @router.post("/jira/export")

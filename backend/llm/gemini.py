@@ -22,8 +22,22 @@ class GeminiProvider(LLMProvider):
             contents=user_message,
             config=config,
         ):
-            if chunk.text:
-                yield chunk.text
+            cand = (chunk.candidates or [None])[0]
+            if not cand or not cand.content or not cand.content.parts:
+                # Fallback: try chunk.text only if no candidates (avoids thought leakage)
+                try:
+                    text = chunk.text
+                    if text:
+                        yield text
+                except Exception:
+                    pass
+                continue
+            for part in cand.content.parts or []:
+                if getattr(part, "thought", False):
+                    continue  # skip internal reasoning
+                part_text = getattr(part, "text", None)
+                if part_text:
+                    yield part_text
 
     # ── Tool use (non-streaming, so thought_signatures are intact) ────────────
 

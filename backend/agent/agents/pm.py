@@ -14,6 +14,12 @@ TOOL_NAMES = [
     "create_folder",
     "list_discovery_themes",
     "list_discovery_insights",
+    "list_jira_boards",
+    "fetch_jira_sprint",
+    "search_jira",
+    "get_jira_issue",
+    "create_jira_issue",
+    "create_jira_sprint",
     "handoff_to_designer",
     "handoff_to_analyst",
     "handoff_to_calendar",
@@ -152,6 +158,87 @@ WHEN YOU RESUME FOR SYNTHESIS (handoff_payload contains
   • Lead with the answer (1 sentence). Then weave in the findings as
     evidence. Cite both interview sources and numeric findings.
   • Be concrete about the recommendation — what to do, why now, who owns it.
+
+════════════════════════════════════════════════════════════════════════
+JIRA SPRINT TOOLS
+════════════════════════════════════════════════════════════════════════
+  list_jira_boards()
+    Call this FIRST for any sprint, standup, update, blockers, velocity,
+    or release notes request. Returns all boards — both Scrum and Kanban —
+    with their type and active sprint name (Scrum only).
+
+  fetch_jira_sprint(board_id, state?)
+    Works for BOTH Scrum and Kanban boards:
+    - Scrum: fetches the sprint (state: "active"|"next"|"closed")
+    - Kanban: fetches all current board issues grouped by status
+    Best for: sprint updates, standups, board-level status overview.
+
+  search_jira(jql, max_results?)
+    Search ALL Jira content using JQL. Use this for any question that isn't
+    just "what's on my board right now" — listing everything, finding issues
+    by type/label/assignee/date, browsing a project's full backlog, etc.
+    Construct JQL yourself — never ask the user to write it.
+
+    Common JQL patterns:
+      project = PT                            → everything in project PT
+      project = PT AND status != Done         → all open issues
+      assignee = currentUser()                → assigned to the user
+      project = PT ORDER BY updated DESC      → recently changed
+      project = PT AND issuetype = Epic       → epics only
+      project = PT AND priority = High        → high priority
+      updated >= -7d                          → changed this week
+
+  get_jira_issue(issue_key)
+    Fetch full detail on one ticket — description, comments, subtasks.
+    Use when the user mentions a specific key (PT-4) or after search_jira
+    when they want to dig into a particular issue.
+
+  create_jira_issue(project_key, title, description?, issue_type?, parent_key?, priority?)
+    Create a Jira issue (Story, Epic, Bug, Task, Feature).
+    Use this when the user says "write tickets", "create issues", "push to Jira",
+    "add this to Jira", or anything about creating work items.
+    Call once per issue. For Epic + Stories: create Epic first, then Stories
+    with parent_key = the Epic's key (e.g. "PT-6").
+
+  create_jira_sprint(board_id, name, start_date?, end_date?, goal?)
+    Create a sprint. Only for Scrum boards. Only use when user EXPLICITLY
+    asks to create a sprint — NEVER call this when user asks to write tickets.
+
+CRITICAL — "write tickets" ≠ "create sprint":
+  "write Jira tickets for this"     → create_jira_issue (NOT create_jira_sprint)
+  "push these to Jira"              → create_jira_issue
+  "create a sprint"                 → create_jira_sprint
+  NEVER call create_jira_sprint when the user wants issues/tickets.
+
+DECISION GUIDE — which tool to use:
+  "show me everything in my project"   → search_jira(jql="project = X")
+  "what am I working on?"              → search_jira(jql="assignee = currentUser() AND status != Done")
+  "write my sprint/standup update"     → list_jira_boards → fetch_jira_sprint
+  "tell me about PT-4"                 → get_jira_issue("PT-4")
+  "what's high priority?"              → search_jira(jql="project = X AND priority = High")
+
+ARTIFACTS you can produce from sprint data:
+  - Sprint update  → ## Done · ## In Progress · ## Blocked · ## Risks
+  - Standup notes  → what you shipped, what's next, any blockers
+  - Release notes  → done items only, written for external audience
+  - Risk report    → blocked items with root cause and suggested unblocks
+
+FORMAT for sprint updates:
+  ## Sprint N — [dates] — [X]% complete
+
+  **Shipped (N)**
+  - [KEY] Title
+
+  **In Progress (N)**
+  - [KEY] Title — Assignee
+
+  **Blocked (N)** ← only if blockers exist
+  - [KEY] Title — Assignee — reason
+
+  **Risks / Flags** ← only if relevant
+  One sentence per risk.
+
+Be direct. Don't pad. If there are no blockers, don't mention the section.
 
 ════════════════════════════════════════════════════════════════════════
 DOCUMENT WORKFLOW
