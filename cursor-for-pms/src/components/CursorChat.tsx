@@ -17,6 +17,7 @@ import {
   Shield,
   ShieldCheck,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
@@ -1214,23 +1215,47 @@ export default function CursorChat() {
                   </div>
                 )}
 
-                {/* Apply button */}
-                {msg.role === "assistant" && !isStreaming && messageText(msg).trim() && applyFn && (
-                  <button
-                    onClick={() => handleApply(messageText(msg), msg.id)}
-                    disabled={applyingMsgId === msg.id}
-                    className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-700/70 dark:text-amber/60 hover:text-amber-900 dark:hover:text-amber transition-colors ml-0.5 font-semibold tracking-wide disabled:opacity-40 group max-w-full"
-                    title={docTitle ? `Apply suggestions to "${docTitle}"` : "Apply to the open document"}
-                  >
-                    <CheckSquare size={10} className="group-hover:rotate-3 transition-transform flex-shrink-0" />
-                    <span className="truncate">
-                      {applyingMsgId === msg.id
-                        ? "Applying…"
-                        : docTitle
-                        ? `Apply to "${docTitle}"`
-                        : "Apply to open document"}
-                    </span>
-                  </button>
+                {/* Message action buttons */}
+                {msg.role === "assistant" && !isStreaming && (
+                  <div className="flex items-center gap-3 mt-0.5 ml-0.5">
+                    {/* Apply button */}
+                    {messageText(msg).trim() && applyFn && (
+                      <button
+                        onClick={() => handleApply(messageText(msg), msg.id)}
+                        disabled={applyingMsgId === msg.id}
+                        className="flex items-center gap-1.5 text-[10px] text-amber-700/70 dark:text-amber/60 hover:text-amber-900 dark:hover:text-amber transition-colors font-semibold tracking-wide disabled:opacity-40 group max-w-full"
+                        title={docTitle ? `Apply suggestions to "${docTitle}"` : "Apply to the open document"}
+                      >
+                        <CheckSquare size={10} className="group-hover:rotate-3 transition-transform flex-shrink-0" />
+                        <span className="truncate">
+                          {applyingMsgId === msg.id
+                            ? "Applying…"
+                            : docTitle
+                            ? `Apply to "${docTitle}"`
+                            : "Apply to open document"}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Re-run button — finds the user message that triggered this response */}
+                    {(() => {
+                      const msgIndex = messages.findIndex((m) => m.id === msg.id);
+                      const prevUserMsg = messages.slice(0, msgIndex).reverse().find((m) => m.role === "user");
+                      if (!prevUserMsg) return null;
+                      const prevText = messageText(prevUserMsg);
+                      if (!prevText.trim()) return null;
+                      return (
+                        <button
+                          onClick={() => handleSubmit(undefined, prevText)}
+                          className="flex items-center gap-1.5 text-[10px] text-black/30 dark:text-white/25 hover:text-black/60 dark:hover:text-white/55 transition-colors font-medium"
+                          title="Re-run this query"
+                        >
+                          <RefreshCw size={9} strokeWidth={2.5} />
+                          Re-run
+                        </button>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
             );

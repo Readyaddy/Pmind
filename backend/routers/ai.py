@@ -688,13 +688,33 @@ async def ai_agent(
                     .execute()
                 )
                 if res.data:
-                    row = res.data[0]
-                    text = _tiptap_to_text(row.get("content") or {})
-                    mention_blocks.append(
-                        f"📄 PM Document: \"{row.get('title', 'Untitled')}\"\n"
-                        f"   doc_id: {doc_id}  ← pass this directly to read_doc / edit_doc\n"
-                        f"   Full content:\n{text[:5000]}"
-                    )
+                    row    = res.data[0]
+                    title  = row.get("title", "Untitled")
+                    raw    = row.get("content") or {}
+
+                    # Rendered UI artifact — give a readable summary + the doc_id.
+                    # The agent calls read("doc:<id>") to get full HTML when needed.
+                    if isinstance(raw, dict) and "html" in raw and "type" not in raw:
+                        from agent.tools import _tiptap_to_text as _ttt
+                        visible_text = _ttt(raw)
+                        html_len = len(raw.get("html", ""))
+                        css_len  = len(raw.get("css",  ""))
+                        js_len   = len(raw.get("js",   ""))
+                        block = (
+                            f"📄 RENDERED_UI Document: \"{title}\"\n"
+                            f"   doc_id: {doc_id}  ← use read('doc:{doc_id}') to get full HTML/CSS/JS\n"
+                            f"   Type: RENDERED_UI — a website/UI component built by the Designer\n"
+                            f"   Size: HTML {html_len}ch · CSS {css_len}ch · JS {js_len}ch\n"
+                            f"   Visible text content:\n{visible_text[:1500]}"
+                        )
+                        mention_blocks.append(block)
+                    else:
+                        text = _tiptap_to_text(raw)
+                        mention_blocks.append(
+                            f"📄 PM Document: \"{title}\"\n"
+                            f"   doc_id: {doc_id}  ← pass this directly to read_doc / edit_doc\n"
+                            f"   Full content:\n{text[:5000]}"
+                        )
         if request.mentioned_kb_ids:
             for kb_id in request.mentioned_kb_ids:
                 doc_res = (

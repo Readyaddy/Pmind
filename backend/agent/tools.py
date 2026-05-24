@@ -873,24 +873,61 @@ def _embed(query: str) -> list[float]:
 
 
 def _tiptap_to_text(content: Any) -> str:
-    """Best-effort flatten Tiptap JSON to plain text."""
+    """Best-effort flatten Tiptap JSON to plain text.
+
+    Handles three content shapes:
+    1. Standard Tiptap doc JSON  (type: "doc", content: [...])
+    2. Rendered UI artifact      ({"html": "...", "css": "...", "js": "..."})
+    3. Plain string
+    """
     if not content:
         return ""
+
     if isinstance(content, str):
+        # Could be a JSON string — try to parse it
+        stripped = content.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                return _tiptap_to_text(json.loads(stripped))
+            except Exception:
+                pass
         return content
+
     if isinstance(content, dict):
+        # ── Rendered UI artifact ────────────────────────────────────────────
+        # Produced by the designer agent: {"html": "...", "css": "...", "js": "..."}
+        if "html" in content and "type" not in content:
+            html = content.get("html", "")
+            # Strip tags to get readable text
+            text = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL)
+            text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL)
+            text = re.sub(r"<[^>]+>", " ", text)
+            text = re.sub(r"\s+", " ", text).strip()
+            parts = [f"[Rendered UI — visible text content]\n{text}"]
+            if content.get("css"):
+                parts.append(f"\n[CSS: {len(content['css'])} chars]")
+            if content.get("js"):
+                parts.append(f"\n[JS: {len(content['js'])} chars]")
+            if content.get("pages"):
+                page_names = [p.get("name", "") for p in content["pages"]]
+                parts.append(f"\n[Multi-page: {', '.join(page_names)}]")
+            return "".join(parts)
+
+        # ── Standard Tiptap node ────────────────────────────────────────────
         out = []
         if content.get("type") == "text" and "text" in content:
             out.append(content["text"])
         for child in content.get("content", []) or []:
             out.append(_tiptap_to_text(child))
-        # Add line breaks between block-level nodes
-        block_types = {"paragraph", "heading", "bulletList", "orderedList", "listItem"}
+        block_types = {"paragraph", "heading", "bulletList", "orderedList",
+                       "listItem", "tableRow", "blockquote", "codeBlock"}
         if content.get("type") in block_types:
             out.append("\n")
         return "".join(out)
+
     if isinstance(content, list):
         return "".join(_tiptap_to_text(c) for c in content)
+
     return ""
 
 
@@ -1024,17 +1061,35 @@ async def _read_doc(ctx: dict, doc_id: str) -> dict:
             ),
             "sources": [],
         }
-    doc = res.data[0]
+    doc     = res.data[0]
+    raw     = doc.get("content") or {}
+    title   = doc.get("title") or "Untitled"
 
-    text = _tiptap_to_text(doc.get("content")).strip() or "(empty document)"
+    # Rendered UI artifact — return the actual HTML/CSS/JS so the agent can
+    # pass it to handoff_to_designer for improvements.
+    if isinstance(raw, dict) and "html" in raw and "type" not in raw:
+        html = raw.get("html", "")
+        css  = raw.get("css",  "")
+        js   = raw.get("js",   "")
+        data = (
+            f"[RENDERED_UI: \"{title}\"]\n"
+            f"Pass these to handoff_to_designer notes field as:\n"
+            f"  EXISTING_HTML:<html below>\n  EXISTING_CSS:<css below>\n  IMPROVEMENTS:\\n- ...\n\n"
+            f"--- HTML ---\n{html}\n"
+            + (f"\n--- CSS ---\n{css}\n" if css else "")
+            + (f"\n--- JS ---\n{js}\n"   if js  else "")
+        )
+        return {
+            "summary": f"Read rendered UI '{title}' (HTML: {len(html)}ch, CSS: {len(css)}ch, JS: {len(js)}ch).",
+            "data": data,
+            "sources": [{"id": f"doc:{doc['id']}", "kind": "doc", "title": title}],
+        }
+
+    text = _tiptap_to_text(raw).strip() or "(empty document)"
     return {
-        "summary": f"Read '{doc['title']}' ({len(text)} chars).",
+        "summary": f"Read '{title}' ({len(text)} chars).",
         "data": text,
-        "sources": [{
-            "id": f"doc:{doc['id']}",
-            "kind": "doc",
-            "title": doc["title"] or "Untitled",
-        }],
+        "sources": [{"id": f"doc:{doc['id']}", "kind": "doc", "title": title}],
     }
 
 
@@ -1083,6 +1138,22 @@ async def _create_doc(
         return {"summary": "No active project — cannot create doc.", "sources": []}
 
     supabase = get_supabase()
+
+    # Deduplicate title — append _1, _2, … if name already exists
+    base = (title or "Untitled").strip()
+    existing_titles = set()
+    try:
+        ex = (supabase.table("documents").select("title")
+              .eq("project_id", project_id).eq("user_id", user_id).execute())
+        existing_titles = {r["title"] for r in (ex.data or [])}
+    except Exception:
+        pass
+    if base in existing_titles:
+        i = 1
+        while f"{base}_{i}" in existing_titles:
+            i += 1
+        base = f"{base}_{i}"
+
     tiptap = markdown_to_tiptap(content)
     try:
         res = (
@@ -1091,7 +1162,7 @@ async def _create_doc(
                 "user_id": user_id,
                 "project_id": project_id,
                 "folder_id": folder_id,
-                "title": title or "Untitled",
+                "title": base,
                 "content": tiptap,
             })
             .execute()

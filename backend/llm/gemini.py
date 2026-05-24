@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from typing import Any, AsyncGenerator
 
@@ -6,6 +7,19 @@ from google.genai import types as gtypes
 
 from .base import LLMProvider
 from .types import Message, StreamEvent, Tool
+
+_RETRYABLE_STATUS = {503, 429}  # service unavailable, rate limit
+_RETRY_DELAY = 2.0              # seconds to wait before one retry
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Return True if this exception is a transient Gemini API error worth retrying."""
+    msg = str(exc).lower()
+    return (
+        "503" in msg or "unavailable" in msg or
+        "429" in msg or "resource_exhausted" in msg or
+        "quota" in msg or "high demand" in msg
+    )
 
 
 class GeminiProvider(LLMProvider):
@@ -17,27 +31,35 @@ class GeminiProvider(LLMProvider):
         self, system_prompt: str, user_message: str, stream: bool = True
     ) -> AsyncGenerator[str, None]:
         config = gtypes.GenerateContentConfig(system_instruction=system_prompt)
-        async for chunk in await self.client.aio.models.generate_content_stream(
-            model=self.model,
-            contents=user_message,
-            config=config,
-        ):
-            cand = (chunk.candidates or [None])[0]
-            if not cand or not cand.content or not cand.content.parts:
-                # Fallback: try chunk.text only if no candidates (avoids thought leakage)
-                try:
-                    text = chunk.text
-                    if text:
-                        yield text
-                except Exception:
-                    pass
-                continue
-            for part in cand.content.parts or []:
-                if getattr(part, "thought", False):
-                    continue  # skip internal reasoning
-                part_text = getattr(part, "text", None)
-                if part_text:
-                    yield part_text
+
+        for attempt in range(2):
+            try:
+                async for chunk in await self.client.aio.models.generate_content_stream(
+                    model=self.model,
+                    contents=user_message,
+                    config=config,
+                ):
+                    cand = (chunk.candidates or [None])[0]
+                    if not cand or not cand.content or not cand.content.parts:
+                        try:
+                            text = chunk.text
+                            if text:
+                                yield text
+                        except Exception:
+                            pass
+                        continue
+                    for part in cand.content.parts or []:
+                        if getattr(part, "thought", False):
+                            continue
+                        part_text = getattr(part, "text", None)
+                        if part_text:
+                            yield part_text
+                return  # success
+            except Exception as e:
+                if attempt == 0 and _is_retryable(e):
+                    await asyncio.sleep(_RETRY_DELAY)
+                    continue
+                raise
 
     # ── Tool use (non-streaming, so thought_signatures are intact) ────────────
 
@@ -93,7 +115,9 @@ class GeminiProvider(LLMProvider):
 
         stream_calls: list[tuple[str, dict]] = []  # (name, args) in order
 
-        try:
+        for _attempt in range(2):
+          try:
+            stream_calls = []
             async for chunk in await self.client.aio.models.generate_content_stream(
                 model=model or self.model,
                 contents=contents,
@@ -119,7 +143,11 @@ class GeminiProvider(LLMProvider):
                     if fc and getattr(fc, "name", None):
                         stream_calls.append((fc.name, dict(fc.args or {})))
 
-        except Exception as e:
+            break  # Phase 1 success
+          except Exception as e:
+            if _attempt == 0 and _is_retryable(e):
+                await asyncio.sleep(_RETRY_DELAY)
+                continue
             yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
             return
 
@@ -132,13 +160,27 @@ class GeminiProvider(LLMProvider):
         # Re-run generate_content so thought_signature bytes are present on
         # each function_call Part.  Tool-call events are emitted from here.
 
-        try:
-            response = await self.client.aio.models.generate_content(
-                model=model or self.model,
-                contents=contents,
-                config=config,
-            )
+        response = None
+        for _attempt in range(2):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=model or self.model,
+                    contents=contents,
+                    config=config,
+                )
+                break
+            except Exception as e:
+                if _attempt == 0 and _is_retryable(e):
+                    await asyncio.sleep(_RETRY_DELAY)
+                    continue
+                yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
+                return
 
+        if response is None:
+            yield {"type": "turn_end", "stop_reason": "error", "error": "No response after retry"}
+            return
+
+        try:
             # Collect function_call Parts from complete response (in order).
             ns_fc_parts: list = []
             candidate = (response.candidates or [None])[0]
@@ -201,32 +243,37 @@ class GeminiProvider(LLMProvider):
         config = gtypes.GenerateContentConfig(**cfg_kwargs)
         contents = _to_gemini_contents(messages)
 
-        try:
-            async for chunk in await self.client.aio.models.generate_content_stream(
-                model=model or self.model,
-                contents=contents,
-                config=config,
-            ):
-                cand = (chunk.candidates or [None])[0]
-                if not cand or not cand.content or not cand.content.parts:
-                    try:
-                        text = chunk.text
-                        if text:
-                            yield {"type": "text", "delta": text}
-                    except Exception:
-                        pass
-                    continue
-                for part in cand.content.parts or []:
-                    # Skip internal reasoning parts from thinking models.
-                    if getattr(part, "thought", False):
+        for _attempt in range(2):
+            try:
+                async for chunk in await self.client.aio.models.generate_content_stream(
+                    model=model or self.model,
+                    contents=contents,
+                    config=config,
+                ):
+                    cand = (chunk.candidates or [None])[0]
+                    if not cand or not cand.content or not cand.content.parts:
+                        try:
+                            text = chunk.text
+                            if text:
+                                yield {"type": "text", "delta": text}
+                        except Exception:
+                            pass
                         continue
-                    part_text = getattr(part, "text", None)
-                    if part_text:
-                        yield {"type": "text", "delta": part_text}
+                    for part in cand.content.parts or []:
+                        if getattr(part, "thought", False):
+                            continue
+                        part_text = getattr(part, "text", None)
+                        if part_text:
+                            yield {"type": "text", "delta": part_text}
 
-            yield {"type": "turn_end", "stop_reason": "end_turn", "error": None}
-        except Exception as e:
-            yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
+                yield {"type": "turn_end", "stop_reason": "end_turn", "error": None}
+                return
+            except Exception as e:
+                if _attempt == 0 and _is_retryable(e):
+                    await asyncio.sleep(_RETRY_DELAY)
+                    continue
+                yield {"type": "turn_end", "stop_reason": "error", "error": str(e)}
+                return
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

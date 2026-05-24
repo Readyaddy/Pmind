@@ -55,8 +55,15 @@ ROUTER_MODEL = "gemini-2.5-flash-lite"
 
 ROUTER_SYSTEM = """Pick the specialist who should handle the user's latest message.
 
-pm           — research, PRDs, user stories, docs, knowledge-base search. Default.
-designer     — UI, mockups, websites, landing pages, components, visual artifacts.
+pm           — DEFAULT for almost everything. Research, PRDs, user stories, docs,
+               knowledge-base search, Jira, document analysis, content review,
+               "what's wrong with this", "improve this doc", "analyze themes",
+               document structure feedback. When in doubt, pick pm.
+designer     — ONLY for visual/UI work: mockups, websites, landing pages,
+               UI components, dashboards, wireframes. The word "design" alone
+               does NOT mean designer — only pick designer if the request is
+               explicitly about building or reviewing a VISUAL artifact.
+               "improve this design doc" → pm. "build me a landing page" → designer.
 analyst      — CSV/Excel data analysis, metrics, churn/revenue/NPS calculations.
 calendar     — schedules, meetings, time-blocking, "do I have time", "prep me".
 opportunity  — "what should we build?", "rank opportunities", "mine themes",
@@ -100,11 +107,30 @@ def _resume_agent(canonical_msgs: list, pending_decisions: list[dict] | None) ->
     return None
 
 
-async def _route(message: str, history_tail: str) -> str:
+import re as _re
+
+_VISUAL_BUILD_KEYWORDS = {
+    "build", "create a", "design a", "make a", "mockup", "mock up",
+    "landing page", "website", "render", "component", "dashboard",
+    "wireframe", "prototype", "figma", "ui for", "page for",
+}
+
+
+async def _route(message: str, history_tail: str, has_mentions: bool = False) -> str:
     """Single cheap LLM call. Returns one of: pm | designer | analyst | calendar.
     Falls back to 'pm' on any error."""
     if not message.strip():
         return "pm"
+
+    msg_lower = message.lower()
+
+    # @mentions (from pre-loaded context OR raw @-text in message) mean the user
+    # is referencing a document — always PM unless they explicitly want a visual build.
+    has_at_mention = has_mentions or bool(_re.search(r"@\w", message))
+    if has_at_mention:
+        if not any(kw in msg_lower for kw in _VISUAL_BUILD_KEYWORDS):
+            logger.info("Router → pm (@mention present, no visual-build keywords)")
+            return "pm"
 
     try:
         llm = get_llm_provider(
@@ -204,7 +230,23 @@ async def run_orchestrated(
     # Pick the starting agent.
     current = _resume_agent(canonical_msgs, pending_decisions)
     if current is None:
-        current = await _route(last_user_text, _history_tail(messages))
+        # @mentions mean the user is referencing a specific doc/KB file.
+        # Short-circuit to PM unless the request is explicitly about building
+        # a new visual artifact ("build", "mockup", "landing page", etc.).
+        has_mentions = bool(mentions_context and mentions_context.strip()) or bool(
+            _re.search(r"@\w", last_user_text)
+        )
+        if has_mentions and not any(
+            kw in last_user_text.lower() for kw in _VISUAL_BUILD_KEYWORDS
+        ):
+            logger.info("Router → pm (has @mention, no visual-build keyword)")
+            current = "pm"
+        else:
+            current = await _route(
+                last_user_text,
+                _history_tail(messages),
+                has_mentions=has_mentions,
+            )
 
     logger.info(
         "Orchestrator start — user=%s start_agent=%s pending=%d",
@@ -233,6 +275,9 @@ async def run_orchestrated(
         # iteration unless the agent itself requests another handoff.
         handoff_payload = None
 
+        # Designer must always call a tool first — never output text before render_ui
+        force_tool_first = (current == "designer")
+
         loop_result: dict = {}
         async for chunk in run_agent_loop(
             system=system,
@@ -243,6 +288,7 @@ async def run_orchestrated(
             model=model,
             provider=provider,
             max_steps=max_steps,
+            force_tool_first=force_tool_first,
         ):
             parsed = _parse_loop_end(chunk)
             if parsed is not None:

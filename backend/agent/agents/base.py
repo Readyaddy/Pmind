@@ -19,6 +19,7 @@ run_agent_loop() is the core agentic LLM loop. It:
      This sentinel is NEVER forwarded to the HTTP client; the orchestrator
      reads it to decide whether to continue, switch agent, or terminate.
 """
+import asyncio
 import json
 import logging
 from typing import AsyncGenerator
@@ -34,6 +35,17 @@ from ..tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+_RETRY_DELAY_SECS = 2.0
+
+def _is_retryable_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "503" in msg or "unavailable" in msg or
+        "429" in msg or "resource_exhausted" in msg or
+        "quota" in msg or "high demand" in msg or
+        "rate limit" in msg
+    )
 
 
 # ── SSE helpers ───────────────────────────────────────────────────────────────
@@ -148,6 +160,7 @@ async def run_agent_loop(
     model: str | None = None,
     provider: str | None = None,
     max_steps: int = 8,
+    force_tool_first: bool = False,
 ) -> AsyncGenerator[str, None]:
     """
     Core agentic LLM loop.
@@ -227,12 +240,45 @@ async def run_agent_loop(
         stop_reason = "end_turn"
         error_msg: str | None = None
 
+        last_role = canonical_msgs[-1]["role"] if canonical_msgs else None
+
+        # Determine the name of the last tool that returned a result.
+        # Used to decide whether to force a follow-up tool call.
+        last_tool_name: str | None = None
+        if last_role == "tool":
+            for b in (canonical_msgs[-1].get("content") or []):
+                if b.get("type") == "tool_result":
+                    last_tool_name = b.get("name") or ""
+                    break
+
+        # Tools that produce a final artifact — no forced follow-up needed.
+        # After render_ui / create_doc the agent should just output text and finish.
+        _TERMINAL_TOOLS = {
+            "render_ui", "create_doc", "edit_doc",
+            "save_opportunity", "promote_to_feature",
+            "create_jira_issue", "create_jira_sprint",
+            "design_brief",  # waits for user input, don't force another call
+        }
+
+        # Force a tool call when:
+        # A) force_tool_first=True AND step 0 (Designer must always act first)
+        # B) Last message was a tool result from a READ-type operation — forces the
+        #    agent to act on the data rather than just outputting text and stopping.
+        #    This specifically fixes PM stopping after read() without calling handoff.
+        _READ_TOOLS = {"read", "search_workspace", "list_docs"}
+
+        is_first_step   = step == 0 and bool(tools) and last_role != "tool"
+        just_got_read   = (last_role == "tool" and bool(tools)
+                           and last_tool_name in _READ_TOOLS)
+
+        tool_choice = "any" if (force_tool_first and is_first_step) or just_got_read else None
+
         llm_gen = llm.stream_with_tools(
             system=system,
             messages=canonical_msgs,
             tools=tools,
             model=model,
-            tool_choice=None,
+            tool_choice=tool_choice,
         )
 
         try:
@@ -272,6 +318,19 @@ async def run_agent_loop(
                     error_msg = ev.get("error")
                     break
         except Exception as e:
+            if _is_retryable_error(e):
+                logger.warning(
+                    "Retryable error at step %d (user=%s) — waiting %.1fs then retrying: %s",
+                    step + 1, ctx.get("user_id"), _RETRY_DELAY_SECS, e,
+                )
+                await asyncio.sleep(_RETRY_DELAY_SECS)
+                # Reset this step's state and retry by continuing the for loop
+                current_text_parts = []
+                turn_calls = []
+                stop_reason = "end_turn"
+                error_msg = None
+                continue
+
             logger.error(
                 "Agent error at step %d — user=%s: %s",
                 step + 1, ctx.get("user_id"), e, exc_info=True,
@@ -298,7 +357,18 @@ async def run_agent_loop(
             canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
 
         if stop_reason == "error":
-            yield _sse("error", {"message": error_msg or "Provider error"})
+            err = error_msg or "Provider error"
+            # Retry once on transient provider errors before surfacing to the user
+            if _is_retryable_error(Exception(err)):
+                logger.warning("Provider error at step %d — retrying in %.1fs: %s",
+                               step + 1, _RETRY_DELAY_SECS, err)
+                await asyncio.sleep(_RETRY_DELAY_SECS)
+                current_text_parts = []
+                turn_calls = []
+                stop_reason = "end_turn"
+                error_msg = None
+                continue
+            yield _sse("error", {"message": err})
             yield _loop_end("".join(final_text_parts), errored=True)
             return
 

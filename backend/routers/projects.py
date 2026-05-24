@@ -110,6 +110,24 @@ async def list_project_documents(project_id: str, user_id: str = Depends(get_use
     return result.data
 
 
+def _unique_title(supabase, user_id: str, project_id: str, base_title: str) -> str:
+    """Return base_title if unused, otherwise base_title_1, base_title_2, …"""
+    existing = (
+        supabase.table("documents")
+        .select("title")
+        .eq("project_id", project_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    titles = {r["title"] for r in (existing.data or [])}
+    if base_title not in titles:
+        return base_title
+    i = 1
+    while f"{base_title}_{i}" in titles:
+        i += 1
+    return f"{base_title}_{i}"
+
+
 @router.post("/{project_id}/documents/")
 async def create_project_document(
     project_id: str,
@@ -117,13 +135,14 @@ async def create_project_document(
     user_id: str = Depends(get_user_id),
 ):
     supabase = get_supabase()
+    title = _unique_title(supabase, user_id, project_id, "Untitled")
     result = (
         supabase.table("documents")
         .insert({
             "user_id": user_id,
             "project_id": project_id,
             "folder_id": body.folder_id,
-            "title": "Untitled",
+            "title": title,
             "content": {},
         })
         .execute()
