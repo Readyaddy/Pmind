@@ -843,6 +843,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 REQUIRES_PERMISSION: set[str] = {
     "create_doc", "edit_doc", "create_folder",
     "save_opportunity", "promote_to_feature",
+    "create_jira_issue", "create_jira_sprint",
 }
 
 # Tools that halt the agent loop after running so the user can interact with a

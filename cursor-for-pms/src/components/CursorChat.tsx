@@ -35,6 +35,7 @@ import DesignBriefCard, { type DesignBriefArgs } from "./agent/DesignBriefCard";
 const PERMISSION_TOOLS = new Set([
   "create_doc", "edit_doc", "create_folder",
   "save_opportunity", "promote_to_feature",
+  "create_jira_issue", "create_jira_sprint",
 ]);
 const TREE_REFRESH_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
 

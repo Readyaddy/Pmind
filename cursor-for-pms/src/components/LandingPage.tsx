@@ -1,17 +1,181 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+
+const sandboxData = {
+  fintech: {
+    title: "Fintech Ledger (B2B SaaS)",
+    brain: {
+      target: "Enterprise CFOs & Procurement leads",
+      constraints: "SOC2 Type II compliance. Zero external analytics libraries.",
+      northStar: "Bank verification onboarding time < 2 hours (was 5 days)."
+    },
+    spec: {
+      chatgpt: `Section: Checkout Feature
+
+1. Introduction
+This document defines requirements for the checkout page. We will build a safe and secure way for users to pay.
+
+2. Goals
+• Ensure payment fields work properly.
+• Follow standard templates and payment guides.
+• Make onboarding as fast as possible.`,
+      pmind: (
+        <>
+          <strong>PRD Section: Ledger Sync Gateway</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[B2B High-Compliance FinTech]</span><br /><br />
+          <strong>1. Feature Objective</strong><br />
+          Deliver bank ledger synchronization while respecting strictly audited <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">SOC2 Type II boundaries</span>. The system must process requests under zero external analytics tracking constraints to ensure absolute data privacy.<br /><br />
+          <strong>2. Functional Requirements</strong><br />
+          • Bank Verification: Automate credential caching using our isolated microservice, targeting a <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">verification time under 2 hours</span>.<br />
+          • System Failure Protocol: In case of bank API outages, throw fallback ledger files, bypassing any third-party public analytics endpoints.
+        </>
+      )
+    },
+    stories: {
+      chatgpt: `EPIC: Payment Systems
+
+STORY-001: Pay Invoice
+As a user, I want to pay my invoices online so I don't have to send checks.
+AC:
+1. Pay button must be visible.
+2. User can type credit card numbers.`,
+      pmind: (
+        <>
+          <strong>EPIC: Compliant Ledger Sync</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[B2B High-Compliance FinTech]</span><br /><br />
+          <strong>STORY-001 · Isolated Caching [5 pts]</strong><br />
+          As an Enterprise CFO, I want bank ledger syncing to happen inside secure network boundaries so that bank data complies with <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">SOC2 Type II</span> policies.<br />
+          AC: Caching utilizes isolated bank microservices; no third-party APIs called.<br /><br />
+          <strong>STORY-002 · Onboarding Speed [3 pts]</strong><br />
+          As a Procurement Lead, I want a bank onboarding assistant so I can finish verification in <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">under 2 hours</span>.<br />
+          AC: Instant validation rules trigger upon account submission.
+        </>
+      )
+    }
+  },
+  travel: {
+    title: "TravelFlow (B2C Mobile)",
+    brain: {
+      target: "Mobile-first leisure travelers, time-sensitive",
+      constraints: "Fast layout rendering on weak 3G networks. Priority Apple Pay integration.",
+      northStar: "Mobile checkout completion rate > 85% (was 54%)."
+    },
+    spec: {
+      chatgpt: `Section: Checkout Feature
+
+1. Introduction
+This document defines requirements for the checkout page. We will build a safe and secure way for users to pay.
+
+2. Goals
+• Ensure payment fields work properly.
+• Follow standard templates and payment guides.
+• Make onboarding as fast as possible.`,
+      pmind: (
+        <>
+          <strong>PRD Section: Mobile Booking Checkout</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[B2C Mobile Travel]</span><br /><br />
+          <strong>1. Feature Objective</strong><br />
+          Streamline mobile flight booking to increase checkout completion rates past the <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">85% target</span>. Design layouts to support instant payment on low-bandwidth <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">weak 3G networks</span>.<br /><br />
+          <strong>2. Functional Requirements</strong><br />
+          • Wallet Integration: <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">Apple Pay integration takes priority</span> above standard card inputs, occupying above-the-fold screen space.<br />
+          • Asset Optimization: Bundle and render layout files under 80KB to maintain operational speeds in remote travel environments with poor signal.
+        </>
+      )
+    },
+    stories: {
+      chatgpt: `EPIC: Payment Systems
+
+STORY-001: Pay Invoice
+As a user, I want to pay my invoices online so I don't have to send checks.
+AC:
+1. Pay button must be visible.
+2. User can type credit card numbers.`,
+      pmind: (
+        <>
+          <strong>EPIC: Instant Booking Redesign</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[B2C Mobile Travel]</span><br /><br />
+          <strong>STORY-001 · Apple Pay above-the-fold [3 pts]</strong><br />
+          As a mobile traveler, I want a one-click <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">Apple Pay</span> checkout option so I can secure bookings without typing details on weak wifi.<br />
+          AC: Apple Pay is auto-detected and positioned above standard inputs.<br /><br />
+          <strong>STORY-002 · Offline Queue Loader [5 pts]</strong><br />
+          As a traveler on <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">weak 3G networks</span>, I want checkout confirmations to queue offline so that checkout conversions exceed our <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">85% benchmark</span>.<br />
+          AC: Data payloads compressed below 15KB per request.
+        </>
+      )
+    }
+  },
+  devtool: {
+    title: "DevPulse API (Dev Platform)",
+    brain: {
+      target: "Full-stack backend developers, CLI-first",
+      constraints: "API-only endpoints, YAML configurations, <50ms response latency.",
+      northStar: "Time-to-first-API-call < 5 minutes."
+    },
+    spec: {
+      chatgpt: `Section: Checkout Feature
+
+1. Introduction
+This document defines requirements for the checkout page. We will build a safe and secure way for users to pay.
+
+2. Goals
+• Ensure payment fields work properly.
+• Follow standard templates and payment guides.
+• Make onboarding as fast as possible.`,
+      pmind: (
+        <>
+          <strong>PRD Section: CLI API-Key Dispatch</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[Developer Tool Platform]</span><br /><br />
+          <strong>1. Feature Objective</strong><br />
+          Deliver a zero-config API key dispatch pipeline targeting a <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">time-to-first-API-call under 5 minutes</span>. Every credential must render natively via CLI terminals.<br /><br />
+          <strong>2. Functional Requirements</strong><br />
+          • Configuration Format: Supply and validate key variables strictly via <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">YAML configuration files</span>.<br />
+          • Latency Boundary: Maintain API gateway dispatch times within a <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">&lt;50ms response latency</span> window under high load thresholds.
+        </>
+      )
+    },
+    stories: {
+      chatgpt: `EPIC: Payment Systems
+
+STORY-001: Pay Invoice
+As a user, I want to pay my invoices online so I don't have to send checks.
+AC:
+1. Pay button must be visible.
+2. User can type credit card numbers.`,
+      pmind: (
+        <>
+          <strong>EPIC: Dev Onboarding Redesign</strong><br />
+          Grounding Profile: <span className="text-[#F59E0B] font-medium">[Developer Tool Platform]</span><br /><br />
+          <strong>STORY-001 · YAML key generation [3 pts]</strong><br />
+          As a developer, I want my initial credentials formatted inside a standard <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">YAML file</span> so I can start making calls in <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">under 5 minutes</span>.<br />
+          AC: &apos;pmind init&apos; outputs clean, copy-pasteable YAML keys.<br /><br />
+          <strong>STORY-002 · Low-Latency Gateway [8 pts]</strong><br />
+          As a developer, I want key validation requests returned in <span className="bg-amber-600/10 text-[#F59E0B] px-1.5 py-0.5 rounded font-medium">under 50ms</span> to prevent pipeline bottlenecks.<br />
+          AC: Validation endpoint uses edge caching, maintaining p95 latency at &lt; 35ms.
+        </>
+      )
+    }
+  }
+};
 
 export default function LandingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Interactive Sandbox state
+  const [profile, setProfile] = useState<"fintech" | "travel" | "devtool">("fintech");
+  const [task, setTask] = useState<"spec" | "stories">("spec");
+
+  // Calculator state
+  const [specsHours, setSpecsHours] = useState(6);
+  const [researchHours, setResearchHours] = useState(8);
+  const [ticketsHours, setTicketsHours] = useState(5);
 
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    // ctx is non-null from here; capture for closures
     const gctx = ctx;
     let W = 0, H = 0, t = 0, raf = 0;
 
@@ -23,11 +187,11 @@ export default function LandingPage() {
     window.addEventListener("resize", resize);
 
     const orbs = [
-      { nx:0.14, ny:0.18, r:380, a:0.13, sp:0.19, ph:0.0 },
-      { nx:0.82, ny:0.42, r:320, a:0.09, sp:0.14, ph:2.1 },
-      { nx:0.50, ny:0.78, r:420, a:0.07, sp:0.11, ph:4.2 },
-      { nx:0.92, ny:0.12, r:260, a:0.10, sp:0.22, ph:1.1 },
-      { nx:0.28, ny:0.62, r:300, a:0.06, sp:0.16, ph:3.4 },
+      { nx:0.14, ny:0.18, r:380, a:0.11, sp:0.19, ph:0.0 },
+      { nx:0.82, ny:0.42, r:320, a:0.08, sp:0.14, ph:2.1 },
+      { nx:0.50, ny:0.78, r:420, a:0.06, sp:0.11, ph:4.2 },
+      { nx:0.92, ny:0.12, r:260, a:0.09, sp:0.22, ph:1.1 },
+      { nx:0.28, ny:0.62, r:300, a:0.05, sp:0.16, ph:3.4 },
     ];
     function drawOrbs() {
       orbs.forEach(o => {
@@ -69,12 +233,12 @@ export default function LandingPage() {
       });
     }
 
-    gctx.fillStyle = "#080808";
+    gctx.fillStyle = "#050505";
     gctx.fillRect(0, 0, innerWidth, innerHeight);
 
     function frame() {
       t += 0.007;
-      gctx.fillStyle = "rgba(8,8,8,0.20)";
+      gctx.fillStyle = "rgba(5,5,5,0.20)";
       gctx.fillRect(0, 0, W, H);
       drawOrbs(); drawParticles();
       raf = requestAnimationFrame(frame);
@@ -100,21 +264,30 @@ export default function LandingPage() {
     amber: "#D97706" as const,
     amberHi: "#F59E0B" as const,
     text: "#F5F2EE" as const,
-    text2: "rgba(245,242,238,0.52)" as const,
-    text3: "rgba(245,242,238,0.28)" as const,
+    text2: "rgba(245,242,238,0.65)" as const,
+    text3: "rgba(245,242,238,0.35)" as const,
     serif: "var(--font-playfair),Georgia,serif" as const,
     mono: "'JetBrains Mono',monospace" as const,
-    glassBorder: "1px solid rgba(255,255,255,0.065)" as const,
-    amberBorder: "1px solid rgba(217,119,6,0.20)" as const,
+    glassBorder: "1px solid rgba(255,255,255,0.06)" as const,
+    amberBorder: "1px solid rgba(217,119,6,0.15)" as const,
   };
 
   const divider = (
     <div style={{ height:1, position:"relative", zIndex:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.06) 28%,rgba(255,255,255,0.06) 72%,transparent)" }} />
   );
 
+  // Time-savings calculations
+  const hoursSaved = (specsHours * 0.65) + (researchHours * 0.75) + (ticketsHours * 0.8);
+  const roundedHours = hoursSaved.toFixed(1);
+  const monthlyDays = ((hoursSaved * 4.33) / 8).toFixed(0);
+  const daysWord = monthlyDays === "1" ? "1 full working day" : `${monthlyDays} full working days`;
+  const yearlyVal = Math.round(hoursSaved * 52 * 80);
+  const formattedVal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(yearlyVal);
+  const progressPercent = Math.min(100, Math.max(10, (hoursSaved / ((25 * 0.65) + (25 * 0.75) + (25 * 0.8))) * 100));
+
   return (
-    <div style={{ fontFamily:"var(--font-inter),-apple-system,sans-serif", background:"#080808", color:S.text, lineHeight:1.6, overflowX:"hidden", WebkitFontSmoothing:"antialiased" }}>
-      {/* Background */}
+    <div style={{ fontFamily:"var(--font-inter),-apple-system,sans-serif", background:"#050505", color:S.text, lineHeight:1.6, overflowX:"hidden", WebkitFontSmoothing:"antialiased" }}>
+      {/* Background elements */}
       <canvas ref={canvasRef} style={{ position:"fixed", inset:0, zIndex:0, pointerEvents:"none", opacity:0.72 }} />
       <div className="lp-bg-grain" />
       <div className="lp-bg-grid" />
@@ -126,44 +299,55 @@ export default function LandingPage() {
       </div>
 
       {/* Nav */}
-      <nav style={{ position:"fixed", top:0, left:0, right:0, zIndex:600, height:58, background:"rgba(8,8,8,0.72)", backdropFilter:"blur(28px) saturate(1.5)", WebkitBackdropFilter:"blur(28px) saturate(1.5)", borderBottom:"1px solid rgba(255,255,255,0.046)" }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px", height:"100%", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <nav style={{ position:"fixed", top:0, left:0, right:0, zIndex:600, height:64, background:"rgba(5,5,5,0.78)", backdropFilter:"blur(28px) saturate(1.5)", WebkitBackdropFilter:"blur(28px) saturate(1.5)", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ maxWidth:1120, margin:"0 auto", padding:"0 28px", height:"100%", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:26, height:26, background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:S.serif, fontSize:13, fontWeight:700, color:"rgba(255,255,255,0.92)", boxShadow:"0 4px 14px rgba(217,119,6,0.32)" }}>P</div>
-            <span style={{ fontFamily:S.serif, fontWeight:700, fontSize:16, color:S.text, letterSpacing:"-0.02em" }}>PMind</span>
+            <div style={{ width:28, height:28, background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:S.serif, fontSize:14, fontWeight:700, color:"rgba(255,255,255,0.95)", boxShadow:"0 4px 14px rgba(217,119,6,0.25)" }}>P</div>
+            <span style={{ fontFamily:S.serif, fontWeight:700, fontSize:18, color:S.text, letterSpacing:"-0.02em" }}>PMind</span>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:20 }}>
-            <Link href="/blog" style={{ fontSize:13, color:"rgba(245,242,238,0.45)", textDecoration:"none" }}>Blog</Link>
-            <Link href="/billing" style={{ fontSize:13, color:"rgba(245,242,238,0.45)", textDecoration:"none" }}>Pricing</Link>
-            <Link href="/sign-in" style={{ padding:"7px 18px", background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:7, color:S.amberHi, fontSize:13, fontWeight:600, textDecoration:"none" }}>
-              Get Started →
+          <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+            <a href="#playground" className="nav-link">Product Brain</a>
+            <a href="#workflow" className="nav-link">Discovery Engine</a>
+            <a href="#calculator" className="nav-link">Savings Calculator</a>
+            <Link href="/sign-in" style={{ padding:"7px 18px", background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:6, color:S.amberHi, fontSize:13, fontWeight:600, textDecoration:"none", transition:"background 0.15s" }}>
+              Get Started free →
             </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
-      <section style={{ paddingTop:128, paddingBottom:56, textAlign:"center", position:"relative", zIndex:1 }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-          <div style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"5px 14px", marginBottom:44, background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:100, fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:S.amberHi }}>
+      <section style={{ paddingTop:140, paddingBottom:48, textAlign:"center", position:"relative", zIndex:1 }}>
+        <div style={{ maxWidth:1120, margin:"0 auto", padding:"0 28px" }}>
+          <div style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"5px 14px", marginBottom:32, background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:100, fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:S.amberHi }}>
             <span className="lp-badge-pulse" />&nbsp;Private Beta — Limited Access
           </div>
-          <h1 style={{ fontFamily:S.serif, fontSize:"clamp(46px,6.8vw,82px)", fontWeight:700, lineHeight:1.04, letterSpacing:"-0.034em", color:S.text, marginBottom:26, maxWidth:840, marginLeft:"auto", marginRight:"auto" }}>
-            The workspace that<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>thinks in product.</em>
+          <h1 style={{ fontFamily:S.serif, fontSize:"clamp(44px,6.5vw,78px)", fontWeight:700, lineHeight:1.06, letterSpacing:"-0.03em", color:S.text, marginBottom:24, maxWidth:920, marginLeft:"auto", marginRight:"auto" }}>
+            The first AI workspace that<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>thinks in product.</em>
           </h1>
-          <p style={{ fontSize:18, color:S.text2, maxWidth:480, margin:"0 auto 44px", lineHeight:1.68 }}>
-            AI grounded in your strategy, your users, and your constraints — not just your last message.
+          <p style={{ fontSize:19, color:S.text2, maxWidth:620, margin:"0 auto 40px", lineHeight:1.65, fontWeight:400 }}>
+            Stop re-explaining your constraints to AI that forgets by morning. PMind grounds every spec, user story, and ticket in your actual strategy.
           </p>
-          <Link href="/sign-in" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"14px 30px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:9, color:"#fff", fontSize:15, fontWeight:600, textDecoration:"none", boxShadow:"0 6px 28px rgba(217,119,6,0.3)" }}>
-            Get started free →
-          </Link>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, flexWrap:"wrap" }}>
+            <Link href="/sign-in" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"13px 28px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, color:"#fff", fontSize:14, fontWeight:600, textDecoration:"none", boxShadow:"0 4px 20px rgba(217,119,6,0.25)" }}>
+              Get started free →
+            </Link>
+            <a href="#playground" className="btn-secondary" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"13px 28px", borderRadius:6, color:S.text, fontSize:14, fontWeight:600, textDecoration:"none" }}>
+              Try Interactive Playground
+            </a>
+          </div>
+          <div style={{ marginTop:56, fontFamily:S.mono, fontSize:11, color:S.amberHi, letterSpacing:"0.05em", textTransform:"uppercase", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            <span style={{ width:32, height:1, background:"rgba(217,119,6,0.3)" }} />
+            Save 15+ Hours Per Week On Specs, Tickets & Discovery
+            <span style={{ width:32, height:1, background:"rgba(217,119,6,0.3)" }} />
+          </div>
         </div>
       </section>
 
       {/* App Mockup */}
       <section style={{ padding:"0 0 96px", position:"relative", zIndex:1 }}>
         <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:36 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:32 }}>
             <span style={{ flex:"0 0 52px", height:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.08))" }} />
             <span style={{ fontFamily:S.mono, fontSize:10, letterSpacing:"0.16em", textTransform:"uppercase", color:S.text3 }}>See PMind in action</span>
             <span style={{ flex:"0 0 52px", height:1, background:"linear-gradient(90deg,rgba(255,255,255,0.08),transparent)" }} />
@@ -171,7 +355,7 @@ export default function LandingPage() {
 
           <div className="lp-reveal" style={{ position:"relative" }}>
             <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:"70%", height:280, pointerEvents:"none", zIndex:0, background:"radial-gradient(ellipse,rgba(217,119,6,0.09) 0%,transparent 65%)" }} />
-            <div style={{ borderRadius:12, overflow:"hidden", boxShadow:"0 32px 80px rgba(0,0,0,0.7),0 0 0 1px rgba(217,119,6,0.12)", position:"relative", zIndex:1 }}>
+            <div style={{ borderRadius:8, overflow:"hidden", boxShadow:"0 32px 80px rgba(0,0,0,0.7),0 0 0 1px rgba(217,119,6,0.12)", position:"relative", zIndex:1 }}>
               {/* Titlebar */}
               <div style={{ background:"#0e0e0e", borderBottom:"1px solid rgba(217,119,6,0.08)", padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ display:"flex", gap:6 }}>
@@ -207,7 +391,7 @@ export default function LandingPage() {
                   </div>
                   <div style={{ padding:"8px 10px", borderTop:"1px solid rgba(217,119,6,0.07)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <span style={{ fontSize:9, color:S.text3, padding:"2px 6px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:4, letterSpacing:"0.05em", textTransform:"uppercase" }}>Free</span>
-                    <span style={{ fontSize:11, color:S.text3 }}>☀</span>
+                    <span style={{ fontSize:11, color:S.text3 }}>◑</span>
                   </div>
                 </div>
 
@@ -227,7 +411,7 @@ export default function LandingPage() {
                     </div>
                     {/* ⌘K Modal */}
                     <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)", backdropFilter:"blur(2px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:32 }}>
-                      <div className="lp-cmd-modal" style={{ width:420, maxWidth:"92%", background:"rgba(20,17,12,0.98)", border:"1px solid rgba(217,119,6,0.28)", borderTopColor:"rgba(217,119,6,0.4)", borderRadius:12, boxShadow:"0 32px 72px rgba(0,0,0,0.8),0 0 0 1px rgba(217,119,6,0.08),0 0 40px rgba(217,119,6,0.08)", overflow:"hidden" }}>
+                      <div className="lp-cmd-modal" style={{ width:420, maxWidth:"92%", background:"rgba(20,17,12,0.98)", border:"1px solid rgba(217,119,6,0.28)", borderTopColor:"rgba(217,119,6,0.4)", borderRadius:8, boxShadow:"0 32px 72px rgba(0,0,0,0.8),0 0 0 1px rgba(217,119,6,0.08),0 0 40px rgba(217,119,6,0.08)", overflow:"hidden" }}>
                         <div style={{ padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,0.05)", display:"flex", alignItems:"center", gap:8 }}>
                           <div style={{ width:22, height:22, borderRadius:6, background:"rgba(217,119,6,0.15)", border:"1px solid rgba(217,119,6,0.3)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:S.amberHi }}>⌘</div>
                           <span style={{ fontSize:11, fontWeight:700, color:S.amberHi, letterSpacing:"0.08em", textTransform:"uppercase" }}>AI Commands</span>
@@ -281,88 +465,236 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {divider}
-
       {/* Statement */}
       <section style={{ padding:"72px 0", textAlign:"center", position:"relative", zIndex:1 }}>
         <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-          <blockquote className="lp-reveal" style={{ fontFamily:S.serif, fontSize:"clamp(20px,3.2vw,32px)", fontStyle:"italic", color:S.text2, lineHeight:1.55, maxWidth:660, margin:"0 auto", letterSpacing:"-0.018em" }}>
+          <blockquote className="lp-reveal" style={{ fontFamily:S.serif, fontSize:"clamp(20px,3.2vw,32px)", fontStyle:"italic", color:S.text2, lineHeight:1.55, maxWidth:780, margin:"0 auto", letterSpacing:"-0.018em" }}>
             ChatGPT gives you a template.<br />
             PMind gives you output that<br />
-            <strong style={{ fontStyle:"normal", fontWeight:700, color:S.text }}>knows you ship B2B SaaS to enterprise fintech teams.</strong>
+            <strong style={{ fontStyle:"normal", fontWeight:700, color:S.text }}>knows you ship SOC2-compliant B2B SaaS to enterprise procurement teams.</strong>
           </blockquote>
         </div>
       </section>
 
       {divider}
 
-      {/* Feature 1 — ⌘K */}
-      <section style={{ padding:"88px 0", position:"relative", zIndex:1 }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-          <div className="lp-feat-grid lp-reveal">
-            <div>
-              <div style={{ fontFamily:S.mono, fontSize:10, color:S.amber, opacity:.55, letterSpacing:".1em", marginBottom:18 }}>01 / ⌘K</div>
-              <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.4vw,38px)", fontWeight:700, lineHeight:1.16, letterSpacing:"-0.026em", color:S.text, marginBottom:18 }}>
-                Press ⌘K.<br />Get output that<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>knows your product.</em>
-              </h2>
-              <p style={{ fontSize:15, color:S.text2, lineHeight:1.72, maxWidth:400 }}>Not a chat window. Not a template. Press ⌘K anywhere inside a document and choose what to generate — PRD, ticket breakdown, stakeholder update, research synthesis. The AI reads your current document and your Product Brain before writing a single word.</p>
-              <div style={{ marginTop:22, padding:"12px 16px", background:"rgba(217,119,6,0.10)", borderLeft:"2px solid #D97706", borderRadius:"0 6px 6px 0", fontFamily:S.mono, fontSize:12, color:S.amberHi }}>→ Every command is grounded in your Product Brain, not a blank slate</div>
+      {/* Interactive Grounding Sandbox (NEW) */}
+      <section id="playground" className="playground" style={{ position: "relative", zIndex: 1, background: "#090909", borderTop: "1px solid rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
+        {/* Ambient background aura */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, background: "radial-gradient(circle at 50% 50%, rgba(217, 119, 6, 0.05) 0%, transparent 68%)" }} />
+        
+        <div className="container" style={{ position: "relative", zIndex: 1 }}>
+          <div className="play-header lp-reveal" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 14px", marginBottom: 20, background: "rgba(217,119,6,0.08)", border: S.amberBorder, borderRadius: 100, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: S.amberHi }}>
+              <span className="lp-badge-pulse" />&nbsp;Live Grounding Demo
             </div>
-            <div>
-              <div style={{ borderRadius:13, overflow:"hidden", background:"rgba(255,255,255,0.028)", backdropFilter:"blur(20px)", border:S.glassBorder, borderTopColor:"rgba(255,255,255,0.11)", boxShadow:"0 24px 60px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.04)" }}>
-                <div style={{ padding:"12px 16px", borderBottom:"1px solid rgba(255,255,255,0.04)", fontFamily:S.mono, fontSize:9, color:S.amber, letterSpacing:".1em", textTransform:"uppercase", display:"flex", alignItems:"center", gap:8, background:"rgba(14,12,8,0.8)" }}>
-                  ⌘K Commands<div style={{ flex:1, height:1, background:"rgba(217,119,6,0.12)" }} />
-                </div>
-                <div style={{ padding:10, background:"rgba(12,10,7,0.88)" }}>
-                  {["Write PRD","Break into tickets","Product brief","Stakeholder update","Synthesize research"].map((name, i) => (
-                    <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 12px", borderRadius:7, marginBottom:4, background:i===0?"rgba(217,119,6,0.08)":"rgba(255,255,255,0.018)", border:`1px solid ${i===0?"rgba(217,119,6,0.2)":"rgba(255,255,255,0.042)"}` }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-                        <div style={{ width:5, height:5, borderRadius:"50%", background:i===0?S.amber:S.text3 }} />
-                        <span style={{ fontSize:13, color:i===0?S.amberHi:S.text2, fontWeight:i===0?500:400 }}>{name}</span>
-                      </div>
-                      {i===0 && <span style={{ fontFamily:S.mono, fontSize:9, color:S.text3, padding:"2px 6px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:4 }}>↵</span>}
-                    </div>
-                  ))}
+            <h2 style={{ fontFamily: S.serif, fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 700, marginBottom: 16 }}>
+              Ground your AI in <em style={{ fontStyle: "italic", fontWeight: 400, color: S.amberHi }}>Strategy, not prompts</em>
+            </h2>
+            <p style={{ fontSize: 16, color: S.text2, maxWidth: 580, margin: "0 auto" }}>
+              Toggle below to see how a single background constraint dynamically transforms AI outputs from fluffy templates into precise specifications.
+            </p>
+          </div>
+
+          <div className="play-grid lp-reveal" style={{ marginTop: 48 }}>
+            {/* Left Panel: Profile Selection */}
+            <div className="sandbox-selector glass">
+              <div className="profile-group">
+                <span className="sb-section-title">1. Select Product Profile</span>
+                <button 
+                  className={`profile-btn ${profile === "fintech" ? "active" : ""}`} 
+                  onClick={() => setProfile("fintech")}
+                >
+                  Fintech Ledger (B2B SaaS)
+                </button>
+                <button 
+                  className={`profile-btn ${profile === "travel" ? "active" : ""}`} 
+                  onClick={() => setProfile("travel")}
+                >
+                  TravelFlow (B2C Mobile)
+                </button>
+                <button 
+                  className={`profile-btn ${profile === "devtool" ? "active" : ""}`} 
+                  onClick={() => setProfile("devtool")}
+                >
+                  DevPulse API (Dev Platform)
+                </button>
+              </div>
+
+              <div className="profile-group">
+                <span className="sb-section-title">Active Product Brain</span>
+                <div className="profile-meta-card">
+                  <div className="profile-meta-title">Audience</div>
+                  <div style={{ marginBottom: 8 }}>{sandboxData[profile].brain.target}</div>
+                  <div className="profile-meta-title">Constraints</div>
+                  <div style={{ marginBottom: 8 }}>{sandboxData[profile].brain.constraints}</div>
+                  <div className="profile-meta-title">North Star Metric</div>
+                  <div>{sandboxData[profile].brain.northStar}</div>
                 </div>
               </div>
             </div>
+
+            {/* Right Panel: Code Sandbox Output */}
+            <div className="sandbox-screen glass">
+              <div className="sandbox-tabs">
+                <div className="sb-tab-group">
+                  <button 
+                    className={`sb-tab ${task === "spec" ? "active" : ""}`} 
+                    onClick={() => setTask("spec")}
+                  >
+                    Draft Specification
+                  </button>
+                  <button 
+                    className={`sb-tab ${task === "stories" ? "active" : ""}`} 
+                    onClick={() => setTask("stories")}
+                  >
+                    Write User Stories
+                  </button>
+                </div>
+                <div className="sb-run-indicator">
+                  <span className="sb-run-dot" />Grounding Sandbox
+                </div>
+              </div>
+
+              <div className="sandbox-body">
+                {/* Column 1: Generic ChatGPT */}
+                <div className="sb-column" style={{ borderRight: "1px solid rgba(255,255,255,0.04)", opacity: 0.45, transition: "opacity 0.25s ease" }}>
+                  <div className="sb-col-header sb-chatgpt-header">Generic ChatGPT (Un-grounded)</div>
+                  <div className="sb-code sb-code-chatgpt">
+                    {sandboxData[profile][task].chatgpt}
+                  </div>
+                </div>
+
+                {/* Column 2: PMind grounded */}
+                <div className="sb-column" style={{ background: "rgba(217, 119, 6, 0.015)", transition: "all 0.25s ease" }}>
+                  <div className="sb-col-header sb-pmind-header">PMind Context-Grounded AI</div>
+                  <div className="sb-code sb-code-pmind">
+                    {sandboxData[profile][task].pmind}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* Continuous discovery flow (NEW) */}
+      <section id="workflow" className="flow-sec" style={{ position: "relative", zIndex: 1 }}>
+        <div className="container">
+          <div className="play-header lp-reveal">
+            <h2 style={{ fontFamily: S.serif, fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 700, marginBottom: 16 }}>
+              Continuous discovery, <em style={{ fontStyle: "italic", fontWeight: 400, color: S.amberHi }}>fully automated</em>
+            </h2>
+            <p style={{ fontSize: 16, color: S.text2, maxWidth: 580, margin: "0 auto" }}>
+              From chaotic user feedback to a structured development backlog. PMind handles the heavy lifting so you focus on product decisions.
+            </p>
+          </div>
+
+          <div className="flow-grid" style={{ display: "grid", gap: 24, marginTop: 48 }}>
+            {[
+              {
+                num: "01",
+                title: "Ingest Feedback",
+                desc: "Drop user interview transcripts, Zendesk tickets, or NPS comments. Tab-aware chunking keeps speaker turns and spreadsheet rows completely whole.",
+                meta: "Supports PDF, DOCX, CSV"
+              },
+              {
+                num: "02",
+                title: "Automated Insights",
+                desc: "Our background analysis agents automatically harvest verbatim pain-point quotes, tag target personas, and sort findings into theme folders.",
+                meta: "Assigns Severity 1–5"
+              },
+              {
+                num: "03",
+                title: "RICE Prioritization",
+                desc: "The Opportunity specialist clusters insights across themes, scoring and ranking opportunities grounded directly in real customer quotes.",
+                meta: "Computes RICE Scores"
+              },
+              {
+                num: "04",
+                title: "Tracker Sync",
+                desc: "Select committed opportunities, break them into Epics/Stories with acceptance criteria, and export them natively to tracking boards.",
+                meta: "Syncs with Jira & Linear"
+              }
+            ].map((step, idx) => (
+              <div key={idx} className="flow-card lp-reveal">
+                <div className="flow-step-num">{step.num}</div>
+                <h3 style={{ fontFamily: S.serif, fontSize: 16, fontWeight: 700, marginTop: 8, marginBottom: 12 }}>{step.title}</h3>
+                <p style={{ fontSize: 12.5, color: S.text2, lineHeight: 1.6 }}>{step.desc}</p>
+                <div className="flow-meta">
+                  {step.meta.split(" ").map((w, i) => w === "PDF," || w === "DOCX," || w === "CSV" || w === "Severity" || w === "1–5" || w === "RICE" || w === "Scores" || w === "Jira" || w === "&" || w === "Linear" ? <strong key={i} style={{ color: S.amber }}>{w} </strong> : w + " ")}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {divider}
 
-      {/* Feature 2 — Product Brain */}
-      <section style={{ padding:"88px 0", position:"relative", zIndex:1 }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-          <div className="lp-feat-grid-rev lp-reveal">
-            <div>
-              <div style={{ fontFamily:S.mono, fontSize:10, color:S.amber, opacity:.55, letterSpacing:".1em", marginBottom:18 }}>02 / Product Brain</div>
-              <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.4vw,38px)", fontWeight:700, lineHeight:1.16, letterSpacing:"-0.026em", color:S.text, marginBottom:18 }}>
-                Tell it once.<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>It never forgets.</em>
-              </h2>
-              <p style={{ fontSize:15, color:S.text2, lineHeight:1.72, maxWidth:400 }}>Paste your product strategy, target users, tech constraints, and success metrics into the Product Brain sidebar. Every AI output — across every document, command, and chat — is automatically grounded in it. No more re-explaining your product to every new conversation.</p>
-              <div style={{ marginTop:22, padding:"12px 16px", background:"rgba(217,119,6,0.10)", borderLeft:"2px solid #D97706", borderRadius:"0 6px 6px 0", fontFamily:S.mono, fontSize:12, color:S.amberHi }}>→ One context. Every document. Zero repetition.</div>
+      {/* Time Saved Calculator (NEW) */}
+      <section id="calculator" className="calc-sec" style={{ position: "relative", zIndex: 1 }}>
+        <div className="container">
+          <div className="play-header lp-reveal">
+            <h2 style={{ fontFamily: S.serif, fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 700, marginBottom: 16 }}>
+              How much time will you <em style={{ fontStyle: "italic", fontWeight: 400, color: S.amberHi }}>buy back?</em>
+            </h2>
+            <p style={{ fontSize: 16, color: S.text2, maxWidth: 580, margin: "0 auto" }}>
+              Product managers spend over 65% of their week on writing specs, tagging feedback, and building tickets. Let&apos;s see how much time PMind saves you.
+            </p>
+          </div>
+
+          <div className="calc-box glass lp-reveal" style={{ display: "grid", gap: 48, padding: 48, background: "rgba(12, 12, 12, 0.5)", border: "1px solid rgba(217, 119, 6, 0.15)" }}>
+            <div className="calc-sliders">
+              <div className="slider-item">
+                <div className="slider-header">
+                  <span className="slider-title">Drafting PRDs & Briefs</span>
+                  <span className="slider-val">{specsHours} hrs/wk</span>
+                </div>
+                <input 
+                  type="range" className="range-input" min="1" max="25" value={specsHours} 
+                  onChange={(e) => setSpecsHours(parseInt(e.target.value))} 
+                />
+              </div>
+
+              <div className="slider-item" style={{ marginTop: 28 }}>
+                <div className="slider-header">
+                  <span className="slider-title">Tagging & Synthesizing Feedback</span>
+                  <span className="slider-val">{researchHours} hrs/wk</span>
+                </div>
+                <input 
+                  type="range" className="range-input" min="1" max="25" value={researchHours} 
+                  onChange={(e) => setResearchHours(parseInt(e.target.value))} 
+                />
+              </div>
+
+              <div className="slider-item" style={{ marginTop: 28 }}>
+                <div className="slider-header">
+                  <span className="slider-title">Writing & Sizing Jira Tickets</span>
+                  <span className="slider-val">{ticketsHours} hrs/wk</span>
+                </div>
+                <input 
+                  type="range" className="range-input" min="1" max="25" value={ticketsHours} 
+                  onChange={(e) => setTicketsHours(parseInt(e.target.value))} 
+                />
+              </div>
             </div>
-            <div>
-              <div style={{ borderRadius:13, overflow:"hidden", background:"rgba(217,119,6,0.035)", backdropFilter:"blur(20px)", border:S.amberBorder, borderTopColor:"rgba(217,119,6,0.32)", boxShadow:"0 24px 60px rgba(0,0,0,0.55),0 0 44px rgba(217,119,6,0.07),inset 0 1px 0 rgba(217,119,6,0.12)" }}>
-                <div style={{ padding:"12px 16px", background:"rgba(14,11,7,0.88)", borderBottom:"1px solid rgba(217,119,6,0.12)", display:"flex", alignItems:"center", gap:8, fontSize:10, fontWeight:700, color:"rgba(217,119,6,0.7)", letterSpacing:".12em", textTransform:"uppercase" }}>
-                  <span className="lp-badge-pulse" />Product Brain
-                  <span style={{ marginLeft:"auto", padding:"2px 9px", background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.22)", borderRadius:100, fontSize:9, color:S.amberHi, letterSpacing:".04em" }}>Active</span>
-                </div>
-                <div style={{ background:"rgba(12,10,7,0.86)", padding:12 }}>
-                  {[
-                    { label:"Product",     val:"B2C marketplace for urban professionals. High-intent mobile buyers." },
-                    { label:"Target Users",val:"25–40, repeat purchasers, time-sensitive, trust-driven." },
-                    { label:"Constraints", val:"No 3rd-party SDK additions. No feature flags in prod. Ship Q2." },
-                    { label:"North Star",  val:"Checkout abandon <20%. Repeat purchase +15% YoY." },
-                  ].map((f, i) => (
-                    <div key={i} style={{ background:"rgba(255,255,255,0.018)", border:"1px solid rgba(255,255,255,0.042)", borderRadius:7, padding:"10px 12px", marginBottom:6 }}>
-                      <div style={{ fontFamily:S.mono, fontSize:9, color:"rgba(217,119,6,0.52)", letterSpacing:".07em", textTransform:"uppercase", marginBottom:5 }}>{f.label}</div>
-                      <div style={{ fontFamily:S.mono, fontSize:11, color:S.text2, lineHeight:1.6 }}>{f.val}</div>
-                    </div>
-                  ))}
-                </div>
+
+            <div className="calc-results" style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center", background: "rgba(0,0,0,0.3)", borderRadius: 6, border: "1px solid rgba(217,119,6,0.15)", padding: "36px 24px", position: "relative", overflow: "hidden" }}>
+              <div className="result-huge">{roundedHours}</div>
+              <div className="result-lbl">Hours Saved Per Week</div>
+              
+              <div className="result-bar-wrap">
+                <div className="result-bar" style={{ width: `${progressPercent}%` }} />
+              </div>
+              
+              <p className="result-desc" style={{ fontSize: 13, color: S.text3, maxWidth: 260, lineHeight: 1.5 }}>
+                Equivalent to unlocking <strong style={{ color: S.text }}>{daysWord}</strong> every month to focus on strategy and alignment.
+              </p>
+              
+              <div className="result-value-unlocked" style={{ marginTop: 20, fontSize: 14, fontWeight: 600, color: S.text2 }}>
+                Estimated Value Reclaimed: <span style={{ color: "#22c55e", textShadow: "0 0 15px rgba(34, 197, 94, 0.2)" }}>{formattedVal}</span>/year
               </div>
             </div>
           </div>
@@ -375,17 +707,17 @@ export default function LandingPage() {
       <section style={{ padding:"88px 0", position:"relative", zIndex:1 }}>
         <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
           <div className="lp-reveal" style={{ display:"flex", alignItems:"baseline", gap:18, marginBottom:44 }}>
-            <h2 style={{ fontFamily:S.serif, fontSize:"clamp(26px,3.2vw,34px)", fontWeight:700, letterSpacing:"-0.025em", color:S.text, whiteSpace:"nowrap" }}>Everything else</h2>
+            <h2 style={{ fontFamily:S.serif, fontSize:"clamp(26px,3.2vw,34px)", fontWeight:700, letterSpacing:"-0.025em", color:S.text, whiteSpace:"nowrap" }}>Core Capabilities</h2>
             <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.056)" }} />
           </div>
           <div className="lp-caps-grid lp-reveal">
             {[
-              { idx:"03", title:"AI Chat — document-aware", desc:"Ask your document anything. Find gaps in your PRD, challenge assumptions, simplify for execs. AI reads the doc so you don't paste it." },
-              { idx:"04", title:"Ticket Generator",         desc:"PRD → epics → stories with acceptance criteria and story points. Export directly to Jira or Linear with one click." },
-              { idx:"05", title:"Knowledge Base + RAG",     desc:"Upload research reports, interview transcripts, competitive analyses. AI answers are enriched with cited excerpts — not hallucinated." },
-              { idx:"06", title:"AI Apply — inline diffs",  desc:"See exactly what AI wants to change, highlighted in the document. Accept, reject, or review change by change." },
-              { idx:"07", title:"UI Review — multimodal",   desc:"Attach a screenshot. Get PM-level feedback on UX gaps, missing states, and copy issues in seconds." },
-              { idx:"08", title:"Team Workspaces",          desc:"Shared Product Brain across your PM team. One source of product truth — every document grounded in it.", soon:true },
+              { idx:"03", title:"Document-Aware Chat", desc:"Chat side-by-side with your drafts. Challenge assumptions, find gap coverage in your specs, and compile executive updates without copy-pasting." },
+              { idx:"04", title:"Grounded Context Search",     desc:"Search semantically across user interviews, support threads, and PRDs. Extract verifiable evidence with inline citations directly in your drafts." },
+              { idx:"05", title:"AI Apply — Diff Controls",  desc:"Review changes with visual diff highlights before applying them. Accept, edit, or reject AI alterations line by line directly inside your editor." },
+              { idx:"06", title:"Multimodal UX Audits",   desc:"Drop screenshots of staging builds or design drafts. The design agent reviews them against your product criteria, checking UX consistency and copy gaps." },
+              { idx:"07", title:"Jira / Linear Native Sync",   desc:"Export story point estimates, epics, and acceptance criteria in one click. Descriptions map automatically to native tracker formats." },
+              { idx:"08", title:"Collaborative Strategy",          desc:"Share a centralized Product Brain strategy profile with your product squad. Keep everyone's specs perfectly aligned.", soon:true },
             ].map((cap, i) => (
               <div key={i} className="lp-cap">
                 <div style={{ fontFamily:S.mono, fontSize:9, color:S.amber, opacity:.45, letterSpacing:".06em", marginBottom:9 }}>{cap.idx}</div>
@@ -402,62 +734,48 @@ export default function LandingPage() {
 
       {divider}
 
-      {divider}
-
-      {/* Quickstart / How it works */}
-      <section style={{ padding:"96px 0", position:"relative", zIndex:1 }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", padding:"0 28px" }}>
-
-          {/* Header */}
-          <div className="lp-reveal" style={{ textAlign:"center", marginBottom:64 }}>
-            <div style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"4px 14px", marginBottom:24, background:"rgba(217,119,6,0.08)", border:"1px solid rgba(217,119,6,0.18)", borderRadius:100, fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:S.amberHi }}>
-              Quickstart Guide
+      {/* Beta Pricing & FAQ (NEW) */}
+      <section className="beta-pricing-sec" style={{ padding: "96px 0", position: "relative", zIndex: 1 }}>
+        <div className="container">
+          <div className="pricing-card glass-amber lp-reveal" style={{ maxWidth: 600, margin: "0 auto 56px", padding: 48, textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div className="pr-title">Beta Access Tier</div>
+            <div className="pr-cost">$0<span style={{ fontSize: 16, color: S.text3, fontFamily: "var(--font-inter)", fontWeight: 400 }}>/month</span></div>
+            <div className="pr-note">Free during private beta for accepted product managers.</div>
+            <div className="pr-bullets">
+              <div className="pr-bullet">Unlimited workspaces & documents</div>
+              <div className="pr-bullet">Full Jira & Linear sync options</div>
+              <div className="pr-bullet">Grounded strategy & RICE Opportunity trees</div>
+              <div className="pr-bullet">Guaranteed lifetime 50% discount at launch</div>
             </div>
-            <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.6vw,42px)", fontWeight:700, lineHeight:1.12, letterSpacing:"-0.028em", color:S.text, marginBottom:16 }}>
-              Up and running in 5 minutes
-            </h2>
-            <p style={{ fontSize:15, color:S.text2, maxWidth:420, margin:"0 auto", lineHeight:1.7 }}>
-              A product-grounded AI workspace shouldn&apos;t take a day to learn. Here&apos;s the whole thing.
-            </p>
+            <Link href="/sign-in" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 36px", background: "linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius: 6, color: "#fff", fontSize: 15, fontWeight: 600, textDecoration: "none", boxShadow: "0 4px 20px rgba(217,119,6,0.25)", marginTop: 24 }}>
+              Apply for Private Beta →
+            </Link>
           </div>
 
-          {/* Steps grid — 4 columns */}
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:16, marginBottom:48 }}>
+          <div className="faq-grid lp-reveal" style={{ marginTop: 80 }}>
             {[
-              { n:"01", icon:"⬡", title:"Create a project", desc:"Group your work by product or initiative. Each project gets its own docs, KB, and AI context." },
-              { n:"02", icon:"🧠", title:"Fill in Product Brain", desc:"Paste your strategy, users, and constraints once. Every AI command reads this automatically — forever." },
-              { n:"03", icon:"⌘", title:"Press ⌘K in any doc", desc:"Open the command palette inside a document. Choose Write PRD, Break into tickets, Stakeholder update, and more." },
-              { n:"04", icon:"💬", title:"Chat with your docs", desc:"The AI chat panel reads your open document. Ask it to find gaps, simplify for execs, or draft an answer." },
-              { n:"05", icon:"📚", title:"Upload to Knowledge Base", desc:"Drop in research PDFs, interview transcripts, or CSVs. AI searches them and cites what it finds." },
-              { n:"06", icon:"@", title:"Tag files with @", desc:"Type @ in chat to mention any doc or KB file by name. The AI reads it directly in context." },
-              { n:"07", icon:"📅", title:"Check your calendar", desc:"See upcoming meetings on your project home. Conflict detection flags back-to-back and overlapping blocks." },
-              { n:"08", icon:"✦", title:"Let AI apply changes", desc:"AI suggests edits highlighted in the document. Accept or reject each one — no blind rewrites." },
-            ].map((step, i) => (
-              <div key={i} style={{
-                padding:"22px 20px", borderRadius:12,
-                background: i===0 ? "rgba(217,119,6,0.07)" : "rgba(255,255,255,0.022)",
-                border:`1px solid ${i===0 ? "rgba(217,119,6,0.25)" : "rgba(255,255,255,0.055)"}`,
-                borderTopColor: i===0 ? "rgba(217,119,6,0.38)" : undefined,
-                transition:"border-color 0.2s",
-              }}>
-                <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
-                  <span style={{ fontFamily:S.mono, fontSize:9, color:i===0?S.amber:S.text3, letterSpacing:"0.06em", opacity:0.7 }}>{step.n}</span>
-                  <span style={{ fontSize:16 }}>{step.icon}</span>
-                </div>
-                <p style={{ fontSize:13, fontWeight:700, color:S.text, marginBottom:7, letterSpacing:"-0.01em" }}>{step.title}</p>
-                <p style={{ fontSize:12, color:S.text2, lineHeight:1.65, margin:0 }}>{step.desc}</p>
+              {
+                q: "Is this just another generic ChatGPT wrapper?",
+                a: "No. Standard wrappers send single-shot prompts that hallucinate templated specs. PMind features a multi-agent backend that processes files semantically, builds strategic RICE hierarchies, and forces the model to verify every generation against active strategy constraints."
+              },
+              {
+                q: "How secure is my strategy data?",
+                a: "We take security seriously. All uploads are walled behind strict, enterprise-grade user permission layers. Your strategy context remains private, and is never used to train public LLM models."
+              },
+              {
+                q: "How does the Jira / Linear sync work?",
+                a: "PMind authenticates directly with your tracker profiles. We parse epics and stories, automatically mapping descriptive blocks into native formats so developers receive clean, properly formatted requirements."
+              },
+              {
+                q: "Can I import existing templates?",
+                a: "Yes. PMind features custom Tiptap layout loaders for standard product documents, from simple one-pagers and competitive analysis maps to complete OKR templates."
+              }
+            ].map((faq, idx) => (
+              <div key={idx} className="faq-item">
+                <h4 style={{ fontFamily: S.serif, fontSize: 15, fontWeight: 700, marginBottom: 8, color: S.text }}>{faq.q}</h4>
+                <p style={{ fontSize: 12.5, color: S.text2, lineHeight: 1.6 }}>{faq.a}</p>
               </div>
             ))}
-          </div>
-
-          {/* Link to full guide */}
-          <div style={{ textAlign:"center" }}>
-            <Link
-              href="/quickstart"
-              style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color:S.amberHi, textDecoration:"none", padding:"8px 20px", background:"rgba(217,119,6,0.08)", border:"1px solid rgba(217,119,6,0.22)", borderRadius:8 }}
-            >
-              View full guide with tips →
-            </Link>
           </div>
         </div>
       </section>
@@ -470,9 +788,9 @@ export default function LandingPage() {
           <h2 className="lp-reveal" style={{ fontFamily:S.serif, fontSize:"clamp(30px,4.2vw,50px)", fontWeight:700, lineHeight:1.15, letterSpacing:"-0.028em", color:S.text, maxWidth:660, margin:"0 auto 40px" }}>
             Done explaining your product<br />to AI that <em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>forgets by morning.</em>
           </h2>
-          <div className="lp-reveal lp-reveal-d1" style={{ maxWidth:520, margin:"0 auto", padding:"52px 44px", borderRadius:18, position:"relative", overflow:"hidden", background:"rgba(217,119,6,0.035)", backdropFilter:"blur(20px)", border:S.amberBorder, borderTopColor:"rgba(217,119,6,0.32)", boxShadow:"0 24px 60px rgba(0,0,0,0.55),0 0 44px rgba(217,119,6,0.07),inset 0 1px 0 rgba(217,119,6,0.12)" }}>
+          <div className="lp-reveal lp-reveal-d1" style={{ maxWidth:520, margin:"0 auto", padding:"52px 44px", borderRadius:8, position:"relative", overflow:"hidden", background:"rgba(217,119,6,0.035)", backdropFilter:"blur(20px)", border:S.amberBorder, borderTopColor:"rgba(217,119,6,0.32)", boxShadow:"0 24px 60px rgba(0,0,0,0.55),0 0 44px rgba(217,119,6,0.07),inset 0 1px 0 rgba(217,119,6,0.12)" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0, height:1, background:"linear-gradient(90deg,transparent,#D97706,transparent)", opacity:.32 }} />
-            <Link href="/sign-in" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"15px 38px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:9, color:"#fff", fontSize:16, fontWeight:600, textDecoration:"none", boxShadow:"0 6px 28px rgba(217,119,6,0.3)" }}>
+            <Link href="/sign-in" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"15px 38px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, color:"#fff", fontSize:16, fontWeight:600, textDecoration:"none", boxShadow:"0 6px 28px rgba(217,119,6,0.3)" }}>
               Get started free →
             </Link>
             <p style={{ marginTop:22, fontFamily:S.serif, fontStyle:"italic", fontSize:15, color:"rgba(217,119,6,0.55)", letterSpacing:"-0.01em" }}>The workspace that thinks in product.</p>
@@ -488,7 +806,7 @@ export default function LandingPage() {
               <div style={{ width:22, height:22, background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:S.serif, fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.92)" }}>P</div>
               <span style={{ fontFamily:S.serif, fontWeight:700, fontSize:14, color:S.text, letterSpacing:"-0.02em" }}>PMind</span>
             </div>
-            <span style={{ fontSize:12, color:S.text3 }}>© 2025 PMind</span>
+            <span style={{ fontSize:12, color:S.text3 }}>© 2026 PMind</span>
             <div style={{ display:"flex", alignItems:"center", gap:16 }}>
               <a href="/privacy" style={{ fontSize:12, color:S.text3, textDecoration:"none" }}>Privacy Policy</a>
               <a href="/terms" style={{ fontSize:12, color:S.text3, textDecoration:"none" }}>Terms of Service</a>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock, Lightbulb, Rocket } from "lucide-react";
+import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock, Lightbulb, Rocket, GitBranch } from "lucide-react";
 import type { ToolCall } from "./ToolCallBlock";
 
 const TOOL_META: Record<string, { label: string; icon: React.ElementType }> = {
@@ -10,6 +10,8 @@ const TOOL_META: Record<string, { label: string; icon: React.ElementType }> = {
   create_folder:      { label: "Create folder",     icon: FolderPlus },
   save_opportunity:   { label: "Save opportunity",  icon: Lightbulb },
   promote_to_feature: { label: "Promote to feature", icon: Rocket },
+  create_jira_issue:  { label: "Create Jira issue", icon: GitBranch },
+  create_jira_sprint: { label: "Create Jira sprint", icon: GitBranch },
 };
 
 function previewArgs(name: string, args: Record<string, unknown>): string {
@@ -20,6 +22,14 @@ function previewArgs(name: string, args: Record<string, unknown>): string {
   if (name === "promote_to_feature") {
     const ids = Array.isArray(args.opportunity_ids) ? (args.opportunity_ids as unknown[]).length : 0;
     return `${String(args.name ?? "(unnamed feature)")} · ${ids} opportunity(ies)`;
+  }
+  if (name === "create_jira_issue") {
+    const parts = [String(args.project_key ?? ""), String(args.title ?? "(untitled)")].filter(Boolean);
+    if (args.issue_type) parts.push(String(args.issue_type));
+    return parts.join(" · ");
+  }
+  if (name === "create_jira_sprint") {
+    return `${String(args.name ?? "(unnamed sprint)")} · board ${String(args.board_id ?? "?")}`;
   }
   return JSON.stringify(args);
 }
@@ -40,7 +50,22 @@ export default function PermissionPrompt({
   const Icon = meta.icon;
 
   const bodyPreview =
-    call.name === "create_doc" || call.name === "edit_doc"
+    call.name === "create_jira_issue"
+      ? [
+          call.args.issue_type ? `Type: ${call.args.issue_type}` : "",
+          call.args.priority   ? `Priority: ${call.args.priority}` : "",
+          call.args.parent_key ? `Parent: ${call.args.parent_key}` : "",
+          call.args.description
+            ? `\nDescription:\n${call.args.description}`
+            : "",
+        ].filter(Boolean).join("  ·  ")
+    : call.name === "create_jira_sprint"
+      ? [
+          call.args.goal        ? `Goal: ${call.args.goal}` : "",
+          call.args.start_date  ? `Start: ${call.args.start_date}` : "",
+          call.args.end_date    ? `End: ${call.args.end_date}` : "",
+        ].filter(Boolean).join("  ·  ")
+    : call.name === "create_doc" || call.name === "edit_doc"
       ? String((call.args.content as string) ?? (call.args.new_content as string) ?? "")
       : call.name === "save_opportunity"
       ? [

@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PMind — AI Tool for Product Managers | Write PRDs, Tickets & Briefs with AI</title>
-  <meta name="description" content="PMind is an AI-native workspace for product managers. Write PRDs, generate user stories, and synthesize research with ⌘K — grounded in your product context, not generic templates. Try free." />
-  <meta name="keywords" content="AI tool for product managers, PRD generator AI, product requirements document AI, AI product management, product manager AI workspace, write PRD with AI" />
+  <title>PMind — AI Workspace for Product Managers | Grounded PRDs, Tickets & Discovery</title>
+  <meta name="description" content="Stop explaining your product to AI that forgets by morning. PMind is the first AI-native workspace that grounds every PRD, user story, and discovery roadmap in your actual product strategy and constraints. Syncs with Jira and Linear." />
+  <meta name="keywords" content="AI tool for product managers, PRD generator AI, product requirements document AI, AI product management, product manager AI workspace, write PRD with AI, Jira AI export, Linear AI export" />
   <meta name="robots" content="index, follow" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="PMind — AI Tool for Product Managers" />
-  <meta property="og:description" content="Write PRDs, generate tickets, and synthesize research with AI grounded in your product context. The Cursor for PMs." />
+  <meta property="og:title" content="PMind — AI Workspace for Product Managers" />
+  <meta property="og:description" content="Stop re-explaining your product to generic AI. Ground your specs, RICE opportunity trees, and Jira tickets in your actual strategy and constraints." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://pmind.xyz" />
   <meta property="og:image" content="https://pmind.xyz/og-image.jpg" />
@@ -18,8 +18,8 @@
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="PMind — AI Tool for Product Managers" />
-  <meta name="twitter:description" content="Write PRDs, generate tickets, and synthesize research with AI grounded in your product context. The Cursor for PMs." />
+  <meta name="twitter:title" content="PMind — AI Workspace for Product Managers" />
+  <meta name="twitter:description" content="Stop re-explaining your product. Ground your specs, opportunity trees, and Jira tickets in your actual strategy and constraints." />
   <meta name="twitter:image" content="https://pmind.xyz/og-image.jpg" />
 
   <link rel="canonical" href="https://pmind.xyz" />
@@ -47,7 +47,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <style>
     /* ── Reset & Tokens ─────────────────────────────────────── */
@@ -57,8 +57,8 @@
       /* App's exact dark-mode palette */
       --app-bg:       #131313;
       --app-glass:    rgba(26, 26, 26, 0.7);
-      --app-border:   rgba(217, 119, 6, 0.1);
-      --app-border-t: rgba(217, 119, 6, 0.2);
+      --app-border:   rgba(217, 119, 6, 0.15);
+      --app-border-t: rgba(217, 119, 6, 0.3);
       --app-amber:    #D97706;
       --app-amber-hi: #F59E0B;
       --app-amber-lo: rgba(217, 119, 6, 0.12);
@@ -68,14 +68,15 @@
       --app-text-3:   rgba(243, 242, 241, 0.28);
 
       /* Page tokens */
-      --bg:       #080808;
+      --bg:       #050505;
+      --panel-bg: #0C0C0C;
       --amber:    #D97706;
       --amber-hi: #F59E0B;
-      --amber-lo: rgba(217, 119, 6, 0.10);
+      --amber-lo: rgba(217, 119, 6, 0.08);
       --amber-bd: rgba(217, 119, 6, 0.20);
       --text:     #F5F2EE;
-      --text-2:   rgba(245, 242, 238, 0.52);
-      --text-3:   rgba(245, 242, 238, 0.28);
+      --text-2:   rgba(245, 242, 238, 0.65);
+      --text-3:   rgba(245, 242, 238, 0.35);
       --mono:     'JetBrains Mono', monospace;
       --sans:     'Inter', -apple-system, sans-serif;
       --serif:    'Playfair Display', Georgia, serif;
@@ -93,7 +94,7 @@
     /* Film grain — animated noise texture for depth */
     .bg-grain {
       position: fixed; inset: -50%; width: 200%; height: 200%;
-      z-index: 0; pointer-events: none; opacity: 0.032;
+      z-index: 0; pointer-events: none; opacity: 0.025;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
       background-size: 200px;
       animation: grain 1.5s steps(8) infinite;
@@ -109,9 +110,9 @@
     .bg-grid {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background-image:
-        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
-      background-size: 72px 72px;
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 64px 64px;
       mask-image: radial-gradient(ellipse 100% 65% at 50% 0%, black 5%, transparent 78%);
       -webkit-mask-image: radial-gradient(ellipse 100% 65% at 50% 0%, black 5%, transparent 78%);
     }
@@ -121,133 +122,103 @@
       position: fixed; top: 0; left: -10%; right: -10%;
       height: 60vh; pointer-events: none; z-index: 0;
       background:
-        radial-gradient(ellipse 110% 55% at 32% -18%, rgba(217,119,6,0.20) 0%, transparent 55%),
-        radial-gradient(ellipse 75%  50% at 72% -12%, rgba(146,64,14,0.13)  0%, transparent 52%),
-        radial-gradient(ellipse 55%  35% at 55%  -4%, rgba(245,158,11,0.07) 0%, transparent 48%);
-      filter: blur(36px);
+        radial-gradient(ellipse 110% 55% at 32% -18%, rgba(217,119,6,0.18) 0%, transparent 55%),
+        radial-gradient(ellipse 75%  50% at 72% -12%, rgba(146,64,14,0.11)  0%, transparent 52%),
+        radial-gradient(ellipse 55%  35% at 55%  -4%, rgba(245,158,11,0.05) 0%, transparent 48%);
+      filter: blur(40px);
       animation: aurora-shift 18s ease-in-out infinite alternate;
     }
     @keyframes aurora-shift {
-      0%   { opacity:.7;  transform:translateX(-2%) scaleX(1.0); }
-      100% { opacity:1.0; transform:translateX(2%)  scaleX(1.1); }
+      0%   { opacity:.7;  transform:translateX(-1%) scaleX(1.0); }
+      100% { opacity:1.0; transform:translateX(1%)  scaleX(1.08); }
     }
 
     /* Ambient gradient layer */
     .bg-amber {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background:
-        radial-gradient(ellipse 90% 55% at 50% -10%, rgba(217,119,6,0.12) 0%, transparent 58%),
-        radial-gradient(ellipse 50% 38% at 88%   8%, rgba(146,64,14,0.08)  0%, transparent 50%),
-        radial-gradient(ellipse 38% 28% at  8%   6%, rgba(245,158,11,0.05) 0%, transparent 46%);
+        radial-gradient(ellipse 90% 55% at 50% -10%, rgba(217,119,6,0.1) 0%, transparent 58%),
+        radial-gradient(ellipse 50% 38% at 88%   8%, rgba(146,64,14,0.06)  0%, transparent 50%),
+        radial-gradient(ellipse 38% 28% at  8%   6%, rgba(245,158,11,0.04) 0%, transparent 46%);
       animation: drift 24s ease-in-out infinite alternate;
     }
     @keyframes drift {
       0%   { opacity:1;   transform:scale(1)    translateX(0); }
-      100% { opacity:.82; transform:scale(1.05) translateX(1.8%); }
+      100% { opacity:.85; transform:scale(1.03) translateX(1%); }
     }
 
-    /* Light beams — wide columns with heavy blur for a real shaft-of-light look */
+    /* Light beams */
     .beams { position: fixed; top:0; left:0; right:0; height:100vh; pointer-events:none; z-index:0; overflow:hidden; }
     .beam {
       position: absolute; top:0; transform-origin: top center;
       background: linear-gradient(180deg,
-        rgba(245,158,11,0.60) 0%,
-        rgba(217,119,6,0.32)  18%,
-        rgba(180,83,9,0.12)   52%,
+        rgba(245,158,11,0.45) 0%,
+        rgba(217,119,6,0.22)  18%,
+        rgba(180,83,9,0.08)   52%,
         transparent           100%);
     }
-    .beam:nth-child(1){ left:16%; width:52px;  height:80vh; transform:rotate(-12deg); animation:flicker 8s  ease-in-out infinite;      filter:blur(18px); }
-    .beam:nth-child(2){ left:34%; width:80px;  height:86vh; transform:rotate(-4deg);  animation:flicker 12s ease-in-out infinite 1.4s; filter:blur(28px); }
-    .beam:nth-child(3){ left:51%; width:40px;  height:74vh; transform:rotate(1deg);   animation:flicker 9s  ease-in-out infinite 3.1s; filter:blur(15px); }
-    .beam:nth-child(4){ left:66%; width:100px; height:92vh; transform:rotate(7deg);   animation:flicker 14s ease-in-out infinite 0.7s; filter:blur(36px); }
-    .beam:nth-child(5){ left:83%; width:44px;  height:66vh; transform:rotate(13deg);  animation:flicker 7s  ease-in-out infinite 5s;   filter:blur(18px); }
-    @keyframes flicker { 0%,100%{opacity:.42;} 44%{opacity:.92;} 70%{opacity:.52;} }
+    .beam:nth-child(1){ left:16%; width:44px;  height:80vh; transform:rotate(-12deg); animation:flicker 8s  ease-in-out infinite;      filter:blur(18px); }
+    .beam:nth-child(2){ left:34%; width:70px;  height:86vh; transform:rotate(-4deg);  animation:flicker 12s ease-in-out infinite 1.4s; filter:blur(28px); }
+    .beam:nth-child(3){ left:51%; width:32px;  height:74vh; transform:rotate(1deg);   animation:flicker 9s  ease-in-out infinite 3.1s; filter:blur(15px); }
+    .beam:nth-child(4){ left:66%; width:90px;  height:92vh; transform:rotate(7deg);   animation:flicker 14s ease-in-out infinite 0.7s; filter:blur(36px); }
+    .beam:nth-child(5){ left:83%; width:36px;  height:66vh; transform:rotate(13deg);  animation:flicker 7s  ease-in-out infinite 5s;   filter:blur(18px); }
+    @keyframes flicker { 0%,100%{opacity:.42;} 44%{opacity:.85;} 70%{opacity:.52;} }
 
     /* ── Layout ─────────────────────────────────────────────── */
-    .container { max-width: 1080px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
-    section { padding: 88px 0; position: relative; z-index: 1; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
+    section { padding: 96px 0; position: relative; z-index: 1; }
 
-    /* ── Page glass (for non-app-mockup use) ──────────────────── */
+    /* ── Glass Components ──────────────────────────────────── */
     .glass {
-      background: rgba(255,255,255,0.028);
-      backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
-      border: 1px solid rgba(255,255,255,0.065); border-top-color: rgba(255,255,255,0.11);
-      box-shadow: 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+      background: rgba(12, 12, 12, 0.65);
+      backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+      border: 1px solid rgba(217, 119, 6, 0.1); border-top-color: rgba(217, 119, 6, 0.22);
+      box-shadow: 0 32px 72px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.02);
+      border-radius: 8px;
     }
     .glass-amber {
-      background: rgba(217,119,6,0.035);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--amber-bd); border-top-color: rgba(217,119,6,0.32);
-      box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 44px rgba(217,119,6,0.07), inset 0 1px 0 rgba(217,119,6,0.12);
+      background: rgba(217, 119, 6, 0.02);
+      backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
+      border: 1px solid var(--amber-bd); border-top-color: rgba(217, 119, 6, 0.35);
+      box-shadow: 0 32px 72px rgba(0,0,0,0.7), 0 0 40px rgba(217,119,6,0.05), inset 0 1px 0 rgba(217,119,6,0.08);
+      border-radius: 8px;
     }
 
     /* ── Nav ────────────────────────────────────────────────── */
     nav {
-      position: fixed; top:0; left:0; right:0; z-index:600; height:58px;
-      background: rgba(8,8,8,0.72);
+      position: fixed; top:0; left:0; right:0; z-index:600; height:64px;
+      background: rgba(5,5,5,0.78);
       backdrop-filter: blur(28px) saturate(1.5); -webkit-backdrop-filter: blur(28px) saturate(1.5);
-      border-bottom: 1px solid rgba(255,255,255,0.046);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
     }
     .nav-inner {
-      max-width:1080px; margin:0 auto; padding:0 28px;
+      max-width:1120px; margin:0 auto; padding:0 28px;
       height:100%; display:flex; align-items:center; justify-content:space-between;
     }
     .logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
     .logo-mark {
-      width:26px; height:26px;
+      width:28px; height:28px;
       background: linear-gradient(145deg, var(--amber) 0%, #92400e 100%);
       border-radius:6px; display:flex; align-items:center; justify-content:center;
-      font-family:var(--serif); font-size:13px; font-weight:700; color:rgba(255,255,255,0.92);
-      box-shadow: 0 4px 14px rgba(217,119,6,0.32);
+      font-family:var(--serif); font-size:14px; font-weight:700; color:rgba(255,255,255,0.95);
+      box-shadow: 0 4px 14px rgba(217,119,6,0.25);
     }
-    .logo-name { font-family:var(--serif); font-weight:700; font-size:16px; color:var(--text); letter-spacing:-0.02em; }
+    .logo-name { font-family:var(--serif); font-weight:700; font-size:18px; color:var(--text); letter-spacing:-0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    @media (max-width: 640px) { .nav-links { display: none; } }
+    .nav-link { color: var(--text-2); font-size: 13px; text-decoration: none; font-weight: 500; transition: color 0.15s; }
+    .nav-link:hover { color: var(--amber-hi); }
     .nav-btn {
       padding:7px 18px; background:var(--amber-lo); border:1px solid var(--amber-bd);
-      border-radius:7px; color:var(--amber-hi); font-size:13px; font-weight:600;
+      border-radius:6px; color:var(--amber-hi); font-size:13px; font-weight:600;
       text-decoration:none; transition:background .15s, box-shadow .15s;
     }
     .nav-btn:hover { background:rgba(217,119,6,0.16); box-shadow:0 0 22px rgba(217,119,6,0.12); }
 
     /* ── Hero ───────────────────────────────────────────────── */
-    .hero { padding-top:128px; padding-bottom:56px; text-align:center; }
-
-    /* ── Inline demo section ────────────────────────────────── */
-    .inline-demo { padding: 0 0 96px; position: relative; z-index: 1; }
-    .idemo-label {
-      display: flex; align-items: center; justify-content: center; gap: 16px;
-      margin-bottom: 36px;
-    }
-    .idemo-line { flex: 0 0 52px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08)); }
-    .idemo-line:last-child { background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent); }
-    .idemo-text {
-      font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
-      text-transform: uppercase; color: var(--text-3);
-    }
-    .idemo-wrap { position: relative; }
-    .idemo-glow {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 70%; height: 280px; pointer-events: none; z-index: 0;
-      background: radial-gradient(ellipse, rgba(217,119,6,0.09) 0%, transparent 65%);
-    }
-    .idemo-ratio {
-      position: relative; width: 100%; padding-bottom: 56.25%;
-      border-radius: 12px; overflow: hidden; z-index: 1;
-      box-shadow:
-        0 0 0 1px rgba(217,119,6,0.14),
-        0 40px 100px rgba(0,0,0,0.65),
-        0 0 60px rgba(217,119,6,0.05);
-    }
-    .idemo-frame {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      border: none; display: block; background: #000;
-    }
-    .idemo-caption {
-      margin-top: 16px; text-align: center;
-      font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em;
-    }
-    .idemo-caption span { color: rgba(217,119,6,0.4); }
+    .hero { padding-top:140px; padding-bottom:48px; text-align:center; }
     .hero-badge {
-      display:inline-flex; align-items:center; gap:7px; padding:5px 14px; margin-bottom:44px;
+      display:inline-flex; align-items:center; gap:7px; padding:5px 14px; margin-bottom:32px;
       background:var(--amber-lo); border:1px solid var(--amber-bd); border-radius:100px;
       font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--amber-hi);
     }
@@ -257,292 +228,263 @@
       50%      { transform:scale(0.85); opacity:0.6; box-shadow:0 0 0 6px rgba(217,119,6,0); }
     }
     .hero h1 {
-      font-family:var(--serif); font-size:clamp(46px,6.8vw,82px); font-weight:700;
-      line-height:1.04; letter-spacing:-0.034em; color:var(--text);
-      margin-bottom:26px; max-width:840px; margin-left:auto; margin-right:auto;
+      font-family:var(--serif); font-size:clamp(44px,6.5vw,78px); font-weight:700;
+      line-height:1.06; letter-spacing:-0.03em; color:var(--text);
+      margin-bottom:24px; max-width:920px; margin-left:auto; margin-right:auto;
     }
-    .hero h1 em { font-style:italic; font-weight:400; color:var(--amber-hi); }
-    .hero-sub { font-size:18px; color:var(--text-2); max-width:480px; margin:0 auto 44px; line-height:1.68; font-weight:400; }
+    .hero h1 em { font-style:italic; font-weight:400; color:var(--amber-hi); text-shadow: 0 0 40px rgba(217, 119, 6, 0.15); }
+    .hero-sub { font-size:19px; color:var(--text-2); max-width:620px; margin:0 auto 40px; line-height:1.65; font-weight:400; }
+    
+    .hero-ctas { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
     .btn-primary {
-      display:inline-flex; align-items:center; gap:8px; padding:14px 30px;
+      display:inline-flex; align-items:center; gap:8px; padding:13px 28px;
       background:linear-gradient(145deg, var(--amber) 0%, #92400e 100%);
-      border-radius:9px; color:#fff; font-size:15px; font-weight:600; text-decoration:none;
-      border:none; cursor:pointer; box-shadow:0 6px 28px rgba(217,119,6,0.3);
+      border-radius:6px; color:#fff; font-size:14px; font-weight:600; text-decoration:none;
+      border:none; cursor:pointer; box-shadow:0 4px 20px rgba(217,119,6,0.25);
       transition:transform .14s, box-shadow .14s;
     }
-    .btn-primary:hover { transform:translateY(-2px); box-shadow:0 12px 36px rgba(217,119,6,0.38); }
-
-    /* ════════════════════════════════════════════════════════════
-       APP MOCKUP — matches the real PMind dark-mode UI exactly
-       ════════════════════════════════════════════════════════════ */
-
-    .demo-wrap { margin-top:68px; position:relative; }
-    .demo-halo {
-      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-      width:70%; height:220px; pointer-events:none;
-      background:radial-gradient(ellipse, rgba(217,119,6,0.1) 0%, transparent 68%);
+    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 8px 28px rgba(217,119,6,0.35); }
+    .btn-secondary {
+      display:inline-flex; align-items:center; gap:8px; padding:13px 28px;
+      background:rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+      border-radius:6px; color:var(--text); font-size:14px; font-weight:600; text-decoration:none;
+      cursor:pointer; transition:background .15s, border-color .15s;
     }
+    .btn-secondary:hover { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.15); }
 
-    /* Window chrome */
-    .app-window {
-      border-radius:12px; overflow:hidden;
-      box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(217,119,6,0.12);
-      position:relative;
+    .hero-savings-callout {
+      margin-top: 56px; font-family: var(--mono); font-size: 11px;
+      color: var(--amber-hi); letter-spacing: 0.05em; text-transform: uppercase;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
     }
-    .app-titlebar {
-      background:#0e0e0e; border-bottom:1px solid rgba(217,119,6,0.08);
-      padding:10px 14px; display:flex; align-items:center; gap:12px;
-    }
-    .tl-group { display:flex; gap:6px; }
-    .tl { width:11px; height:11px; border-radius:50%; }
-    .tl-r{background:#FF5F57;} .tl-y{background:#FFBD2E;} .tl-g{background:#28CA41;}
-    .app-fname { font-family:var(--mono); font-size:11px; color:rgba(255,255,255,0.25); }
-
-    /* Three-panel body */
-    .app-body {
-      background:var(--app-bg);
-      display:grid; grid-template-columns:188px 1fr 240px;
-      height:420px;
-    }
-    @media (max-width:780px) {
-      .app-body { grid-template-columns:1fr; height:auto; }
-      .app-sidebar, .app-chat { display:none; }
+    .hero-savings-callout::before, .hero-savings-callout::after {
+      content: ''; width: 32px; height: 1px; background: rgba(217, 119, 6, 0.3);
     }
 
-    /* ── Sidebar panel ─────────────────────────────────────── */
-    .app-sidebar {
-      background:var(--app-glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
-      border-right:1px solid var(--app-border);
-      display:flex; flex-direction:column;
+    /* ── Inline demo section ────────────────────────────────── */
+    .inline-demo { padding: 48px 0 96px; position: relative; z-index: 1; }
+    .idemo-label {
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+      margin-bottom: 32px;
     }
-    .sidebar-header {
-      padding:12px 12px 10px; border-bottom:1px solid rgba(217,119,6,0.07);
-      display:flex; align-items:center; gap:8px;
+    .idemo-line { flex: 0 0 48px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08)); }
+    .idemo-line:last-child { background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent); }
+    .idemo-text {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--text-3);
     }
-    .sidebar-logo {
-      width:20px; height:20px;
-      background:linear-gradient(145deg,#D97706 0%,#92400e 100%);
-      border-radius:5px; display:flex; align-items:center; justify-content:center;
-      font-family:var(--serif); font-size:10px; font-weight:700; color:rgba(255,255,255,0.9);
-      box-shadow:0 2px 8px rgba(217,119,6,0.3); flex-shrink:0;
+    .idemo-wrap { position: relative; }
+    .idemo-glow {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 75%; height: 300px; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse, rgba(217,119,6,0.1) 0%, transparent 68%);
     }
-    .sidebar-appname { font-family:var(--serif); font-size:13px; font-weight:700; color:var(--app-text); letter-spacing:-0.02em; }
-    .sidebar-body { flex:1; padding:10px 8px; overflow:hidden; }
-    .proj-row {
-      display:flex; align-items:center; gap:5px;
-      padding:5px 6px; border-radius:6px; cursor:pointer; margin-bottom:2px;
+    .idemo-ratio {
+      position: relative; width: 100%; padding-bottom: 56.25%;
+      border-radius: 8px; overflow: hidden; z-index: 1;
+      box-shadow:
+        0 0 0 1px rgba(217,119,6,0.12),
+        0 32px 80px rgba(0,0,0,0.7),
+        0 0 50px rgba(217,119,6,0.04);
     }
-    .proj-row:hover { background:rgba(255,255,255,0.04); }
-    .proj-chevron { font-size:9px; color:var(--app-text-3); }
-    .proj-dot { width:7px; height:7px; border-radius:2px; background:#D97706; flex-shrink:0; }
-    .proj-name { font-size:12px; font-weight:600; color:var(--app-text); }
-    .doc-item {
-      display:flex; align-items:center; gap:7px;
-      padding:4px 6px 4px 18px; border-radius:5px; margin-bottom:1px; cursor:pointer;
+    .idemo-frame {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border: none; display: block; background: #000;
     }
-    .doc-item:hover { background:rgba(255,255,255,0.04); }
-    .doc-item.active { background:rgba(217,119,6,0.1); }
-    .doc-icon { font-size:9px; color:var(--app-text-3); }
-    .doc-item.active .doc-icon { color:var(--app-amber); }
-    .doc-name { font-size:12px; color:var(--app-text-2); }
-    .doc-item.active .doc-name { color:var(--app-amber-hi); font-weight:500; }
-    .sidebar-footer {
-      padding:8px 10px; border-top:1px solid rgba(217,119,6,0.07);
-      display:flex; align-items:center; justify-content:space-between;
+    .idemo-caption {
+      margin-top: 18px; text-align: center;
+      font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em;
     }
-    .plan-badge {
-      font-size:9px; color:var(--app-text-3); padding:2px 6px;
-      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:4px;
-      letter-spacing:0.05em; text-transform:uppercase;
-    }
-    .theme-btn { font-size:11px; color:var(--app-text-3); cursor:pointer; }
-
-    /* ── Editor panel ──────────────────────────────────────── */
-    .app-editor { display:flex; flex-direction:column; position:relative; overflow:hidden; }
-
-    /* Toolbar — matches EditorToolbar.tsx */
-    .editor-toolbar {
-      background:var(--app-glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
-      border-bottom:1px solid var(--app-border);
-      padding:5px 10px; display:flex; align-items:center; gap:1px; flex-wrap:nowrap; overflow:hidden;
-    }
-    .tb-btn {
-      width:26px; height:26px; border-radius:5px; border:none; background:transparent;
-      color:rgba(243,242,241,0.45); display:flex; align-items:center; justify-content:center;
-      font-size:11px; font-weight:600; cursor:pointer; flex-shrink:0;
-      transition:background .15s, color .15s;
-    }
-    .tb-btn:hover { background:rgba(255,255,255,0.06); color:var(--app-text); }
-    .tb-btn.on { background:rgba(217,119,6,0.15); color:var(--app-amber-hi); }
-    .tb-sep { width:1px; height:18px; background:rgba(255,255,255,0.07); margin:0 4px; flex-shrink:0; }
-
-    /* Editor content */
-    .editor-content { flex:1; padding:20px 28px; overflow:hidden; background:var(--app-bg); }
-    .editor-h1 {
-      font-family:var(--serif); font-size:22px; font-weight:700; color:var(--app-text);
-      letter-spacing:-0.02em; margin-bottom:16px; line-height:1.2;
-    }
-    .editor-body { font-size:12px; color:var(--app-text-2); line-height:1.75; font-family:var(--sans); }
-    .editor-h2 { font-family:var(--serif); font-size:14px; font-weight:700; color:var(--app-text); margin-top:14px; margin-bottom:6px; }
-    .amber-cur {
-      display:inline-block; width:2px; height:13px; background:var(--app-amber);
-      border-radius:1px; vertical-align:middle; margin-left:1px;
-      animation:blink 1.05s step-end infinite;
-    }
-    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
-
-    /* ⌘K Modal — matches AICommandModal.tsx */
-    .cmd-modal-overlay {
-      position:absolute; inset:0; background:rgba(0,0,0,0.45);
-      backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
-      display:flex; align-items:flex-start; justify-content:center; padding-top:32px;
-    }
-    .cmd-modal {
-      width:420px; max-width:92%;
-      background:rgba(20,17,12,0.98);
-      border:1px solid rgba(217,119,6,0.28); border-top-color:rgba(217,119,6,0.4);
-      border-radius:12px;
-      box-shadow:0 32px 72px rgba(0,0,0,0.8), 0 0 0 1px rgba(217,119,6,0.08), 0 0 40px rgba(217,119,6,0.08);
-      overflow:hidden;
-      opacity:0;
-      animation:modalIn .3s cubic-bezier(.34,1.56,.64,1) forwards;
-      animation-delay:1.8s;
-    }
-    @keyframes modalIn {
-      from { opacity:0; transform:translateY(-10px) scale(.97); }
-      to   { opacity:1; transform:none; }
-    }
-    .cmd-modal-header {
-      padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05);
-      display:flex; align-items:center; gap:8px;
-    }
-    .cmd-modal-icon {
-      width:22px; height:22px; border-radius:6px;
-      background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.3);
-      display:flex; align-items:center; justify-content:center;
-      font-size:11px; font-weight:700; color:var(--app-amber-hi);
-    }
-    .cmd-modal-title { font-size:11px; font-weight:700; color:var(--app-amber-hi); letter-spacing:0.08em; text-transform:uppercase; }
-    .cmd-modal-esc {
-      margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--app-text-3);
-      padding:2px 6px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:4px;
-    }
-    .cmd-list { padding:8px; display:flex; flex-direction:column; gap:3px; }
-    .cmd-row {
-      padding:8px 10px; border-radius:7px;
-      background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04);
-      display:flex; align-items:center; justify-content:space-between; cursor:pointer;
-    }
-    .cmd-row.active { background:rgba(217,119,6,0.09); border-color:rgba(217,119,6,0.22); }
-    .cmd-row-left { display:flex; align-items:center; gap:8px; }
-    .cmd-row-dot { width:5px; height:5px; border-radius:50%; background:var(--app-text-3); }
-    .cmd-row.active .cmd-row-dot { background:var(--app-amber); }
-    .cmd-row-name { font-size:12px; font-weight:500; color:var(--app-text-2); }
-    .cmd-row.active .cmd-row-name { color:var(--app-amber-hi); }
-    .cmd-row-enter {
-      font-family:var(--mono); font-size:9px; color:var(--app-amber);
-      padding:2px 6px; background:rgba(217,119,6,0.1); border:1px solid rgba(217,119,6,0.2); border-radius:4px;
-    }
-    .cmd-input-area {
-      padding:8px; border-top:1px solid rgba(255,255,255,0.045);
-    }
-    .cmd-input-box {
-      width:100%; padding:7px 10px; font-size:12px; font-family:var(--sans);
-      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);
-      border-radius:7px; color:var(--app-text-2); outline:none; resize:none;
-    }
-    .cmd-generating {
-      padding:8px; border-top:1px solid rgba(255,255,255,0.045); display:none;
-    }
-    .gen-label {
-      font-family:var(--mono); font-size:9px; color:rgba(217,119,6,0.55);
-      letter-spacing:0.09em; text-transform:uppercase;
-      display:flex; align-items:center; gap:5px; margin-bottom:6px;
-    }
-    .gen-dot { width:5px; height:5px; border-radius:50%; background:var(--app-amber); animation:pulse .9s ease-in-out infinite; }
-    .gen-text { font-family:var(--mono); font-size:11px; color:var(--app-text-2); line-height:1.65; }
-    .gen-cur {
-      display:inline-block; width:7px; height:12px; background:var(--app-amber-hi);
-      border-radius:1px; vertical-align:middle; margin-left:2px;
-      animation:blink .65s step-end infinite;
-    }
-
-    /* ── Chat panel ────────────────────────────────────────── */
-    .app-chat {
-      background:var(--app-glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
-      border-left:1px solid var(--app-border);
-      display:flex; flex-direction:column;
-    }
-    .chat-header {
-      padding:9px 10px; border-bottom:1px solid rgba(217,119,6,0.07);
-      display:flex; align-items:center; gap:6px;
-    }
-    .chat-icon { font-size:12px; color:var(--app-amber); }
-    .chat-title { font-size:12px; font-weight:600; color:var(--app-text); flex:1; }
-    .model-pill {
-      display:flex; align-items:center; gap:3px; padding:3px 8px;
-      background:rgba(217,119,6,0.1); border:1px solid rgba(217,119,6,0.2); border-radius:5px;
-      font-family:var(--mono); font-size:9px; color:var(--app-amber-hi); cursor:pointer;
-    }
-    .model-pill-arrow { font-size:7px; opacity:.7; }
-    .chat-msgs { flex:1; padding:10px 8px; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
-    .msg-user {
-      align-self:flex-end; max-width:88%;
-      padding:7px 10px; border-radius:10px 10px 3px 10px;
-      background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.2);
-      font-size:11px; color:var(--app-text); line-height:1.55;
-    }
-    .msg-ai {
-      align-self:flex-start; max-width:96%;
-      padding:7px 10px; border-radius:10px 10px 10px 3px;
-      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);
-      font-size:11px; color:var(--app-text-2); line-height:1.55;
-    }
-    .msg-ai-label {
-      font-family:var(--mono); font-size:8px; color:var(--app-amber); letter-spacing:0.07em;
-      text-transform:uppercase; margin-bottom:4px;
-    }
-    .apply-btn {
-      margin-top:6px; padding:3px 8px; font-size:9px; font-weight:600;
-      background:rgba(217,119,6,0.12); border:1px solid rgba(217,119,6,0.22); border-radius:4px;
-      color:var(--app-amber-hi); cursor:pointer; display:inline-flex; align-items:center; gap:3px;
-    }
-    .chat-input-row {
-      padding:8px; border-top:1px solid rgba(217,119,6,0.07);
-      display:flex; align-items:center; gap:5px;
-    }
-    .chat-textarea {
-      flex:1; padding:6px 8px; font-size:11px; font-family:var(--sans);
-      background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);
-      border-radius:7px; color:var(--app-text-2); outline:none; resize:none;
-      height:30px; line-height:1.4;
-    }
-    .chat-send {
-      width:26px; height:26px; border-radius:6px; flex-shrink:0;
-      background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.25);
-      color:var(--app-amber-hi); display:flex; align-items:center; justify-content:center;
-      font-size:11px; cursor:pointer;
-    }
-
-    /* kbd hint */
-    .kbd-row { display:flex; align-items:center; justify-content:center; gap:5px; margin-top:16px; font-size:11px; color:var(--text-3); }
-    .kbd {
-      padding:2px 7px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.09);
-      border-bottom:2px solid rgba(0,0,0,0.3); border-radius:5px; font-family:var(--mono); font-size:10px; color:rgba(255,255,255,0.38);
-    }
+    .idemo-caption span { color: rgba(217,119,6,0.45); }
 
     /* ── Divider ─────────────────────────────────────────────── */
     .divider { height:1px; position:relative; z-index:1; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 28%, rgba(255,255,255,0.06) 72%, transparent); }
 
     /* ── Statement ──────────────────────────────────────────── */
-    .statement { padding:72px 0; text-align:center; }
+    .statement { padding:80px 0; text-align:center; }
     .statement blockquote {
-      font-family:var(--serif); font-size:clamp(20px,3.2vw,32px); font-style:italic;
-      color:var(--text-2); line-height:1.55; max-width:660px; margin:0 auto; letter-spacing:-0.018em;
+      font-family:var(--serif); font-size:clamp(22px,3vw,34px); font-style:italic;
+      color:var(--text-2); line-height:1.5; max-width:780px; margin:0 auto; letter-spacing:-0.015em;
     }
     .statement blockquote strong { font-style:normal; font-weight:700; color:var(--text); }
 
-    /* ── Feature spotlight ──────────────────────────────────── */
+    /* ── Interactive Playground Section (NEW) ──────────────── */
+    .playground { padding: 96px 0; }
+    .play-header { text-align: center; margin-bottom: 56px; }
+    .play-header h2 { font-family: var(--serif); font-size: clamp(32px, 4vw, 44px); font-weight: 700; margin-bottom: 16px; }
+    .play-header h2 em { font-style: italic; font-weight: 400; color: var(--amber-hi); }
+    .play-header p { font-size: 16px; color: var(--text-2); max-width: 540px; margin: 0 auto; }
+    
+    .play-grid {
+      display: grid; grid-template-columns: 320px 1fr; gap: 32px;
+    }
+    @media (max-width: 860px) {
+      .play-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Sandbox Left Panel - Context Selector */
+    .sandbox-selector {
+      padding: 24px; display: flex; flex-direction: column; gap: 20px;
+    }
+    .sb-section-title {
+      font-family: var(--mono); font-size: 10px; color: var(--amber-hi); letter-spacing: 0.1em;
+      text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .profile-group { display: flex; flex-direction: column; gap: 8px; }
+    .profile-btn {
+      width: 100%; padding: 12px 14px; text-align: left; background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; color: var(--text-2);
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease;
+    }
+    .profile-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .profile-btn.active {
+      background: var(--amber-lo); border-color: var(--amber); color: var(--amber-hi);
+      box-shadow: 0 0 16px rgba(217, 119, 6, 0.08);
+    }
+    .profile-meta-card {
+      background: rgba(0, 0, 0, 0.3); border: 1px dashed rgba(217, 119, 6, 0.15);
+      border-radius: 6px; padding: 14px; font-size: 11px; color: var(--text-3);
+      display: flex; flex-direction: column; gap: 6px; line-height: 1.5;
+    }
+    .profile-meta-title { font-family: var(--mono); color: var(--text-2); font-weight: 600; font-size: 10px; text-transform: uppercase; }
+
+    /* Sandbox Right Panel - Output Screen */
+    .sandbox-screen {
+      border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; height: 440px;
+    }
+    .sandbox-tabs {
+      background: #0b0b0b; border-bottom: 1px solid rgba(217, 119, 6, 0.1);
+      display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 48px;
+    }
+    .sb-tab-group { display: flex; gap: 4px; }
+    .sb-tab {
+      height: 48px; padding: 0 16px; background: transparent; border: none;
+      color: var(--text-3); font-size: 12px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; position: relative;
+    }
+    .sb-tab.active { color: var(--amber-hi); }
+    .sb-tab.active::after {
+      content: ''; position: absolute; bottom: -1px; left: 12%; right: 12%; height: 2px;
+      background: var(--amber);
+    }
+    .sb-run-indicator {
+      display: flex; align-items: center; gap: 6px; font-family: var(--mono);
+      font-size: 9px; color: var(--text-3);
+    }
+    .sb-run-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+    
+    .sandbox-body {
+      flex: 1; display: grid; grid-template-columns: 1fr 1fr; background: #080808; overflow: hidden;
+    }
+    @media (max-width: 600px) {
+      .sandbox-body { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+    }
+    .sb-column {
+      padding: 24px; display: flex; flex-direction: column; overflow-y: auto; height: 100%;
+    }
+    .sb-col-header {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sb-chatgpt-header { color: #ef4444; }
+    .sb-pmind-header { color: var(--amber-hi); }
+    
+    .sb-code {
+      font-family: var(--mono); font-size: 11px; line-height: 1.65; white-space: pre-wrap;
+    }
+    .sb-code-chatgpt { color: rgba(255,255,255,0.38); }
+    .sb-code-pmind { color: var(--text-2); }
+    .sb-code-pmind strong { color: var(--text); font-weight: 600; }
+    .sb-code-pmind span.highlight {
+      background: rgba(217, 119, 6, 0.12); color: var(--amber-hi); border-radius: 3px;
+      padding: 0 3px; font-weight: 500;
+    }
+
+    /* ── The OST Discovery Flow (NEW) ──────────────────────── */
+    .flow-sec { padding: 96px 0; }
+    .flow-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 48px;
+    }
+    @media (max-width: 900px) {
+      .flow-grid { grid-template-columns: 1fr; }
+    }
+    .flow-card {
+      padding: 24px; background: rgba(12, 12, 12, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 8px;
+      position: relative; transition: all 0.25s ease;
+    }
+    .flow-card:hover {
+      border-color: rgba(217, 119, 6, 0.15); background: rgba(16, 16, 16, 0.65);
+      transform: translateY(-2px);
+    }
+    .flow-step-num {
+      position: absolute; top: -14px; left: 20px; width: 28px; height: 28px;
+      border-radius: 50%; background: var(--bg); border: 1px solid rgba(217, 119, 6, 0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--amber-hi);
+      box-shadow: 0 0 10px rgba(217, 119, 6, 0.1);
+    }
+    .flow-card h3 { font-family: var(--serif); font-size: 16px; font-weight: 700; margin-top: 8px; margin-bottom: 12px; }
+    .flow-card p { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+    .flow-meta {
+      margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.04);
+      font-family: var(--mono); font-size: 10px; color: var(--text-3);
+    }
+    .flow-meta strong { color: var(--amber); }
+
+    /* ── Time Saved Calculator (NEW) ───────────────────────── */
+    .calc-sec { padding: 96px 0; }
+    .calc-box {
+      display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; padding: 48px;
+    }
+    @media (max-width: 860px) {
+      .calc-box { grid-template-columns: 1fr; padding: 28px; gap: 36px; }
+    }
+    .calc-sliders { display: flex; flex-direction: column; gap: 28px; }
+    .slider-item { display: flex; flex-direction: column; gap: 8px; }
+    .slider-header { display: flex; justify-content: space-between; align-items: baseline; }
+    .slider-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .slider-val { font-family: var(--mono); font-size: 14px; color: var(--amber-hi); font-weight: 600; }
+    
+    .range-input {
+      -webkit-appearance: none; width: 100%; height: 5px; border-radius: 3px;
+      background: rgba(255,255,255,0.08); outline: none; transition: background 0.15s;
+    }
+    .range-input::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+      background: var(--amber); cursor: pointer; transition: transform 0.1s, background-color 0.1s;
+      box-shadow: 0 0 10px rgba(217, 119, 6, 0.4);
+    }
+    .range-input::-webkit-slider-thumb:hover {
+      background: var(--amber-hi); transform: scale(1.2);
+    }
+
+    .calc-results {
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      text-align: center; background: rgba(0,0,0,0.3); border-radius: 6px;
+      border: 1px solid rgba(217, 119, 6, 0.15); padding: 36px 24px;
+      position: relative; overflow: hidden;
+    }
+    .calc-results::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at center, rgba(217, 119, 6, 0.04) 0%, transparent 70%);
+    }
+    .result-huge {
+      font-family: var(--serif); font-size: 64px; font-weight: 700; color: var(--amber-hi);
+      line-height: 1; text-shadow: 0 0 30px rgba(217, 119, 6, 0.3); margin-bottom: 4px;
+    }
+    .result-lbl {
+      font-family: var(--mono); font-size: 10px; color: var(--text-2); letter-spacing: 0.12em;
+      text-transform: uppercase; margin-bottom: 24px;
+    }
+    .result-bar-wrap { width: 100%; max-width: 240px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+    .result-bar { width: 62%; height: 100%; background: var(--amber); border-radius: 3px; transition: width 0.3s ease; }
+    .result-desc { font-size: 13px; color: var(--text-3); max-width: 260px; line-height: 1.5; }
+    .result-value-unlocked { margin-top: 20px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+    .result-value-unlocked span { color: #22c55e; text-shadow: 0 0 15px rgba(34, 197, 94, 0.2); }
+
+    /* ── Feature Spotlights ─────────────────────────────────── */
     .feat { display:grid; grid-template-columns:1fr 1fr; gap:72px; align-items:center; }
     .feat.rev { direction:rtl; }
     .feat.rev > * { direction:ltr; }
@@ -550,15 +492,15 @@
     .feat-no { font-family:var(--mono); font-size:10px; color:var(--amber); opacity:.55; letter-spacing:.1em; margin-bottom:18px; }
     .feat h2 { font-family:var(--serif); font-size:clamp(28px,3.4vw,38px); font-weight:700; line-height:1.16; letter-spacing:-0.026em; color:var(--text); margin-bottom:18px; }
     .feat h2 em { font-style:italic; font-weight:400; color:var(--amber-hi); }
-    .feat p { font-size:15px; color:var(--text-2); line-height:1.72; max-width:400px; }
+    .feat p { font-size:15px; color:var(--text-2); line-height:1.72; max-width:440px; }
     .feat-callout { margin-top:22px; padding:12px 16px; background:var(--amber-lo); border-left:2px solid var(--amber); border-radius:0 6px 6px 0; font-family:var(--mono); font-size:12px; color:var(--amber-hi); }
 
     /* ⌘K command card */
-    .cmdK-vis { border-radius:13px; overflow:hidden; }
+    .cmdK-vis { border-radius:8px; overflow:hidden; }
     .cmdK-head { padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.04); font-family:var(--mono); font-size:9px; color:var(--amber); letter-spacing:.1em; text-transform:uppercase; display:flex; align-items:center; gap:8px; background:rgba(14,12,8,0.8); }
     .cmdK-head::after { content:''; flex:1; height:1px; background:rgba(217,119,6,0.12); }
     .cmdK-list { padding:10px; background:rgba(12,10,7,0.88); }
-    .cmdK-row { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; border-radius:7px; margin-bottom:4px; background:rgba(255,255,255,0.018); border:1px solid rgba(255,255,255,0.042); }
+    .cmdK-row { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; border-radius:6px; margin-bottom:4px; background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.04); }
     .cmdK-row.on { background:rgba(217,119,6,0.08); border-color:rgba(217,119,6,0.2); }
     .cmdK-row-l { display:flex; align-items:center; gap:9px; }
     .row-dot { width:5px; height:5px; border-radius:50%; background:var(--text-3); }
@@ -568,39 +510,62 @@
     .row-tag { font-family:var(--mono); font-size:9px; color:var(--text-3); padding:2px 6px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:4px; }
 
     /* Brain vis */
-    .brain-vis { border-radius:13px; overflow:hidden; }
+    .brain-vis { border-radius:8px; overflow:hidden; }
     .brain-vis-head { padding:12px 16px; background:rgba(14,11,7,0.88); border-bottom:1px solid rgba(217,119,6,0.12); display:flex; align-items:center; gap:8px; font-size:10px; font-weight:700; color:rgba(217,119,6,0.7); letter-spacing:.12em; text-transform:uppercase; }
     .brain-active-badge { margin-left:auto; padding:2px 9px; background:rgba(217,119,6,0.12); border:1px solid rgba(217,119,6,0.22); border-radius:100px; font-size:9px; color:var(--amber-hi); letter-spacing:.04em; }
     .brain-vis-body { background:rgba(12,10,7,0.86); padding:12px; }
-    .brain-field { background:rgba(255,255,255,0.018); border:1px solid rgba(255,255,255,0.042); border-radius:7px; padding:10px 12px; margin-bottom:6px; }
+    .brain-field { background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.04); border-radius:6px; padding:10px 12px; margin-bottom:6px; }
     .brain-field-lbl { font-family:var(--mono); font-size:9px; color:rgba(217,119,6,0.52); letter-spacing:.07em; text-transform:uppercase; margin-bottom:5px; }
     .brain-field-val { font-family:var(--mono); font-size:11px; color:var(--text-2); line-height:1.6; }
 
-    /* ── Capabilities ───────────────────────────────────────── */
+    /* ── Capabilities Grid ─────────────────────────────────── */
     .caps-head { display:flex; align-items:baseline; gap:18px; margin-bottom:44px; }
     .caps-head h2 { font-family:var(--serif); font-size:clamp(26px,3.2vw,34px); font-weight:700; letter-spacing:-0.025em; color:var(--text); white-space:nowrap; }
-    .caps-rule { flex:1; height:1px; background:rgba(255,255,255,0.056); }
-    .caps-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:rgba(255,255,255,0.038); border-radius:12px; overflow:hidden; }
+    .caps-rule { flex:1; height:1px; background:rgba(255,255,255,0.05); }
+    .caps-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:rgba(255,255,255,0.038); border-radius:8px; overflow:hidden; }
     @media(max-width:768px){ .caps-grid{ grid-template-columns:1fr; } }
-    .cap { background:var(--bg); padding:26px 22px; transition:background .18s; position:relative; overflow:hidden; }
-    .cap:hover { background:#0d0d0d; }
+    .cap { background:var(--bg); padding:28px 24px; transition:background .18s; position:relative; overflow:hidden; }
+    .cap:hover { background:#0a0a0a; }
     .cap::after { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(217,119,6,0),transparent); transition:background .25s; }
     .cap:hover::after { background:linear-gradient(90deg,transparent,rgba(217,119,6,0.28),transparent); }
     .cap-idx { font-family:var(--mono); font-size:9px; color:var(--amber); opacity:.45; letter-spacing:.06em; margin-bottom:9px; }
-    .cap-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:7px; letter-spacing:-0.012em; }
-    .cap-desc { font-size:12px; color:var(--text-2); line-height:1.62; }
+    .cap-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:7px; letter-spacing:-0.012em; }
+    .cap-desc { font-size:12.5px; color:var(--text-2); line-height:1.65; }
     .soon { display:inline-block; padding:2px 7px; margin-left:5px; background:rgba(255,255,255,0.038); border:1px solid rgba(255,255,255,0.07); border-radius:4px; font-size:8px; color:var(--text-3); letter-spacing:.07em; text-transform:uppercase; vertical-align:middle; }
+
+    /* ── Beta Plan Card & FAQ (NEW) ────────────────────────── */
+    .beta-pricing-sec { padding: 96px 0; }
+    .pricing-card {
+      max-width: 600px; margin: 0 auto 56px; padding: 48px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .pricing-card::before {
+      content: ''; position: absolute; top:0; left:0; right:0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--amber), transparent);
+    }
+    .pr-title { font-family: var(--mono); font-size: 11px; color: var(--amber-hi); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 12px; }
+    .pr-cost { font-family: var(--serif); font-size: 56px; font-weight: 700; line-height: 1; color: var(--text); margin-bottom: 8px; }
+    .pr-cost span { font-size: 16px; color: var(--text-3); font-family: var(--sans); font-weight: 400; }
+    .pr-note { font-size: 13px; color: var(--text-3); margin-bottom: 28px; }
+    .pr-bullets { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 0 auto 36px; text-align: left; }
+    .pr-bullet { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+    .pr-bullet::before { content: '✓'; color: #22c55e; font-weight: bold; }
+    
+    .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: 800px; margin: 0 auto; }
+    @media (max-width: 640px) { .faq-grid { grid-template-columns: 1fr; gap: 24px; } }
+    .faq-item h4 { font-family: var(--serif); font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+    .faq-item p { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
 
     /* ── CTA ────────────────────────────────────────────────── */
     .cta-sec { padding:96px 0; text-align:center; }
-    .cta-sec h2 { font-family:var(--serif); font-size:clamp(30px,4.2vw,50px); font-weight:700; line-height:1.15; letter-spacing:-0.028em; color:var(--text); max-width:660px; margin:0 auto 40px; }
+    .cta-sec h2 { font-family:var(--serif); font-size:clamp(30px,4.2vw,50px); font-weight:700; line-height:1.15; letter-spacing:-0.028em; color:var(--text); max-width:680px; margin:0 auto 40px; }
     .cta-sec h2 em { font-style:italic; font-weight:400; color:var(--amber-hi); }
-    .cta-card { max-width:520px; margin:0 auto; padding:52px 44px; border-radius:18px; position:relative; overflow:hidden; }
+    .cta-card { max-width:520px; margin:0 auto; padding:52px 44px; border-radius:8px; position:relative; overflow:hidden; }
     .cta-card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--amber),transparent); opacity:.32; }
     .cta-mission { margin-top:22px; font-family:var(--serif); font-style:italic; font-size:15px; color:rgba(217,119,6,0.55); letter-spacing:-0.01em; }
 
     /* ── Footer ─────────────────────────────────────────────── */
-    footer { border-top:1px solid rgba(255,255,255,0.046); padding:32px 0; position:relative; z-index:1; }
+    footer { border-top:1px solid rgba(255,255,255,0.04); padding:32px 0; position:relative; z-index:1; }
     .footer-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
     .footer-copy { font-size:12px; color:var(--text-3); }
     .footer-line { font-family:var(--serif); font-style:italic; font-size:12px; color:rgba(217,119,6,0.36); }
@@ -618,7 +583,13 @@
   <div class="bg-grid"></div>
   <div class="bg-aurora"></div>
   <div class="bg-amber"></div>
-  <div class="beams" aria-hidden="true"><div class="beam"></div><div class="beam"></div><div class="beam"></div><div class="beam"></div><div class="beam"></div></div>
+  <div class="beams" aria-hidden="true">
+    <div class="beam"></div>
+    <div class="beam"></div>
+    <div class="beam"></div>
+    <div class="beam"></div>
+    <div class="beam"></div>
+  </div>
 
   <!-- Nav -->
   <nav>
@@ -627,6 +598,12 @@
         <div class="logo-mark">P</div>
         <span class="logo-name">PMind</span>
       </a>
+      <div class="nav-links">
+        <a href="#playground" class="nav-link">Product Brain</a>
+        <a href="#workflow" class="nav-link">Discovery Engine</a>
+        <a href="#calculator" class="nav-link">Savings Calculator</a>
+        <a href="#capabilities" class="nav-link">Features</a>
+      </div>
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
          target="_blank" rel="noopener noreferrer" class="nav-btn">Join Beta</a>
     </div>
@@ -636,14 +613,22 @@
   <section class="hero">
     <div class="container">
       <div class="hero-badge"><span class="badge-pulse"></span>Private Beta — Limited Access</div>
-      <h1>The workspace that<br><em>thinks in product.</em></h1>
-      <p class="hero-sub">AI grounded in your strategy, your users, and your constraints — not just your last message.</p>
-      <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
-         target="_blank" rel="noopener noreferrer" class="btn-primary">Request Early Access →</a>
+      <h1>The first AI workspace that<br><em>thinks in product.</em></h1>
+      <p class="hero-sub">Stop re-explaining your constraints to AI that forgets by morning. PMind grounds every spec, user story, and ticket in your actual strategy.</p>
+      
+      <div class="hero-ctas">
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
+           target="_blank" rel="noopener noreferrer" class="btn-primary">Request Early Access →</a>
+        <a href="#playground" class="btn-secondary">Try Interactive Playground</a>
+      </div>
+      
+      <div class="hero-savings-callout">
+        Save 15+ Hours Per Week On Specs, Tickets & Discovery
+      </div>
     </div>
   </section>
 
-  <!-- ── Inline demo ───────────────────────────────────────── -->
+  <!-- Inline demo -->
   <section class="inline-demo">
     <div class="container">
       <div class="idemo-label">
@@ -657,7 +642,7 @@
           <iframe src="demo.html" class="idemo-frame" scrolling="no" title="PMind live demo"></iframe>
         </div>
       </div>
-      <p class="idemo-caption">40-second loop &nbsp;·&nbsp; <span>Problem → Product → AI in action → Early access</span></p>
+      <p class="idemo-caption">40-second loop &nbsp;·&nbsp; <span>Problem → Grounded Context → Ticket Breakdown → Jira Sync</span></p>
     </div>
   </section>
 
@@ -666,10 +651,169 @@
   <section class="statement">
     <div class="container">
       <blockquote class="reveal">
-        ChatGPT gives you a template.<br>
-        PMind gives you output that<br>
-        <strong>knows you ship B2B SaaS to enterprise fintech teams.</strong>
+        ChatGPT gives you a generic template.<br>
+        PMind writes specs that automatically know<br>
+        <strong>you ship SOC2-compliant B2B SaaS to enterprise procurement teams.</strong>
       </blockquote>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Interactive Playground (NEW) -->
+  <section id="playground" class="playground">
+    <div class="container">
+      <div class="play-header reveal">
+        <h2>Ground your AI in <em>Strategy, not prompts</em></h2>
+        <p>Toggle below to see how a single background constraint dynamically transforms AI outputs from fluffy copy into precise product specifications.</p>
+      </div>
+
+      <div class="play-grid reveal">
+        <!-- Selector Area -->
+        <div class="sandbox-selector glass">
+          <div class="profile-group">
+            <span class="sb-section-title">1. Select Product Profile</span>
+            <button class="profile-btn active" onclick="setProfile('fintech')">Fintech Ledger (B2B SaaS)</button>
+            <button class="profile-btn" onclick="setProfile('travel')">TravelFlow (B2C Mobile)</button>
+            <button class="profile-btn" onclick="setProfile('devtool')">DevPulse API (Dev Platform)</button>
+          </div>
+
+          <div class="profile-group">
+            <span class="sb-section-title">Active Product Brain</span>
+            <div id="sbBrainCard" class="profile-meta-card">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Screen -->
+        <div class="sandbox-screen glass">
+          <div class="sandbox-tabs">
+            <div class="sb-tab-group">
+              <button class="sb-tab active" id="tabSpec" onclick="setTask('spec')">Draft Specification</button>
+              <button class="sb-tab" id="tabStories" onclick="setTask('stories')">Write User Stories</button>
+            </div>
+            <div class="sb-run-indicator">
+              <span class="sb-run-dot"></span>Grounding Sandbox
+            </div>
+          </div>
+
+          <div class="sandbox-body">
+            <!-- ChatGPT Column -->
+            <div class="sb-column" style="border-right: 1px solid rgba(255,255,255,0.04);">
+              <div class="sb-col-header sb-chatgpt-header">Generic ChatGPT (Un-grounded)</div>
+              <div class="sb-code sb-code-chatgpt" id="codeChatGPT">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- PMind Column -->
+            <div class="sb-column">
+              <div class="sb-col-header sb-pmind-header">PMind Context-Grounded AI</div>
+              <div class="sb-code sb-code-pmind" id="codePMind">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- The OST Discovery Flow (NEW) -->
+  <section id="workflow" class="flow-sec">
+    <div class="container">
+      <div class="play-header reveal">
+        <h2>Continuous discovery, <em>fully automated</em></h2>
+        <p>From chaotic customer feedback to a structured development backlog. PMind handles the heavy lifting so you focus on product decisions.</p>
+      </div>
+
+      <div class="flow-grid">
+        <div class="flow-card reveal" style="animation-delay: 20ms;">
+          <div class="flow-step-num">01</div>
+          <h3>Ingest Feedback</h3>
+          <p>Drop user interview transcripts, Zendesk tickets, or NPS sheets. tab-aware chunking keeps speaker turns and spreadsheet rows completely whole.</p>
+          <div class="flow-meta">Supports <strong>PDF, DOCX, CSV</strong></div>
+        </div>
+
+        <div class="flow-card reveal" style="animation-delay: 80ms;">
+          <div class="flow-step-num">02</div>
+          <h3>Automated Insights</h3>
+          <p>Our background analysis agents automatically harvest verbatim pain-point quotes, tag personas, and sort findings into reusable theme folders.</p>
+          <div class="flow-meta">Assigns <strong>Severity 1–5</strong></div>
+        </div>
+
+        <div class="flow-card reveal" style="animation-delay: 140ms;">
+          <div class="flow-step-num">03</div>
+          <h3>RICE Prioritization</h3>
+          <p>The Opportunity specialist clusters insights across themes, scoring and ranking opportunities grounded directly in real customer quotes.</p>
+          <div class="flow-meta">Computes <strong>RICE Scores</strong></div>
+        </div>
+
+        <div class="flow-card reveal" style="animation-delay: 200ms;">
+          <div class="flow-step-num">04</div>
+          <h3>Tracker Sync</h3>
+          <p>Select committed opportunities, break them into Epics/Stories with acceptance criteria, and export them natively to tracking boards.</p>
+          <div class="flow-meta">Syncs with <strong>Jira & Linear</strong></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Time Saved Calculator (NEW) -->
+  <section id="calculator" class="calc-sec">
+    <div class="container">
+      <div class="play-header reveal">
+        <h2>How much time will you <em>buy back?</em></h2>
+        <p>Product managers spend over 65% of their week on writing specs, tagging feedback, and building tickets. Let's see how much time PMind saves you.</p>
+      </div>
+
+      <div class="calc-box glass reveal">
+        <div class="calc-sliders">
+          <div class="slider-item">
+            <div class="slider-header">
+              <span class="slider-title">Drafting PRDs & Briefs</span>
+              <span class="slider-val"><span id="valSpecs">6</span> hrs/wk</span>
+            </div>
+            <input type="range" class="range-input" id="rangeSpecs" min="1" max="25" value="6" oninput="calculateSavings()" />
+          </div>
+
+          <div class="slider-item">
+            <div class="slider-header">
+              <span class="slider-title">Tagging & Synthesizing Feedback</span>
+              <span class="slider-val"><span id="valResearch">8</span> hrs/wk</span>
+            </div>
+            <input type="range" class="range-input" id="rangeResearch" min="1" max="25" value="8" oninput="calculateSavings()" />
+          </div>
+
+          <div class="slider-item">
+            <div class="slider-header">
+              <span class="slider-title">Writing & Sizing Jira Tickets</span>
+              <span class="slider-val"><span id="valTickets">5</span> hrs/wk</span>
+            </div>
+            <input type="range" class="range-input" id="rangeTickets" min="1" max="25" value="5" oninput="calculateSavings()" />
+          </div>
+        </div>
+
+        <div class="calc-results">
+          <div class="result-huge"><span id="resultHours">15.1</span></div>
+          <div class="result-lbl">Hours Saved Per Week</div>
+          
+          <div class="result-bar-wrap">
+            <div class="result-bar" id="resultBar"></div>
+          </div>
+          
+          <p class="result-desc">Equivalent to unlocking <strong style="color: var(--text);" id="resultUnlocked">2 full working days</strong> every month to focus on strategy and team alignment.</p>
+          
+          <div class="result-value-unlocked">
+            Estimated Value Reclaimed: <span id="resultDollars">$11,700</span>/year
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -680,16 +824,16 @@
     <div class="container">
       <div class="feat reveal">
         <div>
-          <div class="feat-no">01 / ⌘K</div>
-          <h2>Press ⌘K.<br>Get output that<br><em>knows your product.</em></h2>
-          <p>Not a chat window. Not a template. Press ⌘K anywhere inside a document and choose what to generate — PRD, ticket breakdown, stakeholder update, research synthesis. The AI reads your current document and your Product Brain before writing a single word.</p>
-          <div class="feat-callout">→ Every command is grounded in your Product Brain, not a blank slate</div>
+          <div class="feat-no">01 / ⌘K Commands</div>
+          <h2>Press ⌘K.<br>Get output that<br><em>knows your target audience.</em></h2>
+          <p>No chat window friction. No copying and pasting generic prompts. Press ⌘K anywhere inside the Tiptap editor and choose your command — PRD, epic story breakdown, stakeholder brief, or research synthesis. The workspace automatically pulls in strategy context from your sidebar, producing precise outputs instantly.</p>
+          <div class="feat-callout">→ Automatically grounded in your active Product Brain profiles</div>
         </div>
         <div>
           <div class="cmdK-vis glass">
             <div class="cmdK-head">⌘K Commands</div>
             <div class="cmdK-list">
-              <div class="cmdK-row on"><div class="cmdK-row-l"><div class="row-dot"></div><span class="row-name">Write PRD</span></div><span class="row-tag">↵</span></div>
+              <div class="cmdK-row on"><div class="cmdK-row-l"><div class="row-dot"></div><span class="row-name">Write PRD Section</span></div><span class="row-tag">↵</span></div>
               <div class="cmdK-row"><div class="cmdK-row-l"><div class="row-dot"></div><span class="row-name">Break into tickets</span></div></div>
               <div class="cmdK-row"><div class="cmdK-row-l"><div class="row-dot"></div><span class="row-name">Product brief</span></div></div>
               <div class="cmdK-row"><div class="cmdK-row-l"><div class="row-dot"></div><span class="row-name">Stakeholder update</span></div></div>
@@ -709,18 +853,21 @@
       <div class="feat rev reveal">
         <div>
           <div class="feat-no">02 / Product Brain</div>
-          <h2>Tell it once.<br><em>It never forgets.</em></h2>
-          <p>Paste your product strategy, target users, tech constraints, and success metrics into the Product Brain sidebar. Every AI output — across every document, command, and chat — is automatically grounded in it. No more re-explaining your product to every new conversation.</p>
-          <div class="feat-callout">→ One context. Every document. Zero repetition.</div>
+          <h2>Define strategy once.<br><em>Never repeat it.</em></h2>
+          <p>Paste your core audience personas, technical constraints, security compliance profiles, and product metrics inside the Product Brain sidebar. PMind automatically indexes them and injects them as active parameters into every command and conversation thread. Zero repetition.</p>
+          <div class="feat-callout">→ Keep specifications 100% aligned with active project strategy.</div>
         </div>
         <div>
           <div class="brain-vis glass-amber">
-            <div class="brain-vis-head"><span style="width:5px;height:5px;border-radius:50%;background:var(--amber);display:inline-block;animation:pulse 2s ease-in-out infinite;"></span>Product Brain<span class="brain-active-badge">Active</span></div>
+            <div class="brain-vis-head">
+              <span style="width:5px;height:5px;border-radius:50%;background:var(--amber);display:inline-block;animation:pulse 2s ease-in-out infinite;"></span>
+              Product Brain
+              <span class="brain-active-badge">Active</span>
+            </div>
             <div class="brain-vis-body">
-              <div class="brain-field"><div class="brain-field-lbl">Product</div><div class="brain-field-val">B2C marketplace for urban professionals. High-intent mobile buyers.</div></div>
-              <div class="brain-field"><div class="brain-field-lbl">Target Users</div><div class="brain-field-val">25–40, repeat purchasers, time-sensitive, trust-driven.</div></div>
-              <div class="brain-field"><div class="brain-field-lbl">Constraints</div><div class="brain-field-val">No 3rd-party SDK additions. No feature flags in prod. Ship Q2.</div></div>
-              <div class="brain-field"><div class="brain-field-lbl">North Star</div><div class="brain-field-val">Checkout abandon &lt;20%. Repeat purchase +15% YoY.</div></div>
+              <div class="brain-field"><div class="brain-field-lbl">Product Context</div><div class="brain-field-val">B2B procurement gateway for high-compliance enterprise buyers.</div></div>
+              <div class="brain-field"><div class="brain-field-lbl">Constraints</div><div class="brain-field-val">SOC2 Type II boundary. No third-party analytical SDKs allowed.</div></div>
+              <div class="brain-field"><div class="brain-field-lbl">North Star Metric</div><div class="brain-field-val">Time-to-first-approved-vendor < 14 days (reduced from 45).</div></div>
             </div>
           </div>
         </div>
@@ -731,16 +878,82 @@
   <div class="divider"></div>
 
   <!-- Capabilities -->
-  <section>
+  <section id="capabilities">
     <div class="container">
-      <div class="caps-head reveal"><h2>Everything else</h2><div class="caps-rule"></div></div>
+      <div class="caps-head reveal"><h2>Core Capabilities</h2><div class="caps-rule"></div></div>
       <div class="caps-grid reveal">
-        <div class="cap"><div class="cap-idx">03</div><div class="cap-title">AI Chat — document-aware</div><div class="cap-desc">Ask your document anything. Find gaps in your PRD, challenge assumptions, simplify for execs. AI reads the doc so you don't paste it.</div></div>
-        <div class="cap"><div class="cap-idx">04</div><div class="cap-title">Ticket Generator</div><div class="cap-desc">PRD → epics → stories with acceptance criteria and story points. Export directly to Jira or Linear with one click.</div></div>
-        <div class="cap"><div class="cap-idx">05</div><div class="cap-title">Knowledge Base + RAG</div><div class="cap-desc">Upload research reports, interview transcripts, competitive analyses. AI answers are enriched with cited excerpts — not hallucinated.</div></div>
-        <div class="cap"><div class="cap-idx">06</div><div class="cap-title">AI Apply — inline diffs</div><div class="cap-desc">See exactly what AI wants to change, highlighted in the document. Accept, reject, or review change by change.</div></div>
-        <div class="cap"><div class="cap-idx">07</div><div class="cap-title">UI Review — multimodal</div><div class="cap-desc">Attach a screenshot. Get PM-level feedback on UX gaps, missing states, and copy issues in seconds.</div></div>
-        <div class="cap"><div class="cap-idx">08</div><div class="cap-title">Team Workspaces<span class="soon">Soon</span></div><div class="cap-desc">Shared Product Brain across your PM team. One source of product truth — every document grounded in it.</div></div>
+        <div class="cap">
+          <div class="cap-idx">03</div>
+          <div class="cap-title">Document-Aware Chat</div>
+          <div class="cap-desc">Chat side-by-side with your drafts. Challenge assumptions, find gap coverage in your specs, and compile executive updates without copy-pasting.</div>
+        </div>
+        <div class="cap">
+          <div class="cap-idx">04</div>
+          <div class="cap-title">Grounded RAG Search</div>
+          <div class="cap-desc">Search semantically across user interviews, support threads, and PRDs. Extract verifiable evidence with inline citations directly in your drafts.</div>
+        </div>
+        <div class="cap">
+          <div class="cap-idx">05</div>
+          <div class="cap-title">AI Apply — Diff Controls</div>
+          <div class="cap-desc">Review changes with visual diff highlights before applying them. Accept, edit, or reject AI alterations line by line directly inside your editor.</div>
+        </div>
+        <div class="cap">
+          <div class="cap-idx">06</div>
+          <div class="cap-title">Multimodal UX Audits</div>
+          <div class="cap-desc">Drop screenshots of staging builds or design drafts. The design agent reviews them against your product criteria, checking UX consistency and copy gaps.</div>
+        </div>
+        <div class="cap">
+          <div class="cap-idx">07</div>
+          <div class="cap-title">Jira / Linear Native Sync</div>
+          <div class="cap-desc">Export story point estimates, epics, and acceptance criteria in one click. Descriptions map automatically to native tracker formats (ADF).</div>
+        </div>
+        <div class="cap">
+          <div class="cap-idx">08</div>
+          <div class="cap-title">Collaborative Strategy<span class="soon">Soon</span></div>
+          <div class="cap-desc">Share a centralized Product Brain strategy profile with your product squad. Keep everyone's specs perfectly aligned.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- Beta Pricing & FAQ (NEW) -->
+  <section class="beta-pricing-sec">
+    <div class="container">
+      <div class="pricing-card glass-amber reveal">
+        <div class="pr-title">Beta Access Tier</div>
+        <div class="pr-cost">$0<span>/month</span></div>
+        <div class="pr-note">Free during private beta for accepted product managers.</div>
+        <div class="pr-bullets">
+          <div class="pr-bullet">Unlimited workspaces & documents</div>
+          <div class="pr-bullet">Full Jira & Linear sync options</div>
+          <div class="pr-bullet">Grounded RAG & RICE Opportunity trees</div>
+          <div class="pr-bullet">Guaranteed lifetime 50% discount at launch</div>
+        </div>
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
+           target="_blank" rel="noopener noreferrer" class="btn-primary" style="font-size:15px;padding:14px 36px;">
+          Apply for Private Beta →
+        </a>
+      </div>
+
+      <div class="faq-grid reveal" style="margin-top: 80px;">
+        <div class="faq-item">
+          <h4>Is this just another generic ChatGPT wrapper?</h4>
+          <p>No. Standard wrappers send single-shot prompts that hallucinate templated specs. PMind features a multi-agent backend that processes files semantically, builds pgvector RICE hierarchies, and forces the model to verify every generation against active constraints.</p>
+        </div>
+        <div class="faq-item">
+          <h4>How secure is my strategy data?</h4>
+          <p>We take security seriously. All uploads are walled behind user-restricted RLS layers in Supabase Postgres. Your strategy context remains private, and is never used to train public LLM models.</p>
+        </div>
+        <div class="faq-item">
+          <h4>How does the Jira / Linear sync work?</h4>
+          <p>PMind authenticates directly with your tracker profiles. We parse epics and stories, automatically mapping descriptive blocks into Atlassian Document Format (ADF) so developers receive clean, properly formatted requirements.</p>
+        </div>
+        <div class="faq-item">
+          <h4>Can I import existing templates?</h4>
+          <p>Yes. PMind features custom Tiptap layout loaders for standard product documents, from simple one-pagers and competitive analysis maps to complete OKR templates.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -750,13 +963,13 @@
   <!-- CTA -->
   <section class="cta-sec">
     <div class="container">
-      <h2 class="reveal">Done explaining your product<br>to AI that <em>forgets by morning.</em></h2>
+      <h2 class="reveal">Ready to ship better products,<br>in a fraction of the <em>grunt-work time?</em></h2>
       <div class="cta-card glass-amber reveal reveal-d1">
         <a href="https://docs.google.com/forms/d/e/1FAIpQLSfUYt54gUHDzzDxoDH8YZ0pp8RPW5wXtZRRKFBD7ecfNRqQDw/viewform"
            target="_blank" rel="noopener noreferrer" class="btn-primary" style="font-size:16px;padding:15px 38px;">
           Request Early Access →
         </a>
-        <p class="cta-mission">Help shape the future of product management.</p>
+        <p class="cta-mission">Shape the modern standard of product management.</p>
       </div>
     </div>
   </section>
@@ -769,13 +982,187 @@
           <div class="logo-mark" style="width:22px;height:22px;font-size:11px;">P</div>
           <span class="logo-name" style="font-size:14px;">PMind</span>
         </a>
-        <span class="footer-copy">© 2025 PMind</span>
+        <span class="footer-copy">© 2026 PMind</span>
         <span class="footer-line">The workspace that thinks in product.</span>
       </div>
     </div>
   </footer>
 
   <script>
+    // ── Interactive Playground Sandbox Data ─────────────────
+    const playData = {
+      fintech: {
+        brain: `<strong>Target:</strong> Enterprise CFOs & Procurement leads<br><strong>Tech Boundary:</strong> SOC2 Type II compliance. Zero external analytics libraries.<br><strong>North Star Metric:</strong> Bank verification onboarding time &lt; 2 hours (was 5 days).`,
+        spec: `<strong>PRD Section: Ledger Sync Gateway</strong>
+Grounding Profile: [B2B High-Compliance FinTech]
+
+<strong>1. Feature Objective</strong>
+Deliver bank ledger synchronization while respecting strictly audited <strong>SOC2 Type II boundaries</strong>. The system must process requests under zero external analytics tracking constraints to ensure absolute data privacy.
+
+<strong>2. Functional Requirements</strong>
+• Bank Verification: Automate credential caching using our isolated microservice, targeting a <strong>verification time under 2 hours</strong>.
+• System Failure Protocol: In case of bank API outages, throw fallback ledger files, bypassing any third-party public analytics endpoints.`,
+        stories: `<strong>EPIC: Compliant Ledger Sync</strong>
+Grounding Profile: [B2B High-Compliance FinTech]
+
+<strong>STORY-001 · Isolated Caching [5 pts]</strong>
+As an Enterprise CFO, I want bank ledger syncing to happen inside secure network boundaries so that bank data complies with <strong>SOC2 Type II</strong> policies.
+AC: Caching utilizes isolated bank microservices; no third-party APIs called.
+
+<strong>STORY-002 · Onboarding Speed [3 pts]</strong>
+As a Procurement Lead, I want a bank onboarding assistant so I can finish verification in <strong>under 2 hours</strong>.
+AC: Instant validation rules trigger upon account submission.`
+      },
+      travel: {
+        brain: `<strong>Target:</strong> Mobile-first leisure travelers, time-sensitive<br><strong>Tech Boundary:</strong> Fast layout rendering on weak 3G networks. Priority Apple Pay integration.<br><strong>North Star Metric:</strong> Mobile checkout completion rate &gt; 85% (was 54%).`,
+        spec: `<strong>PRD Section: Mobile Booking Checkout</strong>
+Grounding Profile: [B2C Mobile Travel]
+
+<strong>1. Feature Objective</strong>
+Streamline mobile flight booking to increase checkout completion rates past the <strong>85% target</strong>. Design layouts to support instant payment on low-bandwidth <strong>weak 3G networks</strong>.
+
+<strong>2. Functional Requirements</strong>
+• Wallet Integration: <strong>Apple Pay integration takes priority</strong> above standard card inputs, occupying above-the-fold screen space.
+• Asset Optimization: Bundle and render layout files under 80KB to maintain operational speeds in remote travel environments with poor signal.`,
+        stories: `<strong>EPIC: Instant Booking Redesign</strong>
+Grounding Profile: [B2C Mobile Travel]
+
+<strong>STORY-001 · Apple Pay above-the-fold [3 pts]</strong>
+As a mobile traveler, I want a one-click Apple Pay checkout option so I can secure bookings without typing details on weak wifi.
+AC: Apple Pay is auto-detected and positioned above standard inputs.
+
+<strong>STORY-002 · Offline Queue Loader [5 pts]</strong>
+As a traveler on <strong>weak 3G networks</strong>, I want checkout confirmations to queue offline so that checkout conversions exceed our <strong>85% benchmark</strong>.
+AC: Data payloads compressed below 15KB per request.`
+      },
+      devtool: {
+        brain: `<strong>Target:</strong> Full-stack backend developers, CLI-first<br><strong>Tech Boundary:</strong> API-only endpoints, YAML configurations, &lt;50ms response latency.<br><strong>North Star Metric:</strong> Time-to-first-API-call &lt; 5 minutes.`,
+        spec: `<strong>PRD Section: CLI API-Key Dispatch</strong>
+Grounding Profile: [Developer Tool Platform]
+
+<strong>1. Feature Objective</strong>
+Deliver a zero-config API key dispatch pipeline targeting a <strong>time-to-first-API-call under 5 minutes</strong>. Every credential must render natively via CLI terminals.
+
+<strong>2. Functional Requirements</strong>
+• Configuration Format: Supply and validate key variables strictly via <strong>YAML configuration files</strong>.
+• Latency Boundary: Maintain API gateway dispatch times within a <strong>&lt;50ms response latency</strong> window under high load thresholds.`,
+        stories: `<strong>EPIC: Dev Onboarding Redesign</strong>
+Grounding Profile: [Developer Tool Platform]
+
+<strong>STORY-001 · YAML key generation [3 pts]</strong>
+As a developer, I want my initial credentials formatted inside a standard <strong>YAML file</strong> so I can start making calls in <strong>under 5 minutes</strong>.
+AC: 'pmind init' outputs clean, copy-pasteable YAML keys.
+
+<strong>STORY-002 · Low-Latency Gateway [8 pts]</strong>
+As a developer, I want key validation requests returned in <strong>under 50ms</strong> to prevent pipeline bottlenecks.
+AC: Validation endpoint uses edge caching, maintaining p95 latency at < 35ms.`
+      }
+    };
+
+    let activeProfile = 'fintech';
+    let activeTask = 'spec';
+
+    function setProfile(prof) {
+      activeProfile = prof;
+      document.querySelectorAll('.profile-btn').forEach(btn => {
+        if(btn.textContent.toLowerCase().includes(prof === 'fintech' ? 'ledger' : prof === 'travel' ? 'travelflow' : 'devpulse')) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      updateSandbox();
+    }
+
+    function setTask(task) {
+      activeTask = task;
+      if(task === 'spec') {
+        document.getElementById('tabSpec').classList.add('active');
+        document.getElementById('tabStories').classList.remove('active');
+      } else {
+        document.getElementById('tabSpec').classList.remove('active');
+        document.getElementById('tabStories').classList.add('active');
+      }
+      updateSandbox();
+    }
+
+    function updateSandbox() {
+      const data = playData[activeProfile];
+      document.getElementById('sbBrainCard').innerHTML = data.brain;
+      
+      // Generic ChatGPT output simulated
+      let chatgptText = '';
+      if(activeTask === 'spec') {
+        chatgptText = `<strong>Section: Checkout Feature</strong>
+
+<strong>1. Introduction</strong>
+This document defines requirements for the checkout page. We will build a safe and secure way for users to pay.
+
+<strong>2. Goals</strong>
+• Ensure payment fields work properly.
+• Follow standard templates and payment guides.
+• Make onboarding as fast as possible.`;
+      } else {
+        chatgptText = `<strong>EPIC: Payment Systems</strong>
+
+<strong>STORY-001: Pay Invoice</strong>
+As a user, I want to pay my invoices online so I don't have to send checks.
+AC:
+1. Pay button must be visible.
+2. User can type credit card numbers.`;
+      }
+      document.getElementById('codeChatGPT').innerHTML = chatgptText;
+
+      // PMind output simulated
+      let pmindText = data[activeTask];
+      // Highlight certain keywords dynamically
+      pmindText = pmindText
+        .replace(/(SOC2 Type II|SOC2|SOC2 compliance)/gi, '<span class="highlight">$1</span>')
+        .replace(/(under 2 hours|under 5 minutes|under 50ms|<50ms|85% target|85% benchmark)/gi, '<span class="highlight">$1</span>')
+        .replace(/(weak 3G networks|Apple Pay|YAML configuration|YAML)/gi, '<span class="highlight">$1</span>');
+      
+      document.getElementById('codePMind').innerHTML = pmindText;
+    }
+
+    // Initialize sandbox
+    updateSandbox();
+
+    // ── Time Saved Calculator Logic ──────────────────────────
+    function calculateSavings() {
+      const specs = parseInt(document.getElementById('rangeSpecs').value);
+      const research = parseInt(document.getElementById('rangeResearch').value);
+      const tickets = parseInt(document.getElementById('rangeTickets').value);
+
+      document.getElementById('valSpecs').textContent = specs;
+      document.getElementById('valResearch').textContent = research;
+      document.getElementById('valTickets').textContent = tickets;
+
+      // Savings weights: 65% off Specs, 75% off Research manual tag, 80% off Jira ticket writing
+      const hoursSaved = (specs * 0.65) + (research * 0.75) + (tickets * 0.8);
+      const roundedHours = hoursSaved.toFixed(1);
+
+      document.getElementById('resultHours').textContent = roundedHours;
+
+      // Adjust percentage bar
+      const maxPossible = (25 * 0.65) + (25 * 0.75) + (25 * 0.8);
+      const pct = (hoursSaved / maxPossible) * 100;
+      document.getElementById('resultBar').style.width = Math.min(100, Math.max(10, pct)) + '%';
+
+      // Describe days unlocked (assuming 8hr day)
+      const monthlyDays = ((hoursSaved * 4.33) / 8).toFixed(0);
+      let daysWord = monthlyDays === '1' ? '1 full working day' : `${monthlyDays} full working days`;
+      document.getElementById('resultUnlocked').textContent = daysWord;
+
+      // Unlocked financial valuation (assuming standard PM rate of $80/hr)
+      const yearlyVal = Math.round(hoursSaved * 52 * 80);
+      const formattedVal = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(yearlyVal);
+      document.getElementById('resultDollars').textContent = formattedVal;
+    }
+
+    // Initialize calculator
+    calculateSavings();
+
+
     // ── Canvas: ambient orbs + flow-field particles ────────────
     (function(){
       const c = document.getElementById('bg-canvas');
@@ -787,11 +1174,11 @@
 
       // ── Large ambient orbs ─────────────────────────────────
       const orbs = [
-        { nx:0.14, ny:0.18, r:380, a:0.13, sp:0.19, ph:0.0  },
-        { nx:0.82, ny:0.42, r:320, a:0.09, sp:0.14, ph:2.1  },
-        { nx:0.50, ny:0.78, r:420, a:0.07, sp:0.11, ph:4.2  },
-        { nx:0.92, ny:0.12, r:260, a:0.10, sp:0.22, ph:1.1  },
-        { nx:0.28, ny:0.62, r:300, a:0.06, sp:0.16, ph:3.4  },
+        { nx:0.14, ny:0.18, r:380, a:0.11, sp:0.19, ph:0.0  },
+        { nx:0.82, ny:0.42, r:320, a:0.08, sp:0.14, ph:2.1  },
+        { nx:0.50, ny:0.78, r:420, a:0.06, sp:0.11, ph:4.2  },
+        { nx:0.92, ny:0.12, r:260, a:0.09, sp:0.22, ph:1.1  },
+        { nx:0.28, ny:0.62, r:300, a:0.05, sp:0.16, ph:3.4  },
       ];
 
       function drawOrbs() {
@@ -849,12 +1236,12 @@
       }
 
       // Seed initial black frame
-      ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+      ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, innerWidth, innerHeight);
 
       function frame() {
         t += 0.007;
         // Partial clear — creates particle trails
-        ctx.fillStyle = 'rgba(8,8,8,0.20)';
+        ctx.fillStyle = 'rgba(5,5,5,0.20)';
         ctx.fillRect(0, 0, W, H);
         drawOrbs();
         drawParticles();
@@ -866,7 +1253,6 @@
     // ── Scroll reveal ─────────────────────────────────────────
     const io=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('vis');});},{threshold:.07,rootMargin:'0px 0px -28px 0px'});
     document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-
   </script>
 </body>
 </html>
