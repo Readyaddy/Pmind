@@ -25,7 +25,7 @@ export interface ToolCall {
   _thought_sig?: string;
 }
 
-import { Sparkles, Zap, TrendingUp, Calendar, Database, GitBranch, Globe } from "lucide-react";
+import { Sparkles, Zap, TrendingUp, Calendar, Database, GitBranch, Globe, LayoutTemplate } from "lucide-react";
 
 const TOOL_META: Record<string, { label: string; icon: React.ElementType; verb: string }> = {
   search_kb:          { label: "Knowledge base",    icon: BookOpen,    verb: "Searching" },
@@ -49,6 +49,8 @@ const TOOL_META: Record<string, { label: string; icon: React.ElementType; verb: 
   create_jira_sprint:      { label: "Jira sprint",  icon: GitBranch,   verb: "Creating" },
   check_calendar:          { label: "Calendar",     icon: Calendar,    verb: "Checking" },
   render_ui:               { label: "UI",           icon: Globe,       verb: "Rendering" },
+  render_diagram:          { label: "Diagram",      icon: LayoutTemplate, verb: "Drawing" },
+  handoff_to_whiteboard:   { label: "Whiteboard",   icon: LayoutTemplate, verb: "Handing off to" },
   design_brief:            { label: "Design brief", icon: Globe,       verb: "Preparing" },
   analyze_data:            { label: "Data",         icon: Database,    verb: "Analyzing" },
   handoff_to_designer:     { label: "Designer",     icon: Globe,       verb: "Handing off to" },

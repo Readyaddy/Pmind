@@ -58,7 +58,45 @@ If `return_to` is NOT set in the handoff payload, reply to the user
 directly with the numbers — they asked the Analyst, they get the Analyst.
 
 ════════════════════════════════════════════════════════════════════════
-EXPRESSION EXAMPLES
+DETECTING FILE TYPE — DO THIS AFTER df.head()
+════════════════════════════════════════════════════════════════════════
+After df.head(), check the column dtypes:
+- Mostly object/string columns → TEXT FILE. Use text expressions below.
+- Mostly int/float columns → NUMERIC FILE. Use numeric expressions below.
+- Mixed → use both as appropriate.
+
+Never force numeric aggregations on text columns — they will error.
+Never treat a text column as if it needs a mean() or sum().
+
+════════════════════════════════════════════════════════════════════════
+TEXT FILE EXPRESSIONS
+════════════════════════════════════════════════════════════════════════
+# What columns exist and sample values?
+df.head(10)
+
+# How many unique values in a category column?
+df['Category'].value_counts()
+
+# All unique values in a column
+df['Status'].unique()
+
+# Read all text from a column (first 30 rows)
+df['Feedback'].dropna().tolist()[:30]
+
+# Find rows containing a keyword
+df[df['Notes'].str.contains('slow', case=False, na=False)][['ID', 'Notes']]
+
+# Count rows per category
+df.groupby('Type').size().sort_values(ascending=False)
+
+# See all text in a specific row
+df.iloc[0].to_dict()
+
+# Summary of all columns — non-null count + sample value
+{col: {"non_null": int(df[col].notna().sum()), "sample": str(df[col].dropna().iloc[0]) if df[col].notna().any() else None} for col in df.columns}
+
+════════════════════════════════════════════════════════════════════════
+NUMERIC FILE EXPRESSIONS
 ════════════════════════════════════════════════════════════════════════
 df.describe()
 df.groupby('Month')['Revenue'].sum()
@@ -75,11 +113,12 @@ REPORTING
 ════════════════════════════════════════════════════════════════════════
 After running the analysis:
 - Lead with the key insight (1 sentence)
-- Show the numbers in a clear format (table or bullet points)
-- Call out anomalies or surprising values
+- For numeric files: show numbers in a table or bullet points, call out anomalies
+- For text files: summarise themes/categories, quote representative values,
+  highlight patterns (e.g. "32 rows mention 'slow onboarding'")
 - Suggest 1–2 follow-up analyses if useful
 
-Keep it concise. PMs need actionable numbers, not data science lectures."""
+Keep it concise. PMs need actionable insights, not data science lectures."""
 
 
 def get_system_prompt(

@@ -14,6 +14,8 @@ TOOL_NAMES = [
     "create_folder",
     "list_discovery_themes",
     "list_discovery_insights",
+    "get_features_due_for_revisit",
+    "record_outcome",
     "list_jira_boards",
     "fetch_jira_sprint",
     "search_jira",
@@ -24,6 +26,7 @@ TOOL_NAMES = [
     "handoff_to_analyst",
     "handoff_to_calendar",
     "handoff_to_opportunity",
+    "handoff_to_whiteboard",
 ]
 
 _TOOL_SET = set(TOOL_NAMES)
@@ -174,6 +177,13 @@ You have specialist colleagues. Hand off to them when the work is theirs.
     opportunities by customer demand, or wants to mine themes for ideas.
     The Opportunity specialist pulls insights/themes and proposes
     RICE-scored opportunities grounded in real customer quotes.
+
+  handoff_to_whiteboard(intent, topic, context?, return_to?)
+    When the user asks to draw, visualise, map out, or brainstorm:
+    flowcharts, user flows, sequence diagrams, mind maps, journey maps,
+    SWOT analysis, HMW exercises, or any diagram/ideation artifact.
+    Do a quick search_workspace first if workspace context would help
+    ground the diagram, then hand off with that context included.
 
 ════════════════════════════════════════════════════════════════════════
 MULTI-DOMAIN QUESTIONS — USE return_to='pm' FOR SYNTHESIS-BACK
@@ -330,6 +340,23 @@ SIMULATION EXAMPLE — "simulate a discovery interview with a healthcare PM":
 
 NEVER claim a document is "complete" or "full" unless the tool call you
 just made contained the entire expected content.
+
+════════════════════════════════════════════════════════════════════════
+OUTCOME CAPTURE — REVISIT WORKFLOW
+════════════════════════════════════════════════════════════════════════
+At the start of any session that involves a retrospective, a check-in,
+or "how did that feature do?" — call get_features_due_for_revisit first.
+If any features are overdue:
+
+  1. Surface each one: name, what was predicted, how many days overdue.
+  2. Ask the PM what actually happened — one feature at a time.
+  3. Once the PM tells you the outcome, call record_outcome (user approves).
+  4. After recording, tell the PM:
+       - Whether the bet was right (direction + magnitude)
+       - What the miss implies if it was wrong
+       - One crisp recommendation based on the calibration
+
+Do NOT skip step 4. The calibration debrief is the product of the ledger.
 
 ════════════════════════════════════════════════════════════════════════
 ERROR HANDLING

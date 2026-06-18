@@ -23,6 +23,7 @@ from .agents import designer as designer_agent
 from .agents import analyst as analyst_agent
 from .agents import calendar as calendar_agent
 from .agents import opportunity as opportunity_agent
+from .agents import whiteboard as whiteboard_agent
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ AGENT_MODULES = {
     "analyst": analyst_agent,
     "calendar": calendar_agent,
     "opportunity": opportunity_agent,
+    "whiteboard": whiteboard_agent,
 }
 
 _DOMAIN_TOOL_NAMES: dict[str, list[str]] = {
@@ -64,10 +66,15 @@ designer     — ONLY for visual/UI work: mockups, websites, landing pages,
                does NOT mean designer — only pick designer if the request is
                explicitly about building or reviewing a VISUAL artifact.
                "improve this design doc" → pm. "build me a landing page" → designer.
-analyst      — CSV/Excel data analysis, metrics, churn/revenue/NPS calculations.
+analyst      — CSV/Excel analysis — both numeric (metrics, churn, revenue, NPS) and
+               text (reading feedback columns, finding themes, counting categories,
+               analysing what's in a spreadsheet).
 calendar     — schedules, meetings, time-blocking, "do I have time", "prep me".
 opportunity  — "what should we build?", "rank opportunities", "mine themes",
                "biggest pain points by RICE", promoting opportunity → feature.
+whiteboard   — diagrams, flowcharts, flow maps, user flows, sequence diagrams,
+               mind maps, journey maps, brainstorming, SWOT, HMW, ideation,
+               "draw", "visualise", "map out", "brainstorm".
 
 Return ONLY the name. No JSON. No explanation. Just one word: pm, designer, analyst, calendar, or opportunity."""
 

@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from deps import get_supabase
@@ -382,6 +383,25 @@ async def extract_insights_for_document(
     """
     supabase = get_supabase()
 
+    # Skip re-extraction if this document was already processed. Without this
+    # guard, re-uploading the same file or re-triggering extraction would
+    # double-count every insight and inflate theme insight_count.
+    try:
+        existing_check = (
+            supabase.table("insights")
+            .select("id", count="exact")
+            .eq("knowledge_document_id", knowledge_document_id)
+            .limit(1)
+            .execute()
+        )
+        if (existing_check.count or 0) > 0:
+            logger.info(
+                "Insight extraction skipped — doc=%s already has insights", knowledge_document_id
+            )
+            return 0
+    except Exception as e:
+        logger.warning("Existing-insights check failed (proceeding anyway): %s", e)
+
     segments = segment_for_extraction(full_text)
     if not segments:
         logger.info("Insight extraction — no usable segments for doc=%s", knowledge_document_id)
@@ -410,6 +430,9 @@ async def extract_insights_for_document(
     all_themes = sorted({t for r in flat for t in r["themes"]})
     name_to_id = _upsert_themes(supabase, project_id, user_id, all_themes)
 
+    now = datetime.now(timezone.utc)
+    current_period = f"{now.year}-Q{(now.month - 1) // 3 + 1}"
+
     rows = []
     for r in flat:
         primary_theme = r["themes"][0] if r["themes"] else None
@@ -424,6 +447,7 @@ async def extract_insights_for_document(
             "theme_id": name_to_id.get(primary_theme) if primary_theme else None,
             "persona": r["persona"],
             "severity": r["severity"],
+            "period": current_period,
         })
 
     # Bulk insert in batches of 100 (Supabase limit per request is generous

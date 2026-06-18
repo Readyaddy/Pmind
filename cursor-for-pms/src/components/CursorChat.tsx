@@ -31,10 +31,12 @@ import MentionPicker, { type MentionItem } from "./agent/MentionPicker";
 import ArtifactCard, { type ArtifactArgs } from "./agent/ArtifactCard";
 import CritiqueCard, { type Critique } from "./agent/CritiqueCard";
 import DesignBriefCard, { type DesignBriefArgs } from "./agent/DesignBriefCard";
+import DiagramCard, { type DiagramArgs } from "./agent/DiagramCard";
 
 const PERMISSION_TOOLS = new Set([
   "create_doc", "edit_doc", "create_folder",
   "save_opportunity", "promote_to_feature",
+  "record_outcome",
   "create_jira_issue", "create_jira_sprint",
 ]);
 const TREE_REFRESH_TOOLS = new Set(["create_doc", "edit_doc", "create_folder"]);
@@ -1130,6 +1132,20 @@ export default function CursorChat() {
                                   isRefiningRef.current = true;
                                   void handleSubmit(undefined, "Please critique this design using critique_design, then create an improved version with render_ui addressing all high-severity issues.");
                                 } : undefined}
+                              />
+                            );
+                          }
+
+                          if (part.call.name === "render_diagram") {
+                            const diagStatus: "running" | "done" | "error" =
+                              part.call.status === "done" ? "done"
+                              : part.call.status === "error" ? "error"
+                              : "running";
+                            return (
+                              <DiagramCard
+                                key={`diag-${part.call.id}-${i}`}
+                                args={part.call.args as unknown as DiagramArgs}
+                                status={diagStatus}
                               />
                             );
                           }

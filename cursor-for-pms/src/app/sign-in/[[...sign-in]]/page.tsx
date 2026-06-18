@@ -75,7 +75,6 @@ export default function SignInPage() {
               colorTextSecondary: "#737373",
               colorPrimary: "#F59E0B",
               colorDanger: "#ef4444",
-              colorNeutral: "#ffffff",
               borderRadius: "0.75rem",
               fontFamily: "var(--font-inter), sans-serif",
               fontSize: "14px",

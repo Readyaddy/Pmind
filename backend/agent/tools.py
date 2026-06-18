@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -217,6 +218,35 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "render_diagram",
+        "description": (
+            "Render a Mermaid diagram the user can view in the chat. Use this for: "
+            "flowcharts, user flows, process maps, sequence diagrams, user journey maps, "
+            "mind maps, entity-relationship diagrams, and Gantt charts. "
+            "DO NOT describe the diagram in prose — build it. "
+            "Always output valid Mermaid syntax in `definition`."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Short label shown above the diagram, e.g. 'User Onboarding Flow'.",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["flowchart", "sequence", "mindmap", "journey", "erDiagram", "gantt", "gitGraph"],
+                    "description": "Mermaid diagram type.",
+                },
+                "definition": {
+                    "type": "string",
+                    "description": "Complete Mermaid diagram definition. Must start with the diagram keyword (e.g. 'flowchart TD', 'sequenceDiagram', 'mindmap', etc.).",
+                },
+            },
+            "required": ["title", "type", "definition"],
+        },
+    },
+    {
         "name": "check_calendar",
         "description": (
             "Check the user's meeting schedule for today (or tomorrow / this_week) "
@@ -382,9 +412,14 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": (
             "List the top customer-feedback themes for the current project, "
             "ranked by how many distinct insights (customer quotes) they "
-            "contain. Each theme has an id, name, insight_count, and an "
-            "optional summary. Call this BEFORE proposing opportunities — "
-            "themes are the raw material."
+            "contain. Each theme includes: id, name, total insight_count, "
+            "first_seen (when this pain first appeared), last_active (most "
+            "recent new signal), this_quarter / last_quarter insight counts, "
+            "and trend_pct (% change quarter-over-quarter — positive means "
+            "growing, negative means fading). Use trend data to say things "
+            "like: 'Onboarding friction — 23 users, up 40% this quarter, "
+            "0 features shipped against it.' Call this BEFORE proposing "
+            "opportunities — themes are the raw material."
         ),
         "parameters": {
             "type": "object",
@@ -493,9 +528,17 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "promote_to_feature",
         "description": (
             "Promote one or more committed opportunities into a Feature — "
-            "a buildable initiative with optional PRD link. The user must "
-            "approve. Promotion auto-marks the linked opportunities as "
-            "'committed' so they drop off the active backlog."
+            "a buildable initiative that becomes a tracked bet in the decision "
+            "ledger. The user must approve.\n\n"
+            "BEFORE calling this, ask the PM for:\n"
+            "  1. rationale — WHY this, WHY now (the reasoning, not just RICE rank)\n"
+            "  2. predicted_metric — which north-star metric do they expect to move?\n"
+            "  3. predicted_delta — by how much? (e.g. '+15% 30-day activation')\n"
+            "  4. revisit_at — what date should we come back and check? (YYYY-MM-DD)\n\n"
+            "If the PM doesn't know the metric or delta, use your best estimate "
+            "and flag it as a guess. Always capture revisit_at — suggest 90 days "
+            "post-expected ship date if PM doesn't specify.\n\n"
+            "Promotion auto-marks linked opportunities as 'committed'."
         ),
         "parameters": {
             "type": "object",
@@ -507,12 +550,84 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "items": {"type": "string"},
                     "description": "Opportunity UUIDs this feature addresses.",
                 },
+                "rationale": {
+                    "type": "string",
+                    "description": "Why this feature, why now — the PM's reasoning beyond the RICE score.",
+                },
+                "predicted_metric": {
+                    "type": "string",
+                    "description": "The north-star or outcome metric this feature is expected to move (e.g. '30-day activation rate', 'support ticket volume').",
+                },
+                "predicted_delta": {
+                    "type": "string",
+                    "description": "The expected change in that metric (e.g. '+15%', '-30 tickets/week', '2x completion rate').",
+                },
+                "revisit_at": {
+                    "type": "string",
+                    "description": "Date (YYYY-MM-DD) to revisit and compare prediction to actual outcome. Suggest ~90 days post ship.",
+                },
                 "prd_document_id": {
                     "type": "string",
                     "description": "(optional) doc_id of the PRD document for this feature.",
                 },
             },
             "required": ["name", "opportunity_ids"],
+        },
+    },
+    # ── Outcome capture tools (Tier 3) ────────────────────────────────────────
+    {
+        "name": "get_features_due_for_revisit",
+        "description": (
+            "Return features whose revisit_at date has passed and whose outcome "
+            "has not yet been recorded. Call this at the start of any session "
+            "that might include a check-in, retrospective, or 'how did that "
+            "feature do?' conversation. If any are overdue, surface them to the "
+            "PM and ask for the actual outcome before continuing. Each row "
+            "includes feature name, predicted_metric, predicted_delta, "
+            "revisit_at, and days_overdue."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "record_outcome",
+        "description": (
+            "Record the actual outcome of a shipped feature against its "
+            "predicted bet. The user must approve.\n\n"
+            "Call this after the PM tells you what actually happened. "
+            "Capture:\n"
+            "  actual_delta — what actually changed (e.g. '+12%, short of the "
+            "+15% target' or 'no measurable change in 90 days')\n"
+            "  current_value — the numeric metric value if available "
+            "(e.g. 0.42 for 42% activation rate)\n"
+            "  notes — PM's reflection: what worked, what didn't, what to do "
+            "differently next time\n\n"
+            "After recording, tell the PM whether the bet was right, "
+            "directionally right, or missed — and what that implies."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "feature_id": {
+                    "type": "string",
+                    "description": "The feature UUID from get_features_due_for_revisit.",
+                },
+                "actual_delta": {
+                    "type": "string",
+                    "description": "Free-text description of what actually happened (e.g. '+12%, short of +15% target').",
+                },
+                "current_value": {
+                    "type": "number",
+                    "description": "(optional) Numeric metric value post-ship (e.g. 0.42 for 42%).",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "(optional) PM's reflection on why the outcome differed from prediction.",
+                },
+            },
+            "required": ["feature_id", "actual_delta"],
         },
     },
     # ── Jira sprint tools ─────────────────────────────────────────────────────
@@ -799,13 +914,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "handoff_to_analyst",
         "description": (
-            "Hand off to the data analyst specialist for CSV/Excel computation "
-            "(churn, revenue, NPS, aggregations). Pass the question and any "
-            "hint about which file to use. Set `return_to='pm'` when the user's "
-            "real request is multi-domain (e.g. 'main pain point + numbers + "
-            "recommendation') and you need the Analyst's findings back so YOU "
-            "can synthesise the final answer — otherwise the Analyst will reply "
-            "directly to the user with just the numbers."
+            "Hand off to the data analyst specialist for any CSV/Excel file analysis — "
+            "both numeric (churn, revenue, NPS, aggregations) AND text-heavy files "
+            "(reading feedback columns, categorising responses, finding themes, "
+            "counting values, summarising what's in a spreadsheet). Pass the question "
+            "and any hint about which file to use. Set `return_to='pm'` when the user's "
+            "real request is multi-domain and you need the Analyst's findings back so YOU "
+            "can synthesise the final answer — otherwise the Analyst will reply directly."
         ),
         "parameters": {
             "type": "object",
@@ -836,6 +951,39 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["intent"],
         },
     },
+    {
+        "name": "handoff_to_whiteboard",
+        "description": (
+            "Hand off to the Whiteboard specialist for diagrams, flow maps, "
+            "brainstorming, and mind maps. Use when the user asks for: flowcharts, "
+            "user flows, sequence diagrams, process maps, mind maps, journey maps, "
+            "brainstorming sessions, SWOT analysis, HMW exercises, or any visual "
+            "thinking artifact."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "description": "What the user wants to create or explore.",
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "The subject matter — e.g. 'user onboarding flow', 'Q3 strategy brainstorm'.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "(optional) Relevant context from workspace research to ground the diagram/brainstorm.",
+                },
+                "return_to": {
+                    "type": "string",
+                    "enum": ["pm"],
+                    "description": "(optional) Set to 'pm' if Whiteboard should hand findings back to PM for synthesis.",
+                },
+            },
+            "required": ["intent", "topic"],
+        },
+    },
 ]
 
 
@@ -844,6 +992,7 @@ REQUIRES_PERMISSION: set[str] = {
     "create_doc", "edit_doc", "create_folder",
     "save_opportunity", "promote_to_feature",
     "create_jira_issue", "create_jira_sprint",
+    "record_outcome",
 }
 
 # Tools that halt the agent loop after running so the user can interact with a
@@ -1369,6 +1518,20 @@ async def _render_ui(
     return {"summary": summary, "sources": []}
 
 
+async def _render_diagram(
+    ctx: dict,
+    title: str,
+    type: str,
+    definition: str,
+) -> dict:
+    """No-op server-side. The frontend reads the args off the tool_call event
+    and renders the Mermaid diagram itself."""
+    return {
+        "summary": f"Rendered '{title}' ({type} diagram). User is viewing it in the chat.",
+        "sources": [],
+    }
+
+
 async def _check_calendar(ctx: dict, timeframe: str = "today") -> dict:
     """Fetch the user's Google/Microsoft calendar events and highlight conflicts."""
     user_id = ctx.get("user_id")
@@ -1800,7 +1963,7 @@ async def _list_discovery_themes(ctx: dict, limit: int = 20) -> dict:
     try:
         res = (
             supabase.table("themes")
-            .select("id, name, description, insight_count, summary")
+            .select("id, name, description, insight_count, summary, created_at, updated_at")
             .eq("project_id", project_id)
             .eq("user_id", user_id)
             .order("insight_count", desc=True)
@@ -1821,13 +1984,63 @@ async def _list_discovery_themes(ctx: dict, limit: int = 20) -> dict:
             "sources": [],
         }
 
-    lines = [
-        f"- {r['name']} (id: {r['id']}) · {r['insight_count']} insight(s)"
-        + (f" · {r['summary']}" if r.get("summary") else "")
-        for r in rows
-    ]
+    # Compute current and previous quarter labels (YYYY-Q1 format).
+    now = datetime.now(timezone.utc)
+    cur_q = (now.month - 1) // 3 + 1
+    cur_period = f"{now.year}-Q{cur_q}"
+    prev_year, prev_q = (now.year - 1, 4) if cur_q == 1 else (now.year, cur_q - 1)
+    prev_period = f"{prev_year}-Q{prev_q}"
+
+    # Fetch per-theme, per-period insight counts in one query.
+    theme_ids = [r["id"] for r in rows]
+    period_counts: dict[str, dict[str, int]] = {tid: {} for tid in theme_ids}
+    try:
+        period_res = (
+            supabase.table("insights")
+            .select("theme_id, period")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .in_("theme_id", theme_ids)
+            .in_("period", [cur_period, prev_period])
+            .execute()
+        )
+        for row in period_res.data or []:
+            tid = row.get("theme_id")
+            p = row.get("period")
+            if tid and p:
+                period_counts.setdefault(tid, {})
+                period_counts[tid][p] = period_counts[tid].get(p, 0) + 1
+    except Exception as e:
+        logger.warning("Period count query failed (trend data unavailable): %s", e)
+
+    lines = []
+    for r in rows:
+        tid = r["id"]
+        this_q = period_counts.get(tid, {}).get(cur_period, 0)
+        last_q = period_counts.get(tid, {}).get(prev_period, 0)
+
+        if last_q > 0:
+            trend_pct = round((this_q - last_q) / last_q * 100)
+            trend_str = f"+{trend_pct}% vs last quarter" if trend_pct >= 0 else f"{trend_pct}% vs last quarter"
+        elif this_q > 0:
+            trend_str = "new this quarter"
+        else:
+            trend_str = "no signal this quarter"
+
+        first_seen = (r.get("created_at") or "")[:10]
+        last_active = (r.get("updated_at") or "")[:10]
+
+        line = (
+            f"- {r['name']} (id: {r['id']}) · {r['insight_count']} total insight(s)"
+            f" · first seen: {first_seen} · last active: {last_active}"
+            f" · {cur_period}: {this_q} insight(s), {prev_period}: {last_q} ({trend_str})"
+        )
+        if r.get("summary"):
+            line += f"\n  Summary: {r['summary']}"
+        lines.append(line)
+
     return {
-        "summary": f"Found {len(rows)} theme(s).",
+        "summary": f"Found {len(rows)} theme(s). Current quarter: {cur_period}.",
         "data": "\n".join(lines),
         "sources": [],
     }
@@ -2063,6 +2276,10 @@ async def _promote_to_feature(
     name: str,
     opportunity_ids: list[str],
     summary: str | None = None,
+    rationale: str | None = None,
+    predicted_metric: str | None = None,
+    predicted_delta: str | None = None,
+    revisit_at: str | None = None,
     prd_document_id: str | None = None,
 ) -> dict:
     project_id = ctx.get("project_id")
@@ -2079,6 +2296,10 @@ async def _promote_to_feature(
         "name": name,
         "summary": summary,
         "opportunity_ids": opportunity_ids,
+        "rationale": rationale,
+        "predicted_metric": predicted_metric,
+        "predicted_delta": predicted_delta,
+        "revisit_at": revisit_at,
         "prd_document_id": prd_document_id,
     }
     payload = {k: v for k, v in payload.items() if v is not None}
@@ -2103,8 +2324,34 @@ async def _promote_to_feature(
     except Exception as e:
         logger.warning("Could not bump opportunity status on promotion: %s", e)
 
+    # Auto-create a metrics row so Tier 3 (outcome capture) has a target to
+    # update on revisit_at. Only created when the PM provided a predicted_metric.
+    if predicted_metric:
+        try:
+            supabase.table("metrics").insert({
+                "feature_id": feature["id"],
+                "user_id": user_id,
+                "name": predicted_metric,
+                "predicted_delta": predicted_delta,
+            }).execute()
+        except Exception as e:
+            logger.warning("Could not auto-create metrics row for feature %s: %s", feature["id"], e)
+
+    ledger_parts = []
+    if rationale:
+        ledger_parts.append("Rationale captured.")
+    if predicted_metric and predicted_delta:
+        ledger_parts.append(f"Bet: {predicted_delta} on {predicted_metric}.")
+    if revisit_at:
+        ledger_parts.append(f"Revisit: {revisit_at}.")
+
+    summary_str = (
+        f"Created feature '{name}' (id: {feature['id']}) from "
+        f"{len(opportunity_ids)} opportunity(ies)."
+        + (f" {' '.join(ledger_parts)}" if ledger_parts else "")
+    )
     return {
-        "summary": f"Created feature '{name}' (id: {feature['id']}) from {len(opportunity_ids)} opportunity(ies).",
+        "summary": summary_str,
         "sources": [{
             "id": f"feature:{feature['id']}",
             "kind": "feature",
@@ -2452,6 +2699,159 @@ async def _get_jira_issue(ctx: dict, issue_key: str) -> dict:
     }
 
 
+async def _get_features_due_for_revisit(ctx: dict) -> dict:
+    from datetime import date
+
+    project_id = ctx.get("project_id")
+    user_id = ctx["user_id"]
+    if not project_id:
+        return {"summary": "No active project — revisit check unavailable.", "sources": []}
+
+    supabase = get_supabase()
+    today = date.today().isoformat()
+
+    # Features with a revisit date that has passed and aren't archived.
+    try:
+        feat_res = (
+            supabase.table("features")
+            .select("id, name, predicted_metric, predicted_delta, revisit_at, status")
+            .eq("project_id", project_id)
+            .eq("user_id", user_id)
+            .lte("revisit_at", today)
+            .neq("status", "archived")
+            .order("revisit_at")
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"Revisit query failed: {e}", "sources": []}
+
+    features = feat_res.data or []
+    if not features:
+        return {
+            "summary": "No features are currently due for a revisit.",
+            "sources": [],
+        }
+
+    # Filter to only those with no recorded outcome (metrics.current IS NULL).
+    feature_ids = [f["id"] for f in features]
+    recorded: set[str] = set()
+    try:
+        met_res = (
+            supabase.table("metrics")
+            .select("feature_id, current")
+            .in_("feature_id", feature_ids)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        for row in met_res.data or []:
+            if row.get("current") is not None:
+                recorded.add(row["feature_id"])
+    except Exception as e:
+        logger.warning("Metrics check failed during revisit query: %s", e)
+
+    pending = [f for f in features if f["id"] not in recorded]
+    if not pending:
+        return {
+            "summary": "All due features have already had their outcomes recorded.",
+            "sources": [],
+        }
+
+    lines = []
+    for f in pending:
+        revisit = f.get("revisit_at") or "?"
+        days_over = (date.today() - date.fromisoformat(revisit)).days if revisit != "?" else 0
+        overdue_str = f"{days_over} day(s) overdue" if days_over > 0 else "due today"
+        line = (
+            f"- {f['name']} (id: {f['id']}) · {overdue_str}"
+            + (f" · predicted: {f['predicted_delta']} on {f['predicted_metric']}" if f.get("predicted_metric") else "")
+            + f" · revisit_at: {revisit}"
+        )
+        lines.append(line)
+
+    return {
+        "summary": f"{len(pending)} feature(s) due for revisit.",
+        "data": "\n".join(lines),
+        "sources": [],
+    }
+
+
+async def _record_outcome(
+    ctx: dict,
+    feature_id: str,
+    actual_delta: str,
+    current_value: float | None = None,
+    notes: str | None = None,
+) -> dict:
+    user_id = ctx["user_id"]
+    supabase = get_supabase()
+
+    # Verify the feature exists and belongs to this user.
+    try:
+        feat_res = (
+            supabase.table("features")
+            .select("id, name, predicted_metric, predicted_delta, revisit_at")
+            .eq("id", feature_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as e:
+        return {"summary": f"Feature lookup failed: {e}", "sources": []}
+
+    if not feat_res.data:
+        return {"summary": "Feature not found or access denied.", "sources": []}
+
+    feature = feat_res.data[0]
+
+    # Find the metric row; create one if the PM skipped it during promotion.
+    metric_update = {
+        "actual_delta": actual_delta,
+        "measured_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if current_value is not None:
+        metric_update["current"] = current_value
+    if notes:
+        metric_update["source"] = notes  # repurpose source as notes field
+
+    try:
+        met_res = (
+            supabase.table("metrics")
+            .select("id")
+            .eq("feature_id", feature_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        existing = met_res.data or []
+    except Exception as e:
+        return {"summary": f"Metrics lookup failed: {e}", "sources": []}
+
+    try:
+        if existing:
+            supabase.table("metrics").update(metric_update).eq("id", existing[0]["id"]).execute()
+        else:
+            metric_update["feature_id"] = feature_id
+            metric_update["user_id"] = user_id
+            metric_update["name"] = feature.get("predicted_metric") or "outcome"
+            supabase.table("metrics").insert(metric_update).execute()
+    except Exception as e:
+        return {"summary": f"Outcome save failed: {e}", "sources": []}
+
+    # Build a calibration verdict so the agent can give the PM signal.
+    predicted = feature.get("predicted_delta") or ""
+    verdict_parts = [f"Outcome recorded for '{feature['name']}'."]
+    if predicted:
+        verdict_parts.append(f"Predicted: {predicted}. Actual: {actual_delta}.")
+
+    return {
+        "summary": " ".join(verdict_parts),
+        "data": f"feature_id: {feature_id}\npredicted: {predicted}\nactual: {actual_delta}",
+        "sources": [{
+            "id": f"feature:{feature_id}",
+            "kind": "feature",
+            "title": feature["name"],
+        }],
+    }
+
+
 async def _handoff_noop(ctx: dict, **kwargs) -> dict:
     """Safety net. The agent loop intercepts handoff_to_* tools by name prefix
     and never reaches this executor — if it does, something has gone wrong."""
@@ -2504,12 +2904,15 @@ TOOL_EXECUTORS = {
     "edit_doc": _edit_doc,
     "create_folder": _create_folder,
     "render_ui": _render_ui,
+    "render_diagram": _render_diagram,
     "critique_design": _critique_design,
     "list_discovery_themes": _list_discovery_themes,
     "list_discovery_insights": _list_discovery_insights,
     "list_opportunities": _list_opportunities,
     "save_opportunity": _save_opportunity,
     "promote_to_feature": _promote_to_feature,
+    "get_features_due_for_revisit": _get_features_due_for_revisit,
+    "record_outcome": _record_outcome,
     # Jira tools
     "list_jira_boards":   _list_jira_boards,
     "fetch_jira_sprint":  _fetch_jira_sprint,
@@ -2523,4 +2926,5 @@ TOOL_EXECUTORS = {
     "handoff_to_analyst": _handoff_noop,
     "handoff_to_calendar": _handoff_noop,
     "handoff_to_opportunity": _handoff_noop,
+    "handoff_to_whiteboard": _handoff_noop,
 }

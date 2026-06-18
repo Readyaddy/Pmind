@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock, Lightbulb, Rocket, GitBranch } from "lucide-react";
+import { Check, X, ChevronRight, FilePlus, Pencil, FolderPlus, Lock, Lightbulb, Rocket, GitBranch, Target } from "lucide-react";
 import type { ToolCall } from "./ToolCallBlock";
 
 const TOOL_META: Record<string, { label: string; icon: React.ElementType }> = {
@@ -10,6 +10,7 @@ const TOOL_META: Record<string, { label: string; icon: React.ElementType }> = {
   create_folder:      { label: "Create folder",     icon: FolderPlus },
   save_opportunity:   { label: "Save opportunity",  icon: Lightbulb },
   promote_to_feature: { label: "Promote to feature", icon: Rocket },
+  record_outcome:     { label: "Record outcome",    icon: Target },
   create_jira_issue:  { label: "Create Jira issue", icon: GitBranch },
   create_jira_sprint: { label: "Create Jira sprint", icon: GitBranch },
 };
@@ -22,6 +23,9 @@ function previewArgs(name: string, args: Record<string, unknown>): string {
   if (name === "promote_to_feature") {
     const ids = Array.isArray(args.opportunity_ids) ? (args.opportunity_ids as unknown[]).length : 0;
     return `${String(args.name ?? "(unnamed feature)")} · ${ids} opportunity(ies)`;
+  }
+  if (name === "record_outcome") {
+    return String(args.actual_delta ?? "(no delta specified)");
   }
   if (name === "create_jira_issue") {
     const parts = [String(args.project_key ?? ""), String(args.title ?? "(untitled)")].filter(Boolean);
@@ -88,6 +92,28 @@ export default function PermissionPrompt({
           Array.isArray(call.args.evidence_insight_ids)
             ? `\n\nEvidence: ${(call.args.evidence_insight_ids as unknown[]).length} customer quote(s)`
             : "",
+        ].join("")
+    : call.name === "promote_to_feature"
+      ? [
+          call.args.summary ? `${call.args.summary}` : "",
+          call.args.rationale ? `\n\nWhy: ${call.args.rationale}` : "",
+          call.args.predicted_metric && call.args.predicted_delta
+            ? `\n\nBet: ${call.args.predicted_delta} on ${call.args.predicted_metric}`
+            : call.args.predicted_metric
+            ? `\n\nMetric: ${call.args.predicted_metric}`
+            : "",
+          call.args.revisit_at ? `\nRevisit: ${call.args.revisit_at}` : "",
+          Array.isArray(call.args.opportunity_ids)
+            ? `\n\nAddresses: ${(call.args.opportunity_ids as unknown[]).length} opportunity(ies)`
+            : "",
+        ].join("")
+    : call.name === "record_outcome"
+      ? [
+          `Actual outcome: ${String(call.args.actual_delta ?? "")}`,
+          call.args.current_value != null
+            ? `\nMeasured value: ${call.args.current_value}`
+            : "",
+          call.args.notes ? `\n\nNotes: ${call.args.notes}` : "",
         ].join("")
       : "";
 
