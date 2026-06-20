@@ -449,12 +449,15 @@ async def run_agent_loop(
         # sequence.
         synth_parts: list[str] = []
         try:
-            async for ev in llm.stream_with_tools(
+            # Use the dedicated tool-free text method. (Calling stream_with_tools
+            # with tools=[] breaks the Gemini provider, which wraps tools into a
+            # Tool(function_declarations=[]) that the API rejects.) stream_text
+            # streams a plain text answer from the tool results already gathered.
+            async for ev in llm.stream_text(
                 system=system,
                 messages=canonical_msgs,
-                tools=[],            # no tools -> model must reply in text
                 model=model,
-                tool_choice=None,
+                disable_thinking=True,
             ):
                 if ev.get("type") == "text":
                     delta = ev.get("delta", "")
