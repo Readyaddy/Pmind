@@ -164,12 +164,12 @@ export default function LandingPage() {
             <span style={{ fontFamily:S.serif, fontWeight:700, fontSize:17, letterSpacing:"-0.02em" }}>PMind</span>
             <span style={{ marginLeft:4, padding:"2px 8px", background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:100, fontSize:9, fontWeight:700, letterSpacing:"0.10em", textTransform:"uppercase", color:S.amberHi }}>Private Beta</span>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:24 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:20 }}>
             <a href="#product-brain" className="nav-link">Product Brain</a>
             <a href="#discovery"     className="nav-link">Discovery</a>
             <a href="#track-record"  className="nav-link">Track Record</a>
             <a href="#pricing"       className="nav-link">Pricing</a>
-            <Link href="/sign-in" style={{ padding:"7px 18px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, color:"#fff", fontSize:13, fontWeight:600, textDecoration:"none", boxShadow:"0 2px 12px rgba(217,119,6,0.22)" }}>
+            <Link href="/sign-in" style={{ padding:"7px 16px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, color:"#fff", fontSize:13, fontWeight:600, textDecoration:"none", boxShadow:"0 2px 12px rgba(217,119,6,0.22)", whiteSpace:"nowrap" }}>
               Get started free →
             </Link>
           </div>
@@ -186,7 +186,7 @@ export default function LandingPage() {
           <p style={{ fontSize:18, color:S.text2, maxWidth:580, margin:"0 auto 36px", lineHeight:1.68, fontWeight:400 }}>
             PMind learns your product, remembers every decision you make, and tells you whether your bets actually paid off — so discovery, specs, and prioritization run on your real track record, not vibes.
           </p>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, flexWrap:"wrap", padding:"0 8px" }}>
             <Link href="/sign-in" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"13px 28px", background:"linear-gradient(145deg,#D97706 0%,#92400e 100%)", borderRadius:6, color:"#fff", fontSize:14, fontWeight:600, textDecoration:"none", boxShadow:"0 4px 20px rgba(217,119,6,0.28)" }}>
               Get started free →
             </Link>
@@ -230,8 +230,8 @@ export default function LandingPage() {
                   { name:"Pricing A/B test",     predicted:"+8% conversion",          actual:"+2%",    hit:false, note:"Miss" },
                   { name:"Export performance",   predicted:"−40% support tickets",    actual:"−38%",   hit:true,  note:"Hit" },
                 ].map((row, i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 0", borderBottom:"1px solid rgba(255,255,255,0.038)", flexWrap:"wrap" as const }}>
-                    <div style={{ flex:"0 0 180px", fontSize:12.5, fontWeight:500, color:S.text }}>{row.name}</div>
+                  <div key={i} className="lp-bet-row">
+                    <div className="lp-bet-name" style={{ color:S.text }}>{row.name}</div>
                     <div style={{ flex:1, display:"flex", alignItems:"center", gap:6, minWidth:0 }}>
                       <span style={{ fontSize:11, color:S.text3, fontFamily:S.mono }}>predicted</span>
                       <span style={{ fontSize:12, color:S.text2 }}>{row.predicted}</span>
@@ -282,7 +282,7 @@ export default function LandingPage() {
             <span style={{ fontFamily:S.mono, fontSize:9, color:S.amber, letterSpacing:"0.14em", textTransform:"uppercase" }}>01 · Ground</span>
             <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.05)" }} />
           </div>
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64, alignItems:"start" }}>
+          <div className="lp-reveal lp-two-col">
             <div>
               <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.6vw,42px)", fontWeight:700, lineHeight:1.12, letterSpacing:"-0.025em", marginBottom:20 }}>
                 It knows<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>your product.</em>
@@ -392,7 +392,7 @@ export default function LandingPage() {
             <span style={{ fontFamily:S.mono, fontSize:9, color:S.amber, letterSpacing:"0.14em", textTransform:"uppercase" }}>02 · Discover</span>
             <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.05)" }} />
           </div>
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64, alignItems:"start" }}>
+          <div className="lp-reveal lp-two-col">
             <div>
               <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.6vw,42px)", fontWeight:700, lineHeight:1.12, letterSpacing:"-0.025em", marginBottom:20 }}>
                 It remembers what<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>users keep saying.</em>
@@ -442,7 +442,7 @@ export default function LandingPage() {
             <span style={{ fontFamily:S.mono, fontSize:9, color:S.amber, letterSpacing:"0.14em", textTransform:"uppercase" }}>03 · Decide</span>
             <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.05)" }} />
           </div>
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64, alignItems:"start" }}>
+          <div className="lp-reveal lp-two-col">
             {/* Receipt card */}
             <div style={{ background:"rgba(14,14,14,0.9)", border:"1px solid rgba(217,119,6,0.14)", borderRadius:7, overflow:"hidden", order:0 }}>
               <div style={{ padding:"11px 16px", borderBottom:"1px solid rgba(217,119,6,0.08)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -489,7 +489,7 @@ export default function LandingPage() {
             <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.05)" }} />
             <span style={{ fontFamily:S.mono, fontSize:9, color:S.amberHi, letterSpacing:"0.10em", textTransform:"uppercase", padding:"2px 8px", background:"rgba(217,119,6,0.10)", border:S.amberBorder, borderRadius:100 }}>The differentiator</span>
           </div>
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64, alignItems:"start" }}>
+          <div className="lp-reveal lp-two-col">
             <div>
               <h2 style={{ fontFamily:S.serif, fontSize:"clamp(28px,3.6vw,42px)", fontWeight:700, lineHeight:1.12, letterSpacing:"-0.025em", marginBottom:20 }}>
                 It tells you if<br /><em style={{ fontStyle:"italic", fontWeight:400, color:S.amberHi }}>you were right.</em>
@@ -509,7 +509,7 @@ export default function LandingPage() {
               </div>
               <div style={{ padding:"16px 18px" }}>
                 <div style={{ fontFamily:S.serif, fontSize:14, fontWeight:700, marginBottom:14 }}>Checkout flow redesign</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+                <div className="lp-two-col-sm">
                   {[
                     { label:"You predicted", value:"+15% activation", color:S.text2 },
                     { label:"What happened", value:"+12% activation", color:"#4ade80" },
@@ -561,9 +561,8 @@ export default function LandingPage() {
               You don&apos;t need months of data to get value. The loop opens the moment you start.
             </p>
           </div>
-          <div className="lp-reveal" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:2, position:"relative" }}>
-            {/* Connector line */}
-            <div style={{ position:"absolute", top:28, left:"16.5%", right:"16.5%", height:1, background:"linear-gradient(90deg,rgba(217,119,6,0.3),rgba(217,119,6,0.6),rgba(217,119,6,0.3))", zIndex:0 }} />
+          <div className="lp-reveal lp-timeline-grid">
+            <div className="lp-timeline-line" />
             {[
               { time:"Week 1",   title:"Grounded specs",     desc:"Product Brain is set. Every PRD, ticket, and brief reflects your real strategy — no re-explaining, no generic output.",       dot:"rgba(217,119,6,0.5)" },
               { time:"Month 3",  title:"Signal detection",   desc:"Recurring pains surface across batches. PMind tells you what's growing, what's fading, and what has no shipped solution yet.", dot:"rgba(217,119,6,0.8)" },
@@ -611,7 +610,7 @@ export default function LandingPage() {
 
       {/* ── Pricing + FAQ ─────────────────────────────────────────────────────── */}
       <section id="pricing" style={{ padding:"88px 0", position:"relative", zIndex:1 }}>
-        <div style={{ maxWidth:1060, margin:"0 auto", padding:"0 28px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:64, alignItems:"start" }}>
+        <div style={{ maxWidth:1060, margin:"0 auto", padding:"0 28px" }} className="lp-pricing-faq">
           {/* Pricing */}
           <div className="lp-reveal">
             <div className="pricing-card glass-amber" style={{ padding:"36px 32px" }}>

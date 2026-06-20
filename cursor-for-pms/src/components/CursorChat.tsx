@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useUser } from "@clerk/nextjs";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -239,6 +240,12 @@ export default function CursorChat() {
     projectId ? s.contexts[projectId] ?? "" : "",
   );
 
+  // Time-of-day greeting for the co-pilot empty state
+  const { user } = useUser();
+  const firstName = user?.firstName ?? "";
+  const hour = new Date().getHours();
+  const greeting = `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}${firstName ? `, ${firstName}` : ""}`;
+
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -276,6 +283,8 @@ export default function CursorChat() {
     const handler = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
       if (text) setInput(text);
+      // Bring the composer into focus (also used as a "talk to co-pilot" entry point)
+      requestAnimationFrame(() => textareaRef.current?.focus());
     };
     window.addEventListener("pmind:prefill-chat", handler);
     return () => window.removeEventListener("pmind:prefill-chat", handler);
@@ -1020,10 +1029,10 @@ export default function CursorChat() {
             </div>
             <div className="space-y-1.5">
               <h3 className="font-serif text-[18px] font-semibold tracking-tight text-black/85 dark:text-ivory leading-tight">
-                Your PM co-pilot
+                {greeting}
               </h3>
               <p className="text-[12.5px] text-black/45 dark:text-white/45 leading-relaxed max-w-[300px]">
-                Searches your research, reads your docs, and drafts artifacts — grounded in your actual data.
+                I&apos;m your PM co-pilot — I search your research, read your docs, and draft artifacts grounded in your actual data.
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full mt-1">

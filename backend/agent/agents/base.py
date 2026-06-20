@@ -182,6 +182,7 @@ async def run_agent_loop(
         return
 
     final_text_parts: list[str] = []
+    executed_any_tool = False  # gates the empty-output synthesis fallback
 
     # ── Pre-loop: resolve pending tool_calls from a previous run ─────────────
     pending = _find_pending_tool_calls(canonical_msgs)
@@ -231,6 +232,7 @@ async def run_agent_loop(
 
         if tool_blocks:
             canonical_msgs.append({"role": "tool", "content": tool_blocks})
+            executed_any_tool = True
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     for step in range(max_steps):
@@ -242,36 +244,18 @@ async def run_agent_loop(
 
         last_role = canonical_msgs[-1]["role"] if canonical_msgs else None
 
-        # Determine the name of the last tool that returned a result.
-        # Used to decide whether to force a follow-up tool call.
-        last_tool_name: str | None = None
-        if last_role == "tool":
-            for b in (canonical_msgs[-1].get("content") or []):
-                if b.get("type") == "tool_result":
-                    last_tool_name = b.get("name") or ""
-                    break
+        is_first_step = step == 0 and bool(tools) and last_role != "tool"
 
-        # Tools that produce a final artifact — no forced follow-up needed.
-        # After render_ui / create_doc the agent should just output text and finish.
-        _TERMINAL_TOOLS = {
-            "render_ui", "create_doc", "edit_doc",
-            "save_opportunity", "promote_to_feature",
-            "create_jira_issue", "create_jira_sprint",
-            "design_brief",  # waits for user input, don't force another call
-        }
-
-        # Force a tool call when:
-        # A) force_tool_first=True AND step 0 (Designer must always act first)
-        # B) Last message was a tool result from a READ-type operation — forces the
-        #    agent to act on the data rather than just outputting text and stopping.
-        #    This specifically fixes PM stopping after read() without calling handoff.
-        _READ_TOOLS = {"read", "search_workspace", "list_docs"}
-
-        is_first_step   = step == 0 and bool(tools) and last_role != "tool"
-        just_got_read   = (last_role == "tool" and bool(tools)
-                           and last_tool_name in _READ_TOOLS)
-
-        tool_choice = "any" if (force_tool_first and is_first_step) or just_got_read else None
+        # Let the model decide each turn whether to call another tool or write its
+        # final answer. We previously forced tool_choice="any" after every read-type
+        # tool (read / search_workspace / list_docs) to stop the PM "reading then
+        # doing nothing". That backfired: on read-and-summarize requests the model
+        # was never permitted to emit text, so it kept being forced into more tool
+        # calls until max_steps was hit and the loop returned EMPTY output. Letting
+        # the model choose fixes that; the empty-output fallback below is the safety
+        # net. The only remaining forced case is the Designer, which must act before
+        # producing any text.
+        tool_choice = "any" if (force_tool_first and is_first_step) else None
 
         llm_gen = llm.stream_with_tools(
             system=system,
@@ -430,6 +414,7 @@ async def run_agent_loop(
             })
             tool_blocks.append(_result_block(call, result))
         canonical_msgs.append({"role": "tool", "content": tool_blocks})
+        executed_any_tool = True
 
         # ── Stops-for-user-input gate — halt deterministically ───────────────
         # Tools like design_brief render a frontend form; the user's next
@@ -446,5 +431,47 @@ async def run_agent_loop(
             )
             return
 
-    logger.info("Agent loop complete — user=%s steps=%d", ctx.get("user_id"), step + 1)
+    # -- Empty-output safety net ----------------------------------------------
+    # The loop ended naturally (broke out, or exhausted max_steps) without an
+    # early return for handoff / permission / user-input. If the agent ran tools
+    # but never produced any text, the user would see a blank reply. Make one
+    # final, tool-free LLM call so it must synthesize a written answer from the
+    # tool results it already gathered.
+    if executed_any_tool and not "".join(final_text_parts).strip():
+        logger.info(
+            "Empty output after tool use - running synthesis fallback (user=%s)",
+            ctx.get("user_id"),
+        )
+        # canonical_msgs already ends with the tool results. With no tools
+        # available the model can only respond in text. We deliberately do NOT
+        # append an extra user nudge: some providers map tool results to a user
+        # turn, and a second user message would be an invalid consecutive-user
+        # sequence.
+        synth_parts: list[str] = []
+        try:
+            async for ev in llm.stream_with_tools(
+                system=system,
+                messages=canonical_msgs,
+                tools=[],            # no tools -> model must reply in text
+                model=model,
+                tool_choice=None,
+            ):
+                if ev.get("type") == "text":
+                    delta = ev.get("delta", "")
+                    synth_parts.append(delta)
+                    final_text_parts.append(delta)
+                    yield _sse("text", {"delta": delta})
+                elif ev.get("type") == "turn_end":
+                    break
+        except Exception as e:
+            logger.error("Synthesis fallback failed (user=%s): %s", ctx.get("user_id"), e)
+
+        synth_text = "".join(synth_parts).strip()
+        if synth_text:
+            canonical_msgs.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": synth_text}],
+            })
+
+    logger.info("Agent loop complete - user=%s steps=%d", ctx.get("user_id"), step + 1)
     yield _loop_end("".join(final_text_parts))
