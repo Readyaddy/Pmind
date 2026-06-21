@@ -231,12 +231,16 @@ async def run_agent_loop(
                 # Approved — fall through to execute
 
             result = await _execute_call(call, ctx)
-            yield _sse("tool_result", {
+            sse_payload: dict = {
                 "id": call["id"],
                 "summary": result.get("summary", ""),
                 "sources": result.get("sources", []),
                 "payload": result.get("critique"),
-            })
+            }
+            if result.get("new_project_id"):
+                sse_payload["new_project_id"] = result["new_project_id"]
+                sse_payload["new_project_name"] = result.get("new_project_name", "")
+            yield _sse("tool_result", sse_payload)
             tool_blocks.append(_result_block(call, result))
 
         if tool_blocks:

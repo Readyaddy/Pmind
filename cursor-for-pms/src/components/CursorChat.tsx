@@ -20,7 +20,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
 import { useEditorStore } from "@/store/editorStore";
 import { useProductBrain } from "@/store/productBrain";
@@ -232,6 +232,7 @@ function isPermissionVisual(call: ToolCall): boolean {
 
 export default function CursorChat() {
   const params = useParams();
+  const router = useRouter();
   const { projectId: activeProjectId } = useActiveProject();
   const projectId = (params?.projectId as string | undefined) ?? activeProjectId ?? undefined;
   const { userId } = useCustomAuth();
@@ -590,6 +591,11 @@ export default function CursorChat() {
               );
               if (matched && matched.kind === "tool" && TREE_REFRESH_TOOLS.has(matched.call.name)) {
                 sawTreeMutation = true;
+              }
+              // If the agent auto-created a project, navigate into it
+              if (payload.new_project_id) {
+                const newProjId = payload.new_project_id as string;
+                router.push(`/projects/${newProjId}`);
               }
               return {
                 ...m,

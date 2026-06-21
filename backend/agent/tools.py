@@ -1279,13 +1279,35 @@ async def _search_docs(ctx: dict, query: str) -> dict:
     }
 
 
+async def _auto_create_project(user_id: str, name: str) -> str | None:
+    """Create a project and return its id, or None on failure."""
+    supabase = get_supabase()
+    try:
+        res = (
+            supabase.table("projects")
+            .insert({"user_id": user_id, "name": name, "color": "#D97706"})
+            .execute()
+        )
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        return None
+
+
 async def _create_doc(
     ctx: dict, title: str, content: str, folder_id: str | None = None
 ) -> dict:
     project_id = ctx.get("project_id")
     user_id = ctx["user_id"]
+
+    auto_created_project: str | None = None
     if not project_id:
-        return {"summary": "No active project — cannot create doc.", "sources": []}
+        # Derive a project name from the document title (strip common suffixes like "Agenda", "Notes", etc.)
+        project_name = (title or "My Project").strip()
+        new_id = await _auto_create_project(user_id, project_name)
+        if not new_id:
+            return {"summary": "No active project and auto-creation failed — cannot create doc.", "sources": []}
+        project_id = new_id
+        auto_created_project = project_name
 
     supabase = get_supabase()
 
@@ -1323,13 +1345,15 @@ async def _create_doc(
     if not res.data:
         return {"summary": "Create returned no row.", "sources": []}
     doc = res.data[0]
+    prefix = f"Auto-created project '{auto_created_project}' and " if auto_created_project else ""
     return {
-        "summary": f"Created '{doc['title']}' (id: {doc['id']}).",
+        "summary": f"{prefix}Created '{doc['title']}' (id: {doc['id']}, project_id: {project_id}).",
         "sources": [{
             "id": f"doc:{doc['id']}",
             "kind": "doc",
             "title": doc["title"] or "Untitled",
         }],
+        **({"new_project_id": project_id, "new_project_name": auto_created_project} if auto_created_project else {}),
     }
 
 
