@@ -1,0 +1,24 @@
+{
+  "projectId": "ed0993de-a4c7-4e0b-8e17-95164796c63f",
+  "pkg": "cursor-for-pms",
+  "shape": "package",
+  "buildCmd": "cd cursor-for-pms && npx tailwindcss -i ./src/app/globals.css -o ./dist-ds/styles.css --config ./tailwind.config.ts",
+  "cssEntry": "dist-ds/styles.css",
+  "tsconfig": "tsconfig.json",
+  "entry": "cursor-for-pms/dist-ds/index.ts",
+  "runtimeFontPrefixes": ["Inter", "Playfair Display", "JetBrains Mono"],
+  "readmeHeader": ".design-sync/conventions.md",
+  "componentSrcMap": {
+    "ThemeProvider": "src/components/ThemeProvider.tsx",
+    "ThemeToggle": "src/components/ThemeToggle.tsx",
+    "ConfirmDialog": "src/components/ConfirmDialog.tsx",
+    "FileTreeItem": "src/components/FileTreeItem.tsx",
+    "CitationChip": "src/components/agent/CitationChip.tsx",
+    "CritiqueCard": "src/components/agent/CritiqueCard.tsx",
+    "DesignBriefCard": "src/components/agent/DesignBriefCard.tsx",
+    "ToolCallBlock": "src/components/agent/ToolCallBlock.tsx",
+    "PermissionPrompt": "src/components/agent/PermissionPrompt.tsx",
+    "MentionPicker": "src/components/agent/MentionPicker.tsx",
+    "DesignViewer": "src/components/agent/DesignViewer.tsx"
+  }
+}

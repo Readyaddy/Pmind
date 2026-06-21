@@ -25,6 +25,8 @@ from .agents import calendar as calendar_agent
 from .agents import opportunity as opportunity_agent
 from .agents import whiteboard as whiteboard_agent
 
+import debug_log
+
 logger = logging.getLogger(__name__)
 
 
@@ -264,6 +266,11 @@ async def run_orchestrated(
     final_texts: list[str] = []
     handoffs_used = 0
 
+    debug_log.log_event(
+        "orchestrator_route", user_id=user_id, project_id=project_id,
+        start_agent=current, last_user_text=last_user_text,
+    )
+
     while True:
         agent_mod = AGENT_MODULES[current]
 
@@ -333,4 +340,6 @@ async def run_orchestrated(
             final_texts.append(loop_result["final_text"])
         break
 
-    yield _sse("done", {"final_text": "\n\n".join(t for t in final_texts if t)})
+    _final = "\n\n".join(t for t in final_texts if t)
+    debug_log.log_event("orchestrator_done", user_id=user_id, final_text=_final)
+    yield _sse("done", {"final_text": _final})

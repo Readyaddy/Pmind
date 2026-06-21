@@ -8,6 +8,8 @@ from google.genai import types as gtypes
 from .base import LLMProvider
 from .types import Message, StreamEvent, Tool
 
+import debug_log
+
 _RETRYABLE_STATUS = {503, 429}  # service unavailable, rate limit
 _RETRY_DELAY = 2.0              # seconds to wait before one retry
 
@@ -115,6 +117,7 @@ class GeminiProvider(LLMProvider):
 
         stream_calls: list[tuple[str, dict]] = []  # (name, args) in order
 
+        finish_reason = None
         for _attempt in range(2):
           try:
             stream_calls = []
@@ -124,6 +127,8 @@ class GeminiProvider(LLMProvider):
                 config=config,
             ):
                 cand = (chunk.candidates or [None])[0]
+                if cand is not None and getattr(cand, "finish_reason", None) is not None:
+                    finish_reason = cand.finish_reason
                 if not cand or not cand.content or not cand.content.parts:
                     try:
                         text = chunk.text
@@ -153,6 +158,10 @@ class GeminiProvider(LLMProvider):
 
         if not stream_calls:
             # Pure text response — already fully streamed, no second call needed.
+            debug_log.log_event(
+                "gemini_text_turn", model=model or self.model,
+                finish_reason=str(finish_reason), tool_choice=tool_choice,
+            )
             yield {"type": "turn_end", "stop_reason": "end_turn", "error": None}
             return
 

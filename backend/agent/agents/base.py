@@ -34,6 +34,8 @@ from ..tools import (
     TOOL_EXECUTORS,
 )
 
+import debug_log
+
 logger = logging.getLogger(__name__)
 
 _RETRY_DELAY_SECS = 2.0
@@ -184,6 +186,13 @@ async def run_agent_loop(
     final_text_parts: list[str] = []
     executed_any_tool = False  # gates the empty-output synthesis fallback
 
+    debug_log.log_event(
+        "loop_start",
+        user_id=ctx.get("user_id"), project_id=ctx.get("project_id"),
+        tools=[t.get("name") for t in tools],
+        system=system, messages=canonical_msgs,
+    )
+
     # ── Pre-loop: resolve pending tool_calls from a previous run ─────────────
     pending = _find_pending_tool_calls(canonical_msgs)
     if pending:
@@ -257,6 +266,10 @@ async def run_agent_loop(
         # producing any text.
         tool_choice = "any" if (force_tool_first and is_first_step) else None
 
+        debug_log.log_event(
+            "llm_request", step=step + 1, tool_choice=tool_choice,
+            n_messages=len(canonical_msgs),
+        )
         llm_gen = llm.stream_with_tools(
             system=system,
             messages=canonical_msgs,
@@ -340,6 +353,12 @@ async def run_agent_loop(
         if assistant_blocks:
             canonical_msgs.append({"role": "assistant", "content": assistant_blocks})
 
+        debug_log.log_event(
+            "llm_turn", step=step + 1, stop_reason=stop_reason,
+            text="".join(current_text_parts), error=error_msg,
+            tool_calls=[{"name": c["name"], "args": c.get("args")} for c in turn_calls],
+        )
+
         if stop_reason == "error":
             err = error_msg or "Provider error"
             # Retry once on transient provider errors before surfacing to the user
@@ -406,6 +425,11 @@ async def run_agent_loop(
         tool_blocks = []
         for call in turn_calls:
             result = await _execute_call(call, ctx)
+            debug_log.log_event(
+                "tool_result", name=call["name"], args=call.get("args"),
+                summary=result.get("summary"), data=result.get("data"),
+                sources=result.get("sources"),
+            )
             yield _sse("tool_result", {
                 "id": call["id"],
                 "summary": result.get("summary", ""),
@@ -469,6 +493,7 @@ async def run_agent_loop(
         except Exception as e:
             logger.error("Synthesis fallback failed (user=%s): %s", ctx.get("user_id"), e)
 
+        debug_log.log_event("synthesis_fallback", text="".join(synth_parts))
         synth_text = "".join(synth_parts).strip()
         if synth_text:
             canonical_msgs.append({
@@ -477,4 +502,8 @@ async def run_agent_loop(
             })
 
     logger.info("Agent loop complete - user=%s steps=%d", ctx.get("user_id"), step + 1)
+    debug_log.log_event(
+        "loop_end", final_text="".join(final_text_parts),
+        executed_any_tool=executed_any_tool,
+    )
     yield _loop_end("".join(final_text_parts))
