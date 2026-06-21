@@ -22,6 +22,7 @@ run_agent_loop() is the core agentic LLM loop. It:
 import asyncio
 import json
 import logging
+import re
 from typing import AsyncGenerator
 
 from llm.factory import get_llm_provider
@@ -185,6 +186,7 @@ async def run_agent_loop(
 
     final_text_parts: list[str] = []
     executed_any_tool = False  # gates the empty-output synthesis fallback
+    executed_results: list[dict] = []  # tool name + summary, for deterministic fallback
 
     debug_log.log_event(
         "loop_start",
@@ -231,6 +233,7 @@ async def run_agent_loop(
                 # Approved — fall through to execute
 
             result = await _execute_call(call, ctx)
+            executed_results.append({"name": call["name"], "summary": result.get("summary"), "sources": result.get("sources")})
             sse_payload: dict = {
                 "id": call["id"],
                 "summary": result.get("summary", ""),
@@ -434,6 +437,7 @@ async def run_agent_loop(
                 summary=result.get("summary"), data=result.get("data"),
                 sources=result.get("sources"),
             )
+            executed_results.append({"name": call["name"], "summary": result.get("summary"), "sources": result.get("sources")})
             yield _sse("tool_result", {
                 "id": call["id"],
                 "summary": result.get("summary", ""),
@@ -503,6 +507,27 @@ async def run_agent_loop(
             canonical_msgs.append({
                 "role": "assistant",
                 "content": [{"type": "text", "text": synth_text}],
+            })
+
+        # Last resort: model returned nothing AND the tool-free synthesis also came
+        # back empty (gemini-2.5-pro emits an empty STOP turn after create_doc).
+        # Build a deterministic confirmation from what the tools actually did.
+        if not "".join(final_text_parts).strip() and executed_results:
+            parts: list[str] = []
+            for tr in executed_results:
+                summ = (tr.get("summary") or "").strip()
+                if not summ:
+                    continue
+                summ = re.sub(r"\s*\(id:[^)]*\)", "", summ)
+                parts.append(summ)
+            det = " ".join(parts).strip() or "Done."
+            logger.info("Deterministic fallback used (user=%s): %s", ctx.get("user_id"), det)
+            debug_log.log_event("deterministic_fallback", text=det)
+            final_text_parts.append(det)
+            yield _sse("text", {"delta": det})
+            canonical_msgs.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": det}],
             })
 
     logger.info("Agent loop complete - user=%s steps=%d", ctx.get("user_id"), step + 1)
