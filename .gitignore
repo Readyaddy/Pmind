@@ -45,6 +45,15 @@ desktop.ini
 errors
 package-lock.json
 
+# Pitch deck / business material (not part of the open-source repo)
+pitch-deck/
+PMind_Pitch_Deck.pdf
+pitch_deck.html
+/generate_pdf.js
+/package.json
+/node_modules/
+text to send.md
+
 # Demo video assets (large files, not for version control)
 demo-video/
 

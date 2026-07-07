@@ -1,115 +1,152 @@
-# PM Cursor 📝🤖
+# PMind
 
-PM Cursor is an AI-native workspace designed specifically for Product Managers. Just like Cursor is an AI-first IDE for engineers, PM Cursor is an AI-first document editor for product workflows. It integrates powerful AI assistance directly into your editing experience, rather than treating it as an afterthought chatbot.
+**An AI-native workspace for Product Managers — think Cursor, but for PM work.**
 
-## ✨ What You Can Do With This Right Now
+PMind puts AI inside the document editor instead of in a separate chatbot tab. Press `Cmd+K` anywhere to generate PRDs, tickets, and briefs grounded in *your* product context, chat with specialist AI agents that hand off to each other, and export the results straight to Jira or Linear.
 
-**1. Create and Edit PM Documents with AI**
-- Use the **Tiptap-based rich text editor** to write your product documents seamlessly.
-- Press **Cmd+K** (or Ctrl+K) to bring up the AI command modal directly within your workflow.
-- **Generate content seamlessly**: The AI streams its output directly into your document in real-time.
+![PMind editor with the Cmd+K AI command modal streaming a ticket breakdown](docs/screenshot.png)
 
-**2. Built-in PM Workflows**
-The AI is pre-configured with prompt templates tailored for standard Product Management tasks:
-- **PRD Writing**: Generate sections or entire Product Requirements Documents.
-- **Ticket Breakdown**: Break down features into User Stories and Acceptance Criteria.
-- **Product Briefs**: Draft concise one-pagers and product briefs.
-- **User Research**: Synthesize raw user research notes into actionable insights.
-- **Stakeholder Updates**: Draft structured updates to keep your team aligned.
-- **Custom Commands**: Ask the AI to write, rewrite, expand, or brainstorm anything else.
+<details>
+<summary>▶️ Watch the demo GIF</summary>
 
-**3. The "Product Brain"**
-- A dedicated right sidebar where you can paste your overarching **product strategy, target audience, and context**.
-- **Contextual AI**: This "Product Brain" context is automatically injected into *every* AI request you make. This ensures the AI generates highly specific, grounded output for your actual product, rather than generic templates.
-- Currently, this context is auto-saved locally to your browser.
+![PMind demo](landing/demo_linkedin.gif)
 
-**4. Document Management & Auto-Save**
-- View and manage your documents in the left sidebar.
-- **Auto-save**: Your document edits are debounced and automatically saved to Supabase every 2 seconds so you never lose your work.
+</details>
 
----
+## Features
 
-## 🛠️ Architecture & Tech Stack
+- **Cmd+K AI commands** — generate content directly inside the Tiptap editor with streaming output. Built-in PM workflows: PRD writing, ticket breakdown, one-pagers/briefs, stakeholder updates, user-research synthesis, plus free-form custom prompts.
+- **Product Brain** — paste your product strategy and context once per project; it is injected into every AI call, so output is grounded in your product instead of generic templates.
+- **Specialist AI agents** — a multi-agent system (PM, Designer, Analyst, Calendar, Opportunity, Whiteboard) where agents hand off to each other and synthesize findings, so asks like *"synthesize my interviews, pull the numbers, tell me what to do"* happen in one shot.
+- **AI Chat sidebar** — threaded, persisted chat with model picker and RAG over your knowledge base.
+- **Knowledge base (RAG)** — upload research docs and interview notes; they're chunked, embedded (pgvector), and retrieved during chat and search.
+- **Discovery** — turn raw customer evidence into themes, insights, and ranked opportunities, with a decision ledger and outcome capture for longitudinal learning.
+- **Ticket export** — generate structured tickets and push them to **Jira** or **Linear**.
+- **Projects & file tree** — organize docs in folders per project, with debounced auto-save and global semantic + text search.
+- **Pluggable LLM providers** — Gemini (default), Anthropic Claude, or OpenAI. Switch with a single env var; users can also override the model per request from the UI.
+- **Templates, theming, billing** — PM document templates, light/dark mode, and optional Stripe subscription management.
 
-This project is split into a modern frontend and a powerful API backend.
+## Architecture
 
-**Frontend (`/cursor-for-pms`)**
-- **Framework**: Next.js 14 (App Router) with TypeScript
-- **Editor**: Tiptap (ProseMirror)
-- **Styling**: Tailwind CSS + shadcn/ui primitives
-- **State Management**: Zustand (for persisting Product Brain context)
-- **Authentication**: Clerk (`@clerk/nextjs`)
+```
+pm_cursor/
+├── cursor-for-pms/          # Next.js 15 frontend (port 3000)
+│   └── src/
+│       ├── app/             # App Router pages (projects, editor, billing, blog…)
+│       ├── components/      # Editor, AICommandModal, CursorChat, Sidebar, …
+│       └── store/           # Zustand stores (Product Brain, active project, editor)
+├── backend/                 # FastAPI backend (port 8000)
+│   ├── main.py              # App entry, CORS, router mounts
+│   ├── prompts.py           # System prompt templates per command
+│   ├── llm/                 # Provider abstraction (Gemini / Claude / OpenAI)
+│   ├── agent/               # Multi-agent orchestrator, tools, specialist agents
+│   ├── routers/             # ai, projects, documents, knowledge, integrations, billing, …
+│   └── migrations/          # Discovery + longitudinal-memory SQL
+├── supabase_*.sql           # Core schema migrations (run in Supabase SQL editor)
+├── landing/                 # Static marketing page
+└── testing/                 # Fictional sample interviews to try research synthesis
+```
 
-**Backend (`/backend`)**
-- **Framework**: FastAPI (Python) + Uvicorn
-- **Database**: Supabase (PostgreSQL)
-- **LLM Integration**: Pluggable Strategy Pattern supporting Google Gemini (default), Anthropic Claude, and OpenAI. Uses Server-Sent Events (SSE) for streaming text.
+| Layer | Choice |
+|---|---|
+| Frontend | Next.js 15 (App Router, TypeScript, React 19) |
+| Editor | Tiptap (ProseMirror) |
+| Styling | Tailwind CSS + shadcn/ui primitives |
+| Auth | Clerk |
+| Client state | Zustand |
+| Backend | FastAPI + Uvicorn |
+| LLM | Pluggable — Gemini (default), Claude, OpenAI, streamed over SSE |
+| Database | Supabase (PostgreSQL + pgvector) |
+| Integrations | Jira, Linear, Stripe (optional) |
 
----
+All AI traffic flows through the FastAPI backend (`/ai/*`), which builds the system prompt from the command template + Product Brain context and streams the provider response back as Server-Sent Events.
 
-## 🚀 Getting Started
+## Getting started
 
 ### Prerequisites
-- Node.js (v18+)
-- Python (3.10+)
-- Accounts for [Clerk](https://clerk.com/) (Auth), [Supabase](https://supabase.com/) (Database), and your chosen LLM provider (Gemini/Claude/OpenAI).
 
-### 1. Database Setup
-Run the SQL script provided in `supabase_schema.sql` in your Supabase SQL editor to create the necessary `documents` and `context_chunks` tables with Row Level Security (RLS) configured.
+- Node.js 18+
+- Python 3.10+
+- A [Supabase](https://supabase.com/) project (database)
+- A [Clerk](https://clerk.com/) application (auth)
+- An API key for at least one LLM provider: [Gemini](https://ai.google.dev/), [Anthropic](https://console.anthropic.com/), or [OpenAI](https://platform.openai.com/)
 
-### 2. Backend Setup
-Navigate to the backend directory and set up a virtual environment:
+### 1. Database
+
+Run the SQL migrations in your Supabase SQL editor, in order:
+
+```
+supabase_schema.sql
+supabase_phase0.sql
+supabase_phase1_filetree.sql
+supabase_phase2_chat.sql
+supabase_phase2_rag.sql
+supabase_phase2b_storage.sql
+supabase_phase3_integrations.sql
+supabase_phase4_billing.sql
+supabase_phase4_search.sql
+backend/migrations/document_chunks.sql
+backend/migrations/discovery.sql
+backend/migrations/tier1_longitudinal.sql
+backend/migrations/tier2_decision_ledger.sql
+backend/migrations/tier3_outcome_capture.sql
+```
+
+### 2. Backend
+
 ```bash
 cd backend
 python -m venv venv
-
-# On Windows:
-venv\Scripts\activate
-# On Mac/Linux:
-# source venv/bin/activate
-
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
-```
 
-Create a `.env` file in the `backend` directory (use `.env.example` as a reference) and add your keys. You can easily switch LLM providers:
-```env
-# Example using Gemini
-LLM_PROVIDER=gemini
-LLM_MODEL=gemini-1.5-flash
-GOOGLE_API_KEY=your_api_key_here
-```
-
-Start the backend server:
-```bash
+cp .env.example .env           # then fill in your keys
 uvicorn main:app --reload --port 8000
 ```
 
-### 3. Frontend Setup
-Open a new terminal and install the frontend dependencies:
+Switching LLM providers is just env vars — no code changes:
+
+```env
+LLM_PROVIDER=gemini    LLM_MODEL=gemini-2.5-flash     GOOGLE_API_KEY=...
+LLM_PROVIDER=claude    LLM_MODEL=claude-sonnet-4-6    ANTHROPIC_API_KEY=...
+LLM_PROVIDER=openai    LLM_MODEL=gpt-4o               OPENAI_API_KEY=...
+```
+
+### 3. Frontend
+
 ```bash
 cd cursor-for-pms
 npm install
-```
-
-Create a `.env.local` file in the `cursor-for-pms` directory (refer to `.env.local.example`) and add your Clerk and backend URLs:
-```env
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-CLERK_SECRET_KEY=your_clerk_secret_key
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-```
-
-Start the frontend server:
-```bash
+cp .env.local.example .env.local   # then fill in your keys
 npm run dev
 ```
 
-Visit `http://localhost:3000` to sign in and start writing!
+Open [http://localhost:3000](http://localhost:3000), sign in, create a project, and press `Cmd+K` (or `Ctrl+K`).
 
----
+### Try it with sample data
 
-## 🗺️ Roadmap (Upcoming Features)
-- **Stage 2**: Migrate Product Brain storage from local storage to Supabase `context_chunks`.
-- **Stage 2**: Implement `pgvector` for semantic context retrieval.
-- **Stage 2**: Integrations with Linear, Jira, and Notion.
-- **Stage 3**: Team workspaces and shared Product Brains.
-- **Stage 4**: Stripe billing integration.
+The `testing/` folder contains five fictional user interviews and research notes for a made-up product ("Shopflow"). Upload them to the knowledge base or paste one into a doc and run the **interview synthesis** command to see the research workflow end to end.
+
+## Environment variables
+
+Secrets live only in `backend/.env` and `cursor-for-pms/.env.local` — both are gitignored. Use the committed example files as templates:
+
+- [`backend/.env.example`](backend/.env.example) — LLM provider keys, Supabase URL + **service** key, Clerk secret key
+- [`cursor-for-pms/.env.local.example`](cursor-for-pms/.env.local.example) — Supabase URL + anon key, Clerk publishable/secret keys, backend URL
+
+Never commit real keys. The Supabase service key bypasses RLS and must stay server-side.
+
+## Contributing
+
+Issues and pull requests are welcome. Useful maps of the codebase:
+
+- [`CODEBASE_CONTEXT.md`](CODEBASE_CONTEXT.md) — file-by-file reference of the whole repo
+- [`DESIGN.md`](DESIGN.md) — the UI design system
+- [`backend/agent/PLANS.md`](backend/agent/PLANS.md) — the multi-agent orchestration roadmap
+
+Before opening a PR, run `npm run typecheck && npm run lint` in `cursor-for-pms/` and `pytest` in `backend/`.
+
+## License
+
+[MIT](LICENSE) © 2026 Adamya Vashisth
