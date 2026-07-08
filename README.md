@@ -1,8 +1,31 @@
 # PMind
 
-**An AI-native workspace for Product Managers — think Cursor, but for PM work.**
+**PMind turns messy customer feedback into a ranked, evidence-backed backlog — automatically.**
 
-PMind puts AI inside the document editor instead of in a separate chatbot tab. Press `Cmd+K` anywhere to generate PRDs, tickets, and briefs grounded in *your* product context, chat with specialist AI agents that hand off to each other, and export the results straight to Jira or Linear.
+Most "AI for PMs" tools are a chat box that writes a nicer first draft. PMind's actual edge is upstream of that: a background multi-agent pipeline that reads your raw research (interviews, support tickets, NPS dumps) and turns it into severity-tagged insights, clusters them into themes, and scores opportunities with RICE — all cited back to the original customer quotes. The doc editor with `Cmd+K` is what you use *after* you already know what to build.
+
+## The Discovery Engine
+
+```
+ 1. Ingest                2. Extract insights            3. Rank opportunities         4. Ship
+ ─────────────            ────────────────────           ───────────────────           ──────────────
+ Interview transcripts    Background agents pull          Opportunity agent clusters    Commit an
+ Support tickets          verbatim pain-point quotes,     insights across themes,       opportunity →
+ NPS / CSV exports   ──▶  tag persona + sentiment,   ──▶  scores Reach/Impact/          break into
+                          assign severity 1–5,             Confidence/Effort, and       epics + tickets
+                          sort into theme folders          ranks by RICE score          → sync to
+                                                                                          Jira/Linear
+```
+
+- **Automated insight extraction** — drop in interview transcripts or support exports; background agents harvest verbatim quotes, tag the persona and sentiment, and assign a severity score, no manual tagging.
+- **Theme clustering** — insights are grouped into reusable theme folders so you can see what customers are actually complaining about in aggregate, not one interview at a time.
+- **RICE-scored opportunities** — the Opportunity agent clusters insights across themes into proposed opportunities, each scored on Reach/Impact/Confidence/Effort and traceable back to the exact quotes behind it.
+- **Decision ledger + outcome capture** — every shortlist/commit/discard decision is recorded, and shipped features get revisited later against real outcomes, so the system learns which calls actually worked.
+- **Multi-agent handoffs** — PM, Analyst, Designer, Opportunity, Calendar, and Whiteboard agents hand off to each other and synthesize findings, so asks like *"synthesize my interviews, pull the perf numbers, tell me what to do"* happen in one turn instead of five tools.
+
+## The editor (Cmd+K)
+
+Once you know what to build, PMind also gives you an AI-native document editor: press `Cmd+K` anywhere to generate PRDs, ticket breakdowns, briefs, or stakeholder updates, grounded in a **Product Brain** (your product strategy/context, injected into every AI call) instead of generic templates.
 
 | Cmd+K command picker | AI streaming into the doc | Result applied inline |
 |---|---|---|
@@ -15,14 +38,10 @@ PMind puts AI inside the document editor instead of in a separate chatbot tab. P
 
 </details>
 
-## Features
+## Everything else
 
-- **Cmd+K AI commands** — generate content directly inside the Tiptap editor with streaming output. Built-in PM workflows: PRD writing, ticket breakdown, one-pagers/briefs, stakeholder updates, user-research synthesis, plus free-form custom prompts.
-- **Product Brain** — paste your product strategy and context once per project; it is injected into every AI call, so output is grounded in your product instead of generic templates.
-- **Specialist AI agents** — a multi-agent system (PM, Designer, Analyst, Calendar, Opportunity, Whiteboard) where agents hand off to each other and synthesize findings, so asks like *"synthesize my interviews, pull the numbers, tell me what to do"* happen in one shot.
 - **AI Chat sidebar** — threaded, persisted chat with model picker and RAG over your knowledge base.
-- **Knowledge base (RAG)** — upload research docs and interview notes; they're chunked, embedded (pgvector), and retrieved during chat and search.
-- **Discovery** — turn raw customer evidence into themes, insights, and ranked opportunities, with a decision ledger and outcome capture for longitudinal learning.
+- **Knowledge base (RAG)** — research docs and interview notes are chunked, embedded (pgvector), and retrieved during chat, search, and discovery ingestion.
 - **Ticket export** — generate structured tickets and push them to **Jira** or **Linear**.
 - **Projects & file tree** — organize docs in folders per project, with debounced auto-save and global semantic + text search.
 - **Pluggable LLM providers** — Gemini (default), Anthropic Claude, or OpenAI. Switch with a single env var; users can also override the model per request from the UI.
@@ -128,7 +147,7 @@ Open [http://localhost:3000](http://localhost:3000), sign in, create a project, 
 
 ### Try it with sample data
 
-The `testing/` folder contains five fictional user interviews and research notes for a made-up product ("Shopflow"). Upload them to the knowledge base or paste one into a doc and run the **interview synthesis** command to see the research workflow end to end.
+The `testing/` folder contains five fictional user interviews and research notes for a made-up product ("Shopflow"). Upload them as knowledge documents and open a project's **Discovery** tab to watch the full pipeline run: insight extraction with severity/persona tags → theme clustering → RICE-ranked opportunities. You can also paste one into a doc and run the **interview synthesis** Cmd+K command for a lighter-weight, single-doc version of the same idea.
 
 ## Environment variables
 
