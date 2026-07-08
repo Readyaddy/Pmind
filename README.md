@@ -4,7 +4,9 @@
 
 PMind puts AI inside the document editor instead of in a separate chatbot tab. Press `Cmd+K` anywhere to generate PRDs, tickets, and briefs grounded in *your* product context, chat with specialist AI agents that hand off to each other, and export the results straight to Jira or Linear.
 
-![PMind editor with the Cmd+K AI command modal streaming a ticket breakdown](docs/screenshot.png)
+| Cmd+K command picker | AI streaming into the doc | Result applied inline |
+|---|---|---|
+| ![Cmd+K command picker showing Write PRD, Break into tickets, Product brief, Stakeholder update](docs/screenshot-command.png) | ![AI streaming a ticket breakdown grounded in the Product Brain](docs/screenshot-generating.png) | ![Finished PRD with AI-generated tickets applied inline](docs/screenshot-applied.png) |
 
 <details>
 <summary>▶️ Watch the demo GIF</summary>
